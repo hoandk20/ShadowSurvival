@@ -1,0 +1,254 @@
+import { SKILL_CONFIG } from '../config/skill.js';
+import HolyAuraEffect from './effects/HolyAuraEffect.js';
+import { EFFECT_CONFIG } from '../config/effects.js';
+
+const EFFECT_CLASS_MAP = {
+    auraGlow: HolyAuraEffect,
+};
+
+export default class Skill extends Phaser.GameObjects.Sprite {
+    constructor(scene, owner, skillType) {
+        const config = SKILL_CONFIG[skillType] ?? {};
+        const animNames = config.animations ? Object.keys(config.animations) : [];
+        const primaryAnimName = animNames.length ? animNames[0] : 'cast';
+        const primaryAnim = config.animations ? config.animations[primaryAnimName] : null;
+        const baseTexture = primaryAnim && primaryAnim.frames && primaryAnim.frames.length
+            ? `${skillType}_${primaryAnimName}_0`
+            : `${skillType}_${primaryAnimName}`;
+
+        super(scene, 0, 0, baseTexture);
+        this.owner = owner;
+        this.skillType = skillType;
+        this.config = config;
+        this.primaryAnimName = primaryAnimName;
+        this.hitboxWidth = config.hitboxWidth ?? 150;
+        this.hitboxHeight = config.hitboxHeight ?? 60;
+        this.duration = config.duration ?? 500;
+        const ownerDamageMul = owner.damageMultiplier ?? 1;
+        this.baseDamage = (config.damage ?? 10) * ownerDamageMul;
+        this.damage = this.baseDamage;
+        this.tintColor = config.tint ?? null;
+        this.category = config.category ?? 'area';
+        this.isAura = this.category === 'aura';
+        this.projectileSpeed = config.projectileSpeed ?? 0;
+        this.travelRange = config.travelRange ?? 0;
+        this.homing = config.homing ?? false;
+        this.destroyOnHit = config.destroyOnHit ?? false;
+        this.alignWithMovement = config.alignWithMovement ?? false;
+        this.orbitRadius = config.orbitRadius ?? 0;
+        this.orbitSpeed = config.orbitSpeed ?? 0;
+        this.orbitDirection = config.orbitDirection ?? 1;
+        this.orbitAngle = 0;
+        this.effectKey = config.effectKey ?? null;
+        this.effectInstance = null;
+        this.knockbackCount = 0;
+        this.direction = new Phaser.Math.Vector2(0, 0);
+        this.startX = 0;
+        this.startY = 0;
+        this.hitTargets = new Set();
+        this.dropFromSky = config.dropFromSky ?? false;
+        this.dropTarget = null;
+        this.dropTrackingSpeed = config.dropTrackingSpeed ?? 220;
+        this.dropXOffset = 0;
+        this.playAnimation = config.playAnimation ?? true;
+        this.visibleDuringEffect = config.visibleDuringEffect ?? true;
+        this.critChance = Phaser.Math.Clamp(config.critChance ?? 0, 0, 1);
+        this.critMultiplier = config.critMultiplier ?? 1.5;
+        this.critColor = config.critColor ?? '#ffde59';
+        this.lastRoll = { value: this.baseDamage, isCritical: false };
+        scene.add.existing(this);
+        this.setActive(false);
+        this.setVisible(false);
+        this.setDisplaySize(this.hitboxWidth, this.hitboxHeight);
+    }
+
+    rollCriticalDamage() {
+        const isCritical = Math.random() < this.critChance;
+        const multiplier = isCritical ? this.critMultiplier : 1;
+        const value = Math.max(1, Math.round(this.baseDamage * multiplier));
+        this.lastRoll = { value, isCritical };
+        return this.lastRoll;
+    }
+
+    cast() {
+        this.knockbackCount = 0;
+        let x = this.owner.x;
+        let y = this.owner.y;
+        if (this.category === 'area' && !this.isAura) {
+            if (typeof this.customAngle === 'number') {
+                const radius = 32;
+                x = this.owner.x + Math.cos(this.customAngle) * radius;
+                y = this.owner.y + Math.sin(this.customAngle) * radius;
+            } else {
+                const ownerBounds = this.owner.getBounds ? this.owner.getBounds() : null;
+                const direction = this.owner.flipX ? -1 : 1;
+                const castGap = this.config?.castGap ?? 16;
+                const frontEdge = ownerBounds
+                    ? (this.owner.flipX ? ownerBounds.left : ownerBounds.right)
+                    : this.owner.x;
+                x = frontEdge + direction * castGap;
+                y = this.owner.y;
+            }
+        }
+        if (this.isAura) {
+            x = this.owner.x;
+            y = this.owner.y;
+        }
+
+        this.hitTargets.clear();
+        if (this.category === 'area' && !this.isAura) {
+            const horizontalOrigin = this.owner.flipX ? 1 : 0;
+            this.setOrigin(horizontalOrigin, 0.5);
+        } else {
+            this.setOrigin(0.5, 0.5);
+        }
+        this.setPosition(x, y);
+        this.setFlipX(this.owner.flipX);
+        const animKey = `${this.skillType}_${this.primaryAnimName}`;
+        if (this.playAnimation && this.scene.anims.exists(animKey)) {
+            this.anims.play(animKey);
+        }
+        if (this.tintColor !== null) {
+            this.setTint(this.tintColor);
+        }
+        this.setActive(true);
+        this.setVisible(this.visibleDuringEffect);
+
+        const effectDefinition = this.effectKey ? EFFECT_CONFIG[this.effectKey] : null;
+        if (this.effectKey && EFFECT_CLASS_MAP[this.effectKey]) {
+            this.effectInstance?.destroy();
+            const EffectClass = EFFECT_CLASS_MAP[this.effectKey];
+            const settings = effectDefinition?.settings ?? {};
+            this.effectInstance = new EffectClass(this.scene, this, settings);
+        }
+        if (this.category === 'projectile') {
+            this.startX = this.owner.x;
+            this.startY = this.owner.y;
+            if (this.alignWithMovement) {
+                const velX = this.owner.body?.velocity?.x ?? 0;
+                const velY = this.owner.body?.velocity?.y ?? 0;
+                const movementVec = new Phaser.Math.Vector2(velX, velY);
+                if (movementVec.lengthSq() === 0) {
+                    movementVec.set(this.owner.flipX ? -1 : 1, 0);
+                } else {
+                    movementVec.normalize();
+                }
+                this.direction.copy(movementVec);
+            } else {
+                const directionX = this.owner.flipX ? -1 : 1;
+                this.direction.set(directionX, 0).normalize();
+            }
+        } else if (this.category === 'area' && !this.isAura) {
+            this.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+                this.destroy();
+            });
+        }
+
+        if (this.category === 'orbit') {
+            if (typeof this.customAngle === 'number') {
+                this.orbitAngle = this.customAngle;
+            } else {
+                this.orbitAngle = Math.random() * Math.PI * 2;
+            }
+            this.startX = this.owner.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+            this.startY = this.owner.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+            this.setPosition(this.startX, this.startY);
+        }
+
+        this.scene.time.delayedCall(this.duration, () => {
+            if (this.active) {
+                this.destroy();
+            }
+        });
+    }
+
+    update(time, delta) {
+        if (this.effectInstance?.update) {
+            this.effectInstance.update(time, delta);
+        }
+        if (this.active) {
+            this.setDisplaySize(this.hitboxWidth, this.hitboxHeight);
+        }
+        if (this.active && this.isAura && this.owner) {
+            this.setPosition(this.owner.x, this.owner.y);
+        }
+        if (this.active && this.category === 'projectile') {
+            if (this.homing) {
+                const target = this.getNearestEnemyTarget();
+                if (target) {
+                    this.direction.set(target.x - this.x, target.y - this.y).normalize();
+                }
+            }
+            if (this.direction.lengthSq() === 0) {
+                const directionX = this.owner.flipX ? -1 : 1;
+                this.direction.set(directionX, 0).normalize();
+            }
+            if (this.dropFromSky && this.dropTarget) {
+                this.applySkyTracking(delta);
+            }
+            const moveDist = (this.projectileSpeed * delta) / 1000;
+            this.x += this.direction.x * moveDist;
+            this.y += this.direction.y * moveDist;
+            if (this.travelRange > 0) {
+                const traveled = Phaser.Math.Distance.Between(this.startX, this.startY, this.x, this.y);
+                if (traveled >= this.travelRange) {
+                    this.destroy();
+                }
+            }
+        } else if (this.active && this.category === 'orbit') {
+            this.orbitAngle += ((this.orbitSpeed * this.orbitDirection) * delta) / 1000;
+            const targetX = this.owner.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+            const targetY = this.owner.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+            this.x = targetX;
+            this.y = targetY;
+        }
+    }
+
+    getNearestEnemyTarget() {
+        if (!this.scene || !this.scene.enemies) return null;
+        const enemies = this.scene.enemies.getChildren();
+        let nearest = null;
+        let minDist = Number.POSITIVE_INFINITY;
+        for (const enemy of enemies) {
+            if (!enemy || !enemy.active) continue;
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = enemy;
+            }
+        }
+        return nearest;
+    }
+
+    applySkyTracking(delta) {
+        if (!this.dropTarget || !this.dropTarget.active) return;
+        const targetY = this.dropTarget.y;
+        const targetX = this.dropTarget.x + this.dropXOffset;
+        if (this.y < targetY) {
+            const desired = targetY - this.y;
+            this.y += Math.min(desired, (this.dropTrackingSpeed * delta) / 1000);
+        }
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        this.direction.set(dx, dy).normalize();
+        this.dropXOffset += dx * 0.1;
+    }
+
+    recordHit(enemy) {
+        if (!enemy || !this.active) return false;
+        if (this.hitTargets.has(enemy)) return false;
+        this.hitTargets.add(enemy);
+        return true;
+    }
+
+    destroy() {
+        this.clearTint();
+        this.setActive(false);
+        this.setVisible(false);
+        this.hitTargets.clear();
+        this.effectInstance?.destroy();
+        this.effectInstance = null;
+        super.destroy();
+    }
+}
