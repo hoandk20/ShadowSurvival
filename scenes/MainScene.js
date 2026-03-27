@@ -1,7 +1,6 @@
 // scenes/MainScene.js
 import Player from '../entities/Player.js';
 import Enemy from '../entities/Enemy.js';
-import Card, { CARD_LAYOUT } from '../entities/Card.js';
 import { CARD_CONFIG } from '../config/card.js';
 import { ENEMIES } from '../config/enemies.js';
 import { SKILL_CONFIG } from '../config/skill.js';
@@ -39,12 +38,12 @@ export default class MainScene extends Phaser.Scene {
         const mapDef = this.mapManager.loadMap(DEFAULT_MAP_KEY);
         if (mapDef) {
             this.mapManager.applyWorldBounds();
-            this.cameras.main.setZoom(1.5);
+            this.cameras.main.setZoom(2);
         }
         this.cameras.main.setBackgroundColor('#808080');
         this.activeCharacterKey = DEFAULT_CHARACTER_KEY;
         const initialCharacter = CHARACTER_CONFIG[this.activeCharacterKey];
-        this.activeSkillKey = initialCharacter?.defaultSkill ?? 'thuner';
+        this.activeSkillKey = initialCharacter?.defaultSkill ?? 'thunder';
         this.skillInputs = {};
         this.characterInputs = {};
 
@@ -56,7 +55,7 @@ export default class MainScene extends Phaser.Scene {
         this.add.existing(this.player);
         this.physics.add.existing(this.player);
         this.player.setCollideWorldBounds(true);
-        this.player.setDepth(10);
+        this.player.setDepth(1000);
         this.children.bringToTop(this.player);
         this.mapManager.enableObjectCollisions(this.player);
         this.playerHitEffect = new CriticalHitEffect(this, {
@@ -70,17 +69,12 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(this.player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
         this.player.once('player-dead', () => this.handlePlayerDeath());
 
-        this.killCountText = this.add.text(10, 0, 'Kills: 0', {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0, 0.5);
-        this.killCountText.setDepth(42);
-        this.killCountText.setScrollFactor(0);
+        if (!this.scene.isActive('HudScene')) {
+            this.scene.launch('HudScene');
+        }
+        this.scene.bringToTop('HudScene');
 
-        this.cameras.main.startFollow(this.player, false, 1, 1);
+        this.cameras.main.startFollow(this.player, false, 0.08, 0.08);
         this.cameras.main.setDeadzone(0, 0);
 
         this.enemies = this.physics.add.group();
@@ -142,12 +136,6 @@ export default class MainScene extends Phaser.Scene {
                 this.spawnRandomEnemy();
             }
         }
-        if (this.killCountText) {
-            this.killCountText.setText(`Kills: ${this.killCount}`);
-            const expBarY = this.player?.expBarY ?? (this.scale.height - 16 - this.player?.expBarHeight ?? 0);
-            this.killCountText.setPosition(10, expBarY - 18);
-        }
-
         // Update enemies
         const enemyChildren = this.enemies.getChildren();
         this.enemies.children.each(enemy => {
@@ -453,6 +441,10 @@ export default class MainScene extends Phaser.Scene {
             if (mapDef) {
                 this.updateMapBounds();
                 this.mapManager.enableObjectCollisions(this.player);
+                this.mapManager.enableObjectCollisions(this.enemies);
+                this.repositionPlayerForCurrentMap();
+                this.cameras.main.startFollow(this.player, false, 0.08, 0.08);
+                this.cameras.main.centerOn(this.player.x, this.player.y);
             }
         });
         mapSection.appendChild(mapSelect);
@@ -481,11 +473,27 @@ export default class MainScene extends Phaser.Scene {
         this.updateEnemyCountDisplay();
     }
 
+    repositionPlayerForCurrentMap() {
+        if (!this.player || !this.mapManager) return;
+        const { width, height } = this.mapManager.getMapSize();
+        if (!width || !height) return;
+        const x = width / 2;
+        const y = height / 2;
+        this.player.setPosition(x, y);
+        this.player.setVelocity(0, 0);
+        this.player.setVisible(true);
+        this.player.setActive(true);
+        this.player.setDepth(1000);
+        this.children.bringToTop(this.player);
+        this.player.body?.reset?.(x, y);
+        this.player.body?.updateFromGameObject?.();
+    }
+
     switchCharacter(characterKey) {
         const config = CHARACTER_CONFIG[characterKey];
         if (!config) return;
         this.activeCharacterKey = characterKey;
-        const defaultSkill = config.defaultSkill ?? 'thuner';
+        const defaultSkill = config.defaultSkill ?? 'thunder';
         const chosenSkill = this.player?.setCharacter?.(characterKey) ?? defaultSkill;
         this.activeSkillKey = chosenSkill;
         Object.entries(this.characterInputs ?? {}).forEach(([key, input]) => {
@@ -533,6 +541,7 @@ export default class MainScene extends Phaser.Scene {
         const enemy = new Enemy(this, x, y, enemyType);
         this.enemies.add(enemy);
         this.add.existing(enemy);
+        this.mapManager.enableObjectCollisions(enemy);
         if (enemy?.setHealthVisible) {
             enemy.setHealthVisible(this.showEnemyHP);
         }
@@ -573,6 +582,7 @@ export default class MainScene extends Phaser.Scene {
         enemy.speed = (enemy.speed ?? 100) * (eliteConfig.speedMultiplier ?? 1);
         this.enemies.add(enemy);
         this.add.existing(enemy);
+        this.mapManager.enableObjectCollisions(enemy);
     }
 
     getSpawnEdgePosition() {
@@ -610,6 +620,7 @@ export default class MainScene extends Phaser.Scene {
         const enemy = new Enemy(this, x, y, type);
         this.enemies.add(enemy);
         this.add.existing(enemy);
+        this.mapManager.enableObjectCollisions(enemy);
         if (enemy?.setHealthVisible) {
             enemy.setHealthVisible(this.showEnemyHP);
         }
@@ -660,34 +671,13 @@ export default class MainScene extends Phaser.Scene {
         }
         this.isChoosingCard = true;
         this.physics.world.pause();
-        this.upgradeOverlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.65)
-            .setOrigin(0)
-            .setScrollFactor(0)
-            .setDepth(80);
-        this.upgradeContainer = this.add.container(this.scale.width / 2, this.scale.height / 2).setDepth(81).setScrollFactor(0);
-        const scaleFactor = Phaser.Math.Clamp(this.scale.width / 900, 0.75, 1.05);
-        const cardHeightScaled = (CARD_LAYOUT.height * CARD_LAYOUT.scale * scaleFactor) + CARD_LAYOUT.padding;
-        const screenHeight = this.scale.height;
-        let spacing = CARD_LAYOUT.spacingGap;
-        if (screenHeight < 600) {
-            spacing = 8;
-        } else if (screenHeight > 1000) {
-            spacing = CARD_LAYOUT.spacingGap + 10;
-        }
-        const totalHeight = cardHeightScaled * baseCards.length + spacing * (baseCards.length - 1);
-        if (totalHeight > screenHeight - 140) {
-            spacing = Math.max(6, (screenHeight - 140 - cardHeightScaled * baseCards.length) / Math.max(1, baseCards.length - 1));
-        }
-        const cardSpacing = cardHeightScaled + spacing;
-        const startY = -((totalHeight - cardHeightScaled) / 2);
-        this.levelUpCards = [];
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.showLevelUpSelection?.(baseCards, (selected) => this.onCardSelected(selected));
+        this.upgradeOverlay = hudScene?.levelUpOverlay ?? null;
+        this.upgradeContainer = hudScene?.levelUpContainer ?? null;
+        this.levelUpCards = hudScene?.levelUpCards ?? [];
         this.cardFocusIndex = 0;
-        baseCards.forEach((cardConfig, index) => {
-            const y = startY + index * cardSpacing;
-            const card = new Card(this, 0, y, cardConfig, (selected) => this.onCardSelected(selected), scaleFactor);
-            this.upgradeContainer.add(card);
-            this.levelUpCards.push(card);
-        });
+        this.keyboardNavigationActive = false;
         this.updateCardFocus();
     }
 
@@ -695,14 +685,11 @@ export default class MainScene extends Phaser.Scene {
         if (!this.isChoosingCard) return;
         this.clearCardFocus();
         this.isChoosingCard = false;
-        if (this.upgradeOverlay) {
-            this.upgradeOverlay.destroy();
-            this.upgradeOverlay = null;
-        }
-        if (this.upgradeContainer) {
-            this.upgradeContainer.destroy();
-            this.upgradeContainer = null;
-        }
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.hideLevelUpSelection?.();
+        this.upgradeOverlay = null;
+        this.upgradeContainer = null;
+        this.levelUpCards = [];
         if (this.physics.world.isPaused) {
             this.physics.world.resume();
         }

@@ -37,24 +37,10 @@ export default class Player extends BaseEntity {
         this.xpToNextLevel = 100;
         this.displayedXP = 0;
         this.gold = 0;
-        this.goldText = null;
-        this.expBarHeight = 6;
-        this.expBarMargin = 10;
-        this.expBarBottomMargin = 16;
-        this.expBarBg = null;
-        this.expBarFill = null;
-        this.expLevelText = null;
-        this.expProgressText = null;
         this.keys = scene.input.keyboard.addKeys('W,S,A,D,UP,DOWN,LEFT,RIGHT');
         this.attackKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.healthBarWidth = 160;
         this.healthBarHeight = 10;
-        this.healthBarX = 10;
-        this.healthBarY = 10;
-        this.healthBarBg = null;
-        this.healthBar = null;
-        this.healthText = null;
-        this.damageText = null;
         this.lastDamageTime = 0;
         this.damageCooldown = 300;
         this.damageMultiplier = 1;
@@ -77,10 +63,17 @@ export default class Player extends BaseEntity {
 
         this.once(Phaser.GameObjects.Events.ADDED_TO_SCENE, () => {
             this.ensurePhysicsSize();
-            this.createHealthBarUI();
-            this.createExpBarUI();
+            this.ensureVisibleState();
             this.setState('move');
         });
+    }
+
+    ensureVisibleState() {
+        this.setVisible(true);
+        this.setActive(true);
+        this.setAlpha(1);
+        this.setBlendMode(Phaser.BlendModes.NORMAL);
+        this.setDepth(1000);
     }
 
     ensurePhysicsSize() {
@@ -91,7 +84,7 @@ export default class Player extends BaseEntity {
     }
 
     castBasicSpell() {
-        const skillType = this.scene?.activeSkillKey || 'thuner';
+        const skillType = this.scene?.activeSkillKey || 'thunder';
         if (this.isCastingSkill) return;
         const now = this.scene.time.now;
         const attackDuration = this.attackAnimationDuration || 400;
@@ -234,6 +227,7 @@ export default class Player extends BaseEntity {
     update(time, delta) {
         if (this.isDead) return;
 
+        this.ensureVisibleState();
         // Handle input
         let velocityX = 0;
         let velocityY = 0;
@@ -287,8 +281,6 @@ export default class Player extends BaseEntity {
         this.smoothHealthBar(delta);
         this.motionTrailEffect?.update(time, delta);
         this.smoothExpBar(delta);
-        this.updateHealthBarUI();
-        this.updateExpBarUI();
         this.attractLoot(delta);
         super.update(time, delta);
         this.wasMovingLastFrame = isMoving;
@@ -489,7 +481,7 @@ export default class Player extends BaseEntity {
     }
 
     getActiveSkillKey() {
-        return this.scene?.activeSkillKey || 'thuner';
+        return this.scene?.activeSkillKey || 'thunder';
     }
 
     getSkillObjectCount(skillKey) {
@@ -520,7 +512,7 @@ export default class Player extends BaseEntity {
     }
 
     getDefaultSkillKey() {
-        return this.characterConfig?.defaultSkill ?? 'thuner';
+        return this.characterConfig?.defaultSkill ?? 'thunder';
     }
 
     resolveAttackAnimationDuration() {
@@ -548,7 +540,7 @@ export default class Player extends BaseEntity {
         const resolvedKey = CHARACTER_CONFIG[requestedKey] ? requestedKey : DEFAULT_CHARACTER_KEY;
         const config = getCharacterConfig(resolvedKey);
         const assetKey = config?.assetKey ?? resolvedKey;
-        const defaultSkill = config.defaultSkill ?? 'thuner';
+        const defaultSkill = config.defaultSkill ?? 'thunder';
         if (this.characterKey === resolvedKey) {
             this.characterConfig = config;
             this.updateSpeedFromConfig();
@@ -595,157 +587,30 @@ export default class Player extends BaseEntity {
 
     createHealthBarUI() {
         this.destroyHealthBarUI();
-        if (!this.scene) return;
-        this.healthBarBg = this.scene.add.graphics();
-        this.healthBar = this.scene.add.graphics();
-        this.healthText = this.scene.add.text(this.healthBarX, this.healthBarY - 4, '', {
-            fontSize: '12px',
-            color: '#ffffff',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setScrollFactor(0).setDepth(42);
-        this.damageText = this.scene.add.text(this.healthBarX + this.healthBarWidth + 6, this.healthBarY + 8, '', {
-            fontSize: '12px',
-            color: '#ffff66',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setScrollFactor(0).setDepth(42);
-        this.goldText = this.scene.add.text(this.healthBarX, this.healthBarY + this.healthBarHeight + 6, 'Gold: 0', {
-            fontSize: '12px',
-            color: '#ffe066',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setScrollFactor(0).setDepth(42);
-        this.updateGoldText();
-        this.healthBarBg.setDepth(40);
-        this.healthBar.setDepth(41);
-        this.healthBarBg.setScrollFactor(0);
-        this.healthBar.setScrollFactor(0);
-        this.updateHealthBarUI();
     }
 
     createExpBarUI() {
         this.destroyExpBarUI();
-        if (!this.scene) return;
-        this.expBarBg = this.scene.add.graphics();
-        this.expBarFill = this.scene.add.graphics();
-        this.expLevelText = this.scene.add.text(0, 0, `Lv ${this.level}`, {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 3
-        }).setOrigin(0.5, 0.5);
-        this.expProgressText = this.scene.add.text(0, 0, '', {
-            fontSize: '12px',
-            fontFamily: 'Arial',
-            color: '#00ffdd',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0, 0.5);
-        this.expBarBg.setDepth(40);
-        this.expBarFill.setDepth(41);
-        this.expLevelText.setDepth(42);
-        this.expProgressText.setDepth(42);
-        this.expBarBg.setScrollFactor(0);
-        this.expBarFill.setScrollFactor(0);
-        this.expLevelText.setScrollFactor(0);
-        this.expProgressText.setScrollFactor(0);
-        this.updateExpBarUI();
     }
 
     updateHealthBarUI() {
-        if (!this.healthBar || !this.healthBarBg) return;
-        const rawHealth = typeof this.displayedHealth === 'number' ? this.displayedHealth : this.health;
-        const progress = Phaser.Math.Clamp(rawHealth / this.maxHealth, 0, 1);
-        this.healthBarBg.clear();
-        const radius = Math.max(4, this.healthBarHeight / 2);
-        this.healthBarBg.fillStyle(0x000000, 0.65);
-        this.healthBarBg.fillRoundedRect(
-            this.healthBarX - 2,
-            this.healthBarY - 2,
-            this.healthBarWidth + 4,
-            this.healthBarHeight + 4,
-            radius
-        );
-
-        const fillWidth = this.healthBarWidth * progress;
-        this.healthBar.clear();
-        if (fillWidth > 0) {
-            this.healthBar.fillStyle(0x330000, 1);
-            this.healthBar.fillRoundedRect(this.healthBarX, this.healthBarY, fillWidth, this.healthBarHeight, radius);
-            this.healthBar.fillStyle(0xff4d4d, 0.65);
-            this.healthBar.fillRoundedRect(
-                this.healthBarX,
-                this.healthBarY,
-                Math.max(fillWidth - 2, 0),
-                Math.max(this.healthBarHeight - 2, 0),
-                radius * 0.8
-            );
-        }
-        if (this.healthText) {
-            this.healthText.setText(`${Math.round(this.health)}/${this.maxHealth}`);
-            this.healthText.setPosition(this.healthBarX + this.healthBarWidth + 6, this.healthBarY - 2);
-        }
-        if (this.damageText) {
-            this.damageText.setText(`DMG ${this.getDisplayedDamage()}`);
-            this.damageText.setPosition(this.healthBarX + this.healthBarWidth + 6, this.healthBarY + 12);
-        }
-        this.updateGoldText();
+        return;
     }
 
     updateGoldText() {
-        if (!this.goldText) return;
-        this.goldText.setText(`Gold: ${Math.round(this.gold)}`);
+        return;
     }
 
     getDisplayedDamage() {
         if (!this.scene) return 0;
-        const skillKey = this.scene.activeSkillKey ?? 'thuner';
+        const skillKey = this.scene.activeSkillKey ?? 'thunder';
         const baseDamage = SKILL_CONFIG[skillKey]?.damage ?? 0;
         const multiplier = this.damageMultiplier ?? 1;
         return Math.round(baseDamage * multiplier);
     }
 
     updateExpBarUI() {
-        if (!this.expBarBg || !this.expBarFill || !this.expLevelText || !this.scene) return;
-        const totalWidth = this.scene.scale.width - this.expBarMargin * 2;
-        const height = this.expBarHeight;
-        const x = this.expBarMargin;
-        const y = this.scene.scale.height - height - this.expBarBottomMargin;
-        const rawXP = typeof this.displayedXP === 'number' ? this.displayedXP : this.currentXP;
-        const progress = this.xpToNextLevel > 0 ? Phaser.Math.Clamp(rawXP / this.xpToNextLevel, 0, 1) : 0;
-
-        this.expBarBg.clear();
-        const radius = Math.max(4, height / 2);
-        this.expBarBg.fillStyle(0x000000, 0.6);
-        this.expBarBg.fillRoundedRect(x - 2, y - 2, totalWidth + 4, height + 4, radius);
-
-        this.expBarFill.clear();
-        if (progress > 0) {
-            const fillWidth = totalWidth * progress;
-            this.expBarFill.fillStyle(0x00ff99, 1);
-            this.expBarFill.fillRoundedRect(x, y, fillWidth, height, radius * 0.9);
-            this.expBarFill.fillStyle(0x00cc77, 0.7);
-            this.expBarFill.fillRoundedRect(
-                x,
-                y,
-                Math.max(fillWidth - 2, 0),
-                Math.max(height - 2, 0),
-                radius * 0.8
-            );
-        }
-
-        this.expLevelText.setText(`Lv ${this.level}`);
-        this.expLevelText.setPosition(this.scene.scale.width / 2, y - 10);
-        if (this.expProgressText) {
-            const displayText = `${Math.floor(rawXP)} / ${this.xpToNextLevel}`;
-            this.expProgressText.setText(displayText);
-            this.expProgressText.setPosition(x + 6, y + height / 2);
-        }
+        return;
     }
 
     smoothExpBar(delta) {
@@ -757,45 +622,11 @@ export default class Player extends BaseEntity {
     }
 
     destroyExpBarUI() {
-        if (this.expBarFill) {
-            this.expBarFill.destroy();
-            this.expBarFill = null;
-        }
-        if (this.expBarBg) {
-            this.expBarBg.destroy();
-            this.expBarBg = null;
-        }
-        if (this.expLevelText) {
-            this.expLevelText.destroy();
-            this.expLevelText = null;
-        }
-        if (this.expProgressText) {
-            this.expProgressText.destroy();
-            this.expProgressText = null;
-        }
+        return;
     }
 
     destroyHealthBarUI() {
-        if (this.healthBar) {
-            this.healthBar.destroy();
-            this.healthBar = null;
-        }
-        if (this.healthBarBg) {
-            this.healthBarBg.destroy();
-            this.healthBarBg = null;
-        }
-        if (this.healthText) {
-            this.healthText.destroy();
-            this.healthText = null;
-        }
-        if (this.damageText) {
-            this.damageText.destroy();
-            this.damageText = null;
-        }
-        if (this.goldText) {
-            this.goldText.destroy();
-            this.goldText = null;
-        }
+        return;
     }
 
     smoothHealthBar(delta) {

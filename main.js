@@ -1,4 +1,5 @@
 import MainScene from './scenes/MainScene.js';
+import HudScene from './scenes/HudScene.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -15,7 +16,7 @@ const config = {
             debug: false
         }
     },
-    scene: [MainScene]
+    scene: [MainScene, HudScene]
 };
 
 new Phaser.Game(config);

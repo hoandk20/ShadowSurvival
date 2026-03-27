@@ -63,6 +63,34 @@ export const ANIMATION_CONFIG = {
         hurt: { frames: [0, 2], frameRate: 6, loop: false },
         dead: { frames: [0, 5], frameRate: 8, loop: false }
     },
+    minotau: {
+        idle: { frames: [0, 3], frameRate: 5, loop: true },
+        move: { frames: [0, 5], frameRate: 6, loop: true },
+        attack: { frames: [0, 4], frameRate: 8, loop: false },
+        hurt: { frames: [0, 2], frameRate: 6, loop: false },
+        dead: { frames: [0, 5], frameRate: 8, loop: false }
+    },
+    baphomet: {
+        idle: { frames: [0, 3], frameRate: 5, loop: true },
+        move: { frames: [0, 5], frameRate: 6, loop: true },
+        attack: { frames: [0, 4], frameRate: 8, loop: false },
+        hurt: { frames: [0, 2], frameRate: 6, loop: false },
+        dead: { frames: [0, 5], frameRate: 8, loop: false }
+    },
+    dino: {
+        idle: { frames: [0, 3], frameRate: 5, loop: true },
+        move: { frames: [0, 5], frameRate: 6, loop: true },
+        attack: { frames: [0, 4], frameRate: 8, loop: false },
+        hurt: { frames: [0, 2], frameRate: 6, loop: false },
+        dead: { frames: [0, 5], frameRate: 8, loop: false }
+    },
+    bugmonster: {
+        idle: { frames: [0, 3], frameRate: 5, loop: true },
+        move: { frames: [0, 5], frameRate: 6, loop: true },
+        attack: { frames: [0, 4], frameRate: 8, loop: false },
+        hurt: { frames: [0, 2], frameRate: 6, loop: false },
+        dead: { frames: [0, 5], frameRate: 8, loop: false }
+    },
     cursed_maiden: {
         idle: { frames: [0, 3], frameRate: 5, loop: true },
         move: { frames: [0, 5], frameRate: 6, loop: true },
@@ -103,6 +131,13 @@ export const ANIMATION_CONFIG = {
     }
     ,
     bat: {
+        idle: { frames: [0, 3], frameRate: 5, loop: true },
+        move: { frames: [0, 5], frameRate: 6, loop: true },
+        attack: { frames: [0, 4], frameRate: 8, loop: false },
+        hurt: { frames: [0, 2], frameRate: 6, loop: false },
+        dead: { frames: [0, 5], frameRate: 8, loop: false }
+    },
+    demonbat: {
         idle: { frames: [0, 3], frameRate: 5, loop: true },
         move: { frames: [0, 5], frameRate: 6, loop: true },
         attack: { frames: [0, 4], frameRate: 8, loop: false },

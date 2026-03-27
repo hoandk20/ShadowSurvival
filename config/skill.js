@@ -1,6 +1,6 @@
 // config/skill.js
 export const SKILL_CONFIG = {
-    thuner: {
+    thunder: {
         label: 'Thunder',
         category: 'area',
         multipleObject: false,
@@ -8,7 +8,7 @@ export const SKILL_CONFIG = {
         alignWithMovement: true,
         maxKnockbackSpeed: 9999,
         knockbackDistance: 5,
-        basePath: 'assets/skills/thuner/',
+        basePath: 'assets/skills/thunder/',
         animations: {
             cast: {
                 frames: ['frame0.png', 'frame1.png', 'frame2.png'],
@@ -102,13 +102,13 @@ export const SKILL_CONFIG = {
     heavenfall: {
         label: 'Heaven Fall',
         category: 'projectile',
-        projectileSpeed: 5000,
+        projectileSpeed: 2000,
         travelRange: 900,
         knockbackTakeDamage: false,
         multipleObject: true,
         maxObjects: 8,
         dropFromSky: true,
-        skyHeight: 400,
+        skyHeight: 300,
         alignWithMovement: false,
         basePath: 'assets/skills/heavenfall/',
         animations: {
@@ -154,8 +154,8 @@ export const SKILL_CONFIG = {
         damage: 25,
         duration: 3000,
         cooldown: 1500,
-        hitboxWidth: 30,
-        hitboxHeight: 30,
+        hitboxWidth: 20,
+        hitboxHeight: 20,
         destroyOnHit: true,
         knockback: 30,
         knockbackDragFactor: 0.3,

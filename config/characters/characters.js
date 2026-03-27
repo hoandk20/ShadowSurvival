@@ -11,7 +11,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'heavenfall',
         speed: 150,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -37,7 +37,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'nova',
         speed: 100,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -63,7 +63,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'charm',
         speed: 150,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -89,7 +89,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'ice',
         speed: 150,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -115,7 +115,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'aura',
         speed: 210,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -141,7 +141,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'avada',
         speed: 215,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -165,9 +165,9 @@ export const CHARACTER_CONFIG = {
             texture: 'assets/player/raiji/raiji.png',
             atlasJSON: 'assets/player/raiji/raiji.json'
         },
-        defaultSkill: 'thuner',
+        defaultSkill: 'thunder',
         speed: 225,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -193,7 +193,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'fire',
         speed: 190,
-        size: { width: 40, height: 40 },
+        size: { width: 30, height: 30 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],
@@ -219,7 +219,7 @@ export const CHARACTER_CONFIG = {
         },
         defaultSkill: 'iron_first',
         speed: 185,
-        size: { width: 45, height: 45 },
+        size: { width: 35, height: 35 },
         animations: {
             idle: {
                 frames: ['idle0.png', 'idle1.png', 'idle2.png'],

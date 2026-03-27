@@ -59,6 +59,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         scene.add.existing(this);
         this.setActive(false);
         this.setVisible(false);
+        this.setDepth(30);
         this.setDisplaySize(this.hitboxWidth, this.hitboxHeight);
     }
 
@@ -103,6 +104,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             this.setOrigin(0.5, 0.5);
         }
         this.setPosition(x, y);
+        this.setDepth(30);
         this.setFlipX(this.owner.flipX);
         const animKey = `${this.skillType}_${this.primaryAnimName}`;
         if (this.playAnimation && this.scene.anims.exists(animKey)) {

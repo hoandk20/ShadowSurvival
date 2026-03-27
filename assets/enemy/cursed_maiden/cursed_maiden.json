@@ -20,6 +20,14 @@
         "w": 64,
         "h": 64
       },
+      "inputSize": {
+        "w": 903,
+        "h": 1064
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
+      },
       "pivot": {
         "x": 0.5,
         "y": 0.5
@@ -42,6 +50,14 @@
         "h": 64
       },
       "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "inputSize": {
+        "w": 925,
+        "h": 1064
+      },
+      "renderSize": {
         "w": 64,
         "h": 64
       },
@@ -70,28 +86,11 @@
         "w": 64,
         "h": 64
       },
-      "pivot": {
-        "x": 0.5,
-        "y": 0.5
-      }
-    },
-    {
-      "filename": "frame3.png",
-      "frame": {
-        "x": 192,
-        "y": 0,
-        "w": 64,
-        "h": 64
+      "inputSize": {
+        "w": 878,
+        "h": 1064
       },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 64
-      },
-      "sourceSize": {
+      "renderSize": {
         "w": 64,
         "h": 64
       },
@@ -107,7 +106,7 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 256,
+      "w": 192,
       "h": 64
     },
     "scale": 1,

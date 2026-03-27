@@ -88,7 +88,7 @@ export const CARD_CONFIG = [
 ];
 
 export const CARD_RARITY_STYLES = {
-    common: { border: 0x293e66, glow: 0x1c2a44, badge: 0x374a74, text: '#b4c4ff' },
-    rare: { border: 0x5d2d85, glow: 0x331d44, badge: 0x7031c3, text: '#d6b5ff' },
-    legendary: { border: 0x8a6123, glow: 0x452a15, badge: 0xaa6216, text: '#ffe0ad' }
+    common: { border: 0x5d78a6, glow: 0x2a3f66, badge: 0x6f8bc2, text: '#d7e4ff' },
+    rare: { border: 0x9b6bcc, glow: 0x4c2f6a, badge: 0xb089eb, text: '#f0ddff' },
+    legendary: { border: 0xc99c4b, glow: 0x6a4b1b, badge: 0xe0b86a, text: '#fff0c6' }
 };

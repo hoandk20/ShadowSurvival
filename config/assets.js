@@ -41,6 +41,10 @@ const ENEMY_ASSET_ENTRIES = {
     moth_woman: buildEnemyAtlasEntry('moth_woman'),
     siren: buildEnemyAtlasEntry('siren'),
     medusa: buildEnemyAtlasEntry('medusa'),
+    minotau: buildEnemyAtlasEntry('minotau'),
+    baphomet: buildEnemyAtlasEntry('baphomet'),
+    dino: buildEnemyAtlasEntry('dino'),
+    bugmonster: buildEnemyAtlasEntry('bugmonster'),
     cursed_maiden: buildEnemyAtlasEntry('cursed_maiden'),
     kitsume: buildEnemyAtlasEntry('kitsume'),
     mummy: buildEnemyAtlasEntry('mummy'),
@@ -48,6 +52,7 @@ const ENEMY_ASSET_ENTRIES = {
     slime: buildEnemyAtlasEntry('slime'),
     rat: buildEnemyAtlasEntry('rat'),
     bat: buildEnemyAtlasEntry('bat'),
+    demonbat: buildEnemyAtlasEntry('demonbat'),
     worm: buildEnemyAtlasEntry('worm'),
     widow: buildEnemyAtlasEntry('widow')
 };

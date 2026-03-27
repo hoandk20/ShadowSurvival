@@ -1,24 +1,32 @@
 {
   "frames": [
     {
-      "filename": "frame2.png",
+      "filename": "frame0.png",
       "frame": {
-        "x": 2,
-        "y": 2,
-        "w": 128,
+        "x": 0,
+        "y": 0,
+        "w": 64,
         "h": 64
       },
       "rotated": false,
-      "trimmed": true,
+      "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
-        "y": 58,
-        "w": 128,
+        "y": 0,
+        "w": 64,
         "h": 64
       },
       "sourceSize": {
-        "w": 132,
-        "h": 132
+        "w": 64,
+        "h": 64
+      },
+      "inputSize": {
+        "w": 1631,
+        "h": 1063
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
       },
       "pivot": {
         "x": 0.5,
@@ -28,22 +36,30 @@
     {
       "filename": "frame1.png",
       "frame": {
-        "x": 134,
-        "y": 2,
-        "w": 122,
-        "h": 89
+        "x": 64,
+        "y": 0,
+        "w": 64,
+        "h": 64
       },
       "rotated": false,
-      "trimmed": true,
+      "trimmed": false,
       "spriteSourceSize": {
-        "x": 6,
-        "y": 35,
-        "w": 122,
-        "h": 89
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
       },
       "sourceSize": {
-        "w": 134,
-        "h": 132
+        "w": 64,
+        "h": 64
+      },
+      "inputSize": {
+        "w": 1063,
+        "h": 1063
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
       },
       "pivot": {
         "x": 0.5,
@@ -51,49 +67,32 @@
       }
     },
     {
-      "filename": "frame0.png",
+      "filename": "frame2.png",
       "frame": {
-        "x": 2,
-        "y": 70,
-        "w": 113,
-        "h": 101
+        "x": 128,
+        "y": 0,
+        "w": 64,
+        "h": 64
       },
       "rotated": false,
-      "trimmed": true,
+      "trimmed": false,
       "spriteSourceSize": {
-        "x": 9,
-        "y": 22,
-        "w": 113,
-        "h": 101
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
       },
       "sourceSize": {
-        "w": 130,
-        "h": 132
+        "w": 64,
+        "h": 64
       },
-      "pivot": {
-        "x": 0.5,
-        "y": 0.5
-      }
-    },
-    {
-      "filename": "frame3.png",
-      "frame": {
-        "x": 260,
-        "y": 2,
-        "w": 109,
-        "h": 75
+      "inputSize": {
+        "w": 1582,
+        "h": 1063
       },
-      "rotated": false,
-      "trimmed": true,
-      "spriteSourceSize": {
-        "x": 11,
-        "y": 48,
-        "w": 109,
-        "h": 75
-      },
-      "sourceSize": {
-        "w": 132,
-        "h": 132
+      "renderSize": {
+        "w": 64,
+        "h": 64
       },
       "pivot": {
         "x": 0.5,
@@ -102,14 +101,15 @@
     }
   ],
   "meta": {
-    "app": "http://free-tex-packer.com",
-    "version": "0.6.7",
-    "image": "texture.png",
+    "app": "Pixel Tools Studio",
+    "version": "1.0.0",
+    "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 371,
-      "h": 173
+      "w": 192,
+      "h": 64
     },
-    "scale": 1
+    "scale": 1,
+    "smartupdate": "#0f172a"
   }
 }

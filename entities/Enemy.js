@@ -39,9 +39,15 @@ export default class Enemy extends BaseEntity {
         this.knockbackTimer = 0;
         this.attackCooldown = enemyConfig.attackCooldown ?? 600;
         this.attackRange = enemyConfig.attackRange ?? 32;
+        this.stuckTimer = 0;
+        this.ghostTimer = 0;
+        this.ghostDuration = enemyConfig.ghostDuration ?? 900;
+        this.lastSafePosition = new Phaser.Math.Vector2(x, y);
+        this.lastPosition = new Phaser.Math.Vector2(x, y);
 
         this.setVisible(false);
         this.setScale(1);
+        this.setDepth(20);
         this.setDisplaySize(this.displaySize.width, this.displaySize.height);
         this.baseWidth = this.displaySize.width;
         this.baseHeight = this.displaySize.height;
@@ -60,6 +66,12 @@ export default class Enemy extends BaseEntity {
 
     update(time, delta, player, allEnemies) {
         if (!this.scene) return;
+        if (this.ghostTimer > 0) {
+            this.ghostTimer -= delta;
+            if (this.ghostTimer <= 0) {
+                this.endGhostMode();
+            }
+        }
         if (this.isStunned) {
             this.body.setVelocity(0, 0);
         } else if (this.knockbackTimer > 0) {
@@ -77,7 +89,9 @@ export default class Enemy extends BaseEntity {
             this.setFlipX(vx < 0);
         }
         this.applySeparation(allEnemies);
+        this.handleStuckInWall(player, delta);
         this.enforceHitboxSize();
+        this.updateStuckMemory();
     }
 
     takeDamage(amount, force = 0, direction = null, source = null, options = {}, skillConfig = null) {
@@ -116,6 +130,7 @@ export default class Enemy extends BaseEntity {
         if (this.isDead) return;
         this.isDead = true;
         this.setState('dead');
+        this.scene?.mapManager?.removeObjectCollisions?.(this);
         if (this.body) {
             this.body.stop();
             this.body.enable = false;
@@ -147,6 +162,68 @@ export default class Enemy extends BaseEntity {
         this.separation.scale(REPELL_FORCE / neighbors);
         this.body.velocity.x += this.separation.x;
         this.body.velocity.y += this.separation.y;
+    }
+
+    handleStuckInWall(player, delta) {
+        if (!this.body) return;
+        if (this.ghostTimer > 0) {
+            this.stuckTimer = 0;
+            return;
+        }
+        const blocked = this.body.blocked || {};
+        const touching = this.body.touching || {};
+        const isBlocked = Boolean(
+            blocked.left || blocked.right || blocked.up || blocked.down ||
+            touching.left || touching.right || touching.up || touching.down
+        );
+        const moving = Math.abs(this.body.velocity.x) + Math.abs(this.body.velocity.y) > 6;
+        const movedDistance = Phaser.Math.Distance.Between(this.x, this.y, this.lastPosition.x, this.lastPosition.y);
+
+        if (isBlocked && moving && movedDistance < 0.5) {
+            this.stuckTimer += delta;
+        } else {
+            this.stuckTimer = 0;
+            this.lastSafePosition.set(this.x, this.y);
+        }
+
+        if (this.stuckTimer < 3000) return;
+
+        this.startGhostMode();
+        const escape = new Phaser.Math.Vector2(0, 0);
+        if (player) {
+            escape.set(this.x - player.x, this.y - player.y);
+        }
+        if (escape.lengthSq() === 0) {
+            escape.set(Phaser.Math.FloatBetween(-1, 1), Phaser.Math.FloatBetween(-1, 1));
+        }
+
+        escape.normalize();
+        const ghostSpeed = Math.max(this.speed * 1.15, 60);
+        this.body.setVelocity(escape.x * ghostSpeed, escape.y * ghostSpeed);
+        this.setFlipX(this.body.velocity.x < 0);
+        this.stuckTimer = 0;
+    }
+
+    updateStuckMemory() {
+        if (!this.body) return;
+        this.lastPosition.set(this.x, this.y);
+    }
+
+    startGhostMode() {
+        if (this.ghostTimer > 0) return;
+        this.ghostTimer = this.ghostDuration;
+        this.scene?.mapManager?.removeObjectCollisions?.(this);
+        if (this.body) {
+            this.body.checkCollision.none = true;
+        }
+    }
+
+    endGhostMode() {
+        this.ghostTimer = 0;
+        if (this.body) {
+            this.body.checkCollision.none = false;
+        }
+        this.scene?.mapManager?.enableObjectCollisions?.(this);
     }
 
     syncBodySize() {

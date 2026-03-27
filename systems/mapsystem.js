@@ -7,8 +7,10 @@ export default class MapManager {
         this.tilemaps = [];
         this.mapLayers = [];
         this.mapColliders = [];
+        this.objectColliders = new Map();
         this.currentMapKey = null;
         this.currentDefinition = null;
+        this.collisionVersion = 0;
     }
 
     preloadMaps() {
@@ -75,6 +77,7 @@ export default class MapManager {
             }
             this.mapLayers.push({ info: layerInfo, layer });
         });
+        this.normalizeLayerDepths();
         this.tilemap = tilemap;
         this.currentMapKey = mapKey;
         this.currentDefinition = definition;
@@ -84,6 +87,7 @@ export default class MapManager {
     }
 
     clearMap() {
+        this.collisionVersion += 1;
         this.mapLayers.forEach(({ layer }) => {
             if (layer && layer.destroy) {
                 layer.destroy();
@@ -96,6 +100,7 @@ export default class MapManager {
             }
         });
         this.mapColliders = [];
+        this.objectColliders.clear();
         this.tilemaps.forEach((map) => {
             if (map && map.destroy) {
                 map.destroy();
@@ -140,14 +145,62 @@ export default class MapManager {
         this.scene.cameras.main.setBounds(0, 0, width, height);
     }
 
+    normalizeLayerDepths() {
+        if (this.backgroundRect) {
+            this.backgroundRect.setDepth(-10);
+        }
+        this.mapLayers.forEach(({ info, layer }, index) => {
+            if (!layer) return;
+            layer.setDepth(info?.depth ?? index);
+        });
+    }
+
     enableObjectCollisions(gameObject) {
         if (!gameObject) return;
-        this.mapLayers.forEach(({ info, layer }) => {
-            if (info.collidable && layer) {
-                const collider = this.scene.physics.add.collider(gameObject, layer);
-                if (collider) {
-                    this.mapColliders.push(collider);
+        const targets = typeof gameObject.getChildren === 'function'
+            ? gameObject.getChildren()
+            : Array.isArray(gameObject)
+                ? gameObject
+                : [gameObject];
+        targets.forEach((target) => {
+            if (!target || typeof target !== 'object') return;
+            if (target._mapCollisionVersion === this.collisionVersion && this.objectColliders.has(target)) return;
+            this.removeObjectCollisions(target);
+            const colliders = [];
+            this.mapLayers.forEach(({ info, layer }) => {
+                if (info.collidable && layer) {
+                    const collider = this.scene.physics.add.collider(target, layer);
+                    if (collider) {
+                        this.mapColliders.push(collider);
+                        colliders.push(collider);
+                    }
                 }
+            });
+            target._mapCollisionVersion = this.collisionVersion;
+            this.objectColliders.set(target, colliders);
+        });
+    }
+
+    removeObjectCollisions(gameObject) {
+        if (!gameObject) return;
+        const targets = typeof gameObject.getChildren === 'function'
+            ? gameObject.getChildren()
+            : Array.isArray(gameObject)
+                ? gameObject
+                : [gameObject];
+        targets.forEach((target) => {
+            if (!target) return;
+            const colliders = this.objectColliders.get(target);
+            if (Array.isArray(colliders)) {
+                colliders.forEach((collider) => {
+                    if (collider && collider.destroy) {
+                        collider.destroy();
+                    }
+                });
+            }
+            this.objectColliders.delete(target);
+            if (target._mapCollisionVersion === this.collisionVersion) {
+                target._mapCollisionVersion = null;
             }
         });
     }
