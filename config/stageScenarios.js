@@ -2,7 +2,7 @@ const ELITE_MODIFIERS = {
     tank: {
         kind: 'self',
         apply(stats) {
-            stats.maxHealth *= 3;
+            stats.maxHealth *= 10;
             stats.speed *= 0.8;
         }
     },
@@ -41,13 +41,33 @@ const ELITE_MODIFIERS = {
 
 export const STAGE_SCENARIOS = {
     church_sanctuary: {
+        normalSpawnPerSecond: 0.5,
+        normalSpawnPerSecondPerMinute: 0.1,
+        enemyHealthPercentPerMinute: 1.5,
+        enemyUnlockTimeline: [
+             { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 6 },
+            { enemyType: 'rat', unlockAtMinute: 3, spawnWeight: 8 },
+            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 10 },
+            { enemyType: 'succubus', unlockAtMinute: 9, spawnWeight: 12 },
+            { enemyType: 'moth_woman', unlockAtMinute: 12, spawnWeight: 14 },
+            { enemyType: 'widow', unlockAtMinute: 15, spawnWeight: 16 },
+            { enemyType: 'kitsume', unlockAtMinute: 20, spawnWeight: 18 },
+            { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 20 },
+           
+        ],
         elite: {
-            baseChance: 0.05,
+            baseChance: 0.01,
             chancePerMinute: 0.02,
-            maxChance: 0.3,
+            maxChance: 0.5,
+            baseStatMultipliers: {
+                maxHealth: 4,
+                damage: 1.5,
+                speed: 1.2,
+                scale: 1.2
+            },
             modifierCount: {
                 min: 1,
-                max: 3
+                max: 1
             },
             auraRadius: 120,
             tint: 0xffd166,
@@ -61,11 +81,10 @@ export const STAGE_SCENARIOS = {
         waves: [
             {
                 id: 'church_opening_swarm',
-                startAtMs: 27000,
-                intervalMs: 35000,
+                startAtMs: 50000,
+                intervalMs: 40000,
                 count: 20,
-                clusterRadius: 90,
-                enemyTypes: ['skeleton', 'succubus', 'lamia', 'moth_woman']
+                clusterRadius: 60
             }
         ]
     }
@@ -73,6 +92,40 @@ export const STAGE_SCENARIOS = {
 
 export function getStageScenario(mapKey) {
     return STAGE_SCENARIOS[mapKey] ?? null;
+}
+
+function getScenarioElapsedMs(scene) {
+    if (!scene) return 0;
+    const now = scene.time?.now ?? 0;
+    const runStartTime = scene.runStartTime ?? now;
+    return Math.max(0, now - runStartTime);
+}
+
+export function getScenarioSpawnInterval(scenario, fallbackInterval = 500) {
+    const normalSpawnPerSecond = scenario?.normalSpawnPerSecond;
+    if (typeof normalSpawnPerSecond !== 'number' || normalSpawnPerSecond <= 0) {
+        return fallbackInterval;
+    }
+    return Math.max(1, Math.round(1000 / normalSpawnPerSecond));
+}
+
+export function getScenarioSpawnRate(scene, scenario, fallbackPerSecond = 2) {
+    const basePerSecond = scenario?.normalSpawnPerSecond;
+    if (typeof basePerSecond !== 'number' || basePerSecond <= 0) {
+        return fallbackPerSecond;
+    }
+    const perMinuteBonus = Math.max(0, scenario?.normalSpawnPerSecondPerMinute ?? 0);
+    const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
+    return basePerSecond + (perMinuteBonus * elapsedMinutes);
+}
+
+export function getScenarioEnemyHealthMultiplier(scene, scenario) {
+    const percentPerMinute = scenario?.enemyHealthPercentPerMinute;
+    if (typeof percentPerMinute !== 'number' || percentPerMinute <= 0) {
+        return 1;
+    }
+    const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
+    return 1 + ((percentPerMinute * elapsedMinutes) / 100);
 }
 
 export function createStageScenarioState(scenario) {
@@ -87,9 +140,32 @@ export function createStageScenarioState(scenario) {
 export function getEliteSpawnChance(scene, scenario) {
     const eliteConfig = scenario?.elite;
     if (!scene || !eliteConfig) return 0;
-    const elapsedMinutes = Math.max((scene.time?.now ?? 0) / 60000, 0);
+    const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
     const scaledChance = eliteConfig.baseChance + (eliteConfig.chancePerMinute * elapsedMinutes);
     return Math.min(eliteConfig.maxChance ?? scaledChance, scaledChance);
+}
+
+export function getUnlockedEnemyTypes(scene, scenario) {
+    const timeline = Array.isArray(scenario?.enemyUnlockTimeline) ? scenario.enemyUnlockTimeline : [];
+    if (!timeline.length) return null;
+    const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
+    return new Set(
+        timeline
+            .filter((entry) => elapsedMinutes >= (entry.unlockAtMinute ?? 0))
+            .map((entry) => entry.enemyType)
+            .filter(Boolean)
+    );
+}
+
+export function getScenarioEnemySpawnWeights(scenario) {
+    const timeline = Array.isArray(scenario?.enemyUnlockTimeline) ? scenario.enemyUnlockTimeline : [];
+    if (!timeline.length) return null;
+    const weights = new Map();
+    timeline.forEach((entry) => {
+        if (!entry?.enemyType || typeof entry.spawnWeight !== 'number') return;
+        weights.set(entry.enemyType, entry.spawnWeight);
+    });
+    return weights;
 }
 
 export function rollEliteSpawn(scene, scenario, rng = Math.random) {
@@ -141,6 +217,15 @@ function applySelfModifiers(stats, modifierKeys) {
     });
 }
 
+function applyEliteBaseStats(stats, scenario) {
+    const multipliers = scenario?.elite?.baseStatMultipliers;
+    if (!multipliers) return;
+    stats.maxHealth *= multipliers.maxHealth ?? 1;
+    stats.damage *= multipliers.damage ?? 1;
+    stats.speed *= multipliers.speed ?? 1;
+    stats.scale *= multipliers.scale ?? 1;
+}
+
 export function applyEliteModifiers(enemy, modifierKeys, scenario) {
     if (!enemy || !Array.isArray(modifierKeys) || !modifierKeys.length) return false;
     ensureEnemyStats(enemy);
@@ -162,6 +247,7 @@ export function applyEliteModifiers(enemy, modifierKeys, scenario) {
         sizeFactor: 0.8
     });
     const nextStats = buildBaseRuntimeStats(enemy);
+    applyEliteBaseStats(nextStats, scenario);
     applySelfModifiers(nextStats, modifierKeys);
     enemy.applyRuntimeStats?.(nextStats, { preserveHealthRatio: false });
     return true;
@@ -224,7 +310,7 @@ export function getTriggeredWaves(scene, scenario, scenarioState) {
     if (!scene || !scenarioState || !Array.isArray(scenario?.waves) || !scenario.waves.length) {
         return [];
     }
-    const now = scene.time?.now ?? 0;
+    const now = getScenarioElapsedMs(scene);
     const triggered = [];
 
     scenario.waves.forEach((wave) => {

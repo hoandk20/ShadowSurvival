@@ -5,6 +5,7 @@ import { EFFECT_CONFIG } from '../config/effects.js';
 const EFFECT_CLASS_MAP = {
     auraGlow: HolyAuraEffect,
 };
+const TARGET_VIEW_MARGIN = 100;
 
 export default class Skill extends Phaser.GameObjects.Sprite {
     constructor(scene, owner, skillType) {
@@ -12,11 +13,16 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const animNames = config.animations ? Object.keys(config.animations) : [];
         const primaryAnimName = animNames.length ? animNames[0] : 'cast';
         const primaryAnim = config.animations ? config.animations[primaryAnimName] : null;
-        const baseTexture = primaryAnim && primaryAnim.frames && primaryAnim.frames.length
-            ? `${skillType}_${primaryAnimName}_0`
+        const baseTexture = config.atlas
+            ? config.atlas.key
+            : primaryAnim && primaryAnim.frames && primaryAnim.frames.length
+                ? `${skillType}_${primaryAnimName}_0`
             : `${skillType}_${primaryAnimName}`;
+        const baseFrame = config.atlas && primaryAnim?.frames?.length
+            ? primaryAnim.frames[0]
+            : undefined;
 
-        super(scene, 0, 0, baseTexture);
+        super(scene, 0, 0, baseTexture, baseFrame);
         this.owner = owner;
         this.skillType = skillType;
         this.config = config;
@@ -39,6 +45,9 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.orbitSpeed = config.orbitSpeed ?? 0;
         this.orbitDirection = config.orbitDirection ?? 1;
         this.orbitAngle = 0;
+        this.spinOnFlight = config.spinOnFlight ?? false;
+        this.spinSpeed = config.spinSpeed ?? 0;
+        this.baseRotation = 0;
         this.effectKey = config.effectKey ?? null;
         this.effectInstance = null;
         this.knockbackCount = 0;
@@ -106,6 +115,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.setPosition(x, y);
         this.setDepth(30);
         this.setFlipX(this.owner.flipX);
+        this.baseRotation = this.rotation ?? 0;
         const animKey = `${this.skillType}_${this.primaryAnimName}`;
         if (this.playAnimation && this.scene.anims.exists(animKey)) {
             this.anims.play(animKey);
@@ -191,6 +201,9 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             const moveDist = (this.projectileSpeed * delta) / 1000;
             this.x += this.direction.x * moveDist;
             this.y += this.direction.y * moveDist;
+            if (this.spinOnFlight && this.spinSpeed !== 0) {
+                this.rotation += (this.spinSpeed * delta) / 1000;
+            }
             if (this.travelRange > 0) {
                 const traveled = Phaser.Math.Distance.Between(this.startX, this.startY, this.x, this.y);
                 if (traveled >= this.travelRange) {
@@ -211,8 +224,16 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const enemies = this.scene.enemies.getChildren();
         let nearest = null;
         let minDist = Number.POSITIVE_INFINITY;
+        const view = this.scene?.cameras?.main?.worldView;
         for (const enemy of enemies) {
             if (!enemy || !enemy.active) continue;
+            if (view) {
+                const withinView = enemy.x >= view.left - TARGET_VIEW_MARGIN
+                    && enemy.x <= view.right + TARGET_VIEW_MARGIN
+                    && enemy.y >= view.top - TARGET_VIEW_MARGIN
+                    && enemy.y <= view.bottom + TARGET_VIEW_MARGIN;
+                if (!withinView) continue;
+            }
             const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
             if (dist < minDist) {
                 minDist = dist;

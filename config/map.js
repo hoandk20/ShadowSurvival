@@ -42,6 +42,11 @@ const MAP_DEFINITIONS = {
         label: 'Church Sanctuary',
         description: 'The Church Sanctuary has fallen. After the Shadow Collapse, the graves opened—and the dead rose.Nothing here rests anymore.',
         mapKey: CHURCH_KEY,
+        infiniteHorizontal: true,
+        alternatingMirroredChunks: true,
+        activeSegmentRadius: 2,
+        preloadSegmentRadius: 2,
+        segmentLoadMarginTiles: 12,
         music: {
             key: 'bgm_church_sunlight_on_cold_stone',
             path: `${MUSIC_BASE_PATH}/Sunlight_on_Cold_Stone.mp3`,

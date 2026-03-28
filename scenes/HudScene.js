@@ -11,6 +11,7 @@ export default class HudScene extends Phaser.Scene {
         this.expLevelText = null;
         this.expProgressText = null;
         this.killCountText = null;
+        this.runTimerText = null;
         this.mainScene = null;
         this.levelUpOverlay = null;
         this.levelUpContainer = null;
@@ -74,6 +75,14 @@ export default class HudScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1003);
+        this.runTimerText = this.add.text(0, 0, '00:00', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            fontStyle: 'bold',
+            color: '#fff6cc',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(1003);
 
         this.createPauseButton();
         this.createInventoryPanel();
@@ -100,9 +109,16 @@ export default class HudScene extends Phaser.Scene {
         const hpProgress = Phaser.Math.Clamp(rawHealth / maxHealth, 0, 1);
         const level = player.level ?? 1;
         const kills = this.mainScene?.killCount ?? 0;
+        const elapsedMs = Math.max(0, (this.mainScene?.time?.now ?? 0) - (this.mainScene?.runStartTime ?? 0));
+        const totalSeconds = Math.floor(elapsedMs / 1000);
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
 
         if (this.killCountText) {
             this.killCountText.setText(`Kills: ${kills}`);
+        }
+        if (this.runTimerText) {
+            this.runTimerText.setText(`${minutes}:${seconds}`);
         }
         this.updateTouchJoystick();
         this.drawHpBar(hpProgress, rawHealth, maxHealth);
@@ -136,6 +152,10 @@ export default class HudScene extends Phaser.Scene {
         if (this.killCountText) {
             const pauseOffset = width < 640 ? 58 : 64;
             this.killCountText.setPosition(pauseOffset, 14);
+        }
+        if (this.runTimerText) {
+            const rightMargin = width < 640 ? 10 : 14;
+            this.runTimerText.setPosition(width - rightMargin, 14);
         }
         this.layoutPauseButton();
         this.layoutTouchJoystick();
@@ -274,6 +294,36 @@ export default class HudScene extends Phaser.Scene {
             vector.x * maxThumbDistance * vector.magnitude,
             vector.y * maxThumbDistance * vector.magnitude
         );
+    }
+
+    isPointOverHud(screenX, screenY) {
+        if (this.levelUpOverlay?.active) {
+            return true;
+        }
+
+        const containsPoint = (gameObject) => {
+            if (!gameObject?.active || !gameObject.visible) return false;
+            const bounds = gameObject.getBounds?.();
+            return Boolean(bounds?.contains?.(screenX, screenY));
+        };
+
+        if (containsPoint(this.pauseButtonHitArea)) return true;
+        if (containsPoint(this.inventoryPanel)) return true;
+        if (containsPoint(this.killCountText)) return true;
+        if (containsPoint(this.runTimerText)) return true;
+
+        if (this.hudLayout) {
+            const { barX, barWidth, hpBarY, expBarY, barHeight } = this.hudLayout;
+            const bottomHudTop = hpBarY - 8;
+            const bottomHudBottom = expBarY + barHeight + 8;
+            const withinBottomHudX = screenX >= barX - 8 && screenX <= barX + barWidth + 8;
+            const withinBottomHudY = screenY >= bottomHudTop && screenY <= bottomHudBottom;
+            if (withinBottomHudX && withinBottomHudY) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     drawInventorySlot(graphics, size) {
@@ -566,6 +616,8 @@ export default class HudScene extends Phaser.Scene {
         this.expProgressText = null;
         this.killCountText?.destroy();
         this.killCountText = null;
+        this.runTimerText?.destroy();
+        this.runTimerText = null;
         this.pauseButton?.destroy(true);
         this.pauseButton = null;
         this.pauseButtonBg = null;

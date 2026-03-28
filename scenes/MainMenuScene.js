@@ -146,11 +146,9 @@ export default class MainMenuScene extends Phaser.Scene {
         const buttonGap = isCompact ? 16 : 18;
         const totalHeight = buttonHeight * 5 + buttonGap * 4;
         const buttonY = Math.max(safeY + 120, height / 2 - totalHeight / 2 + buttonHeight / 2);
-        const hasRunState = this.registry.get('hasStartedGame') ?? false;
         const buttons = [
             { label: 'START GAME', action: () => this.beginNewRun(false) },
             { label: 'START DEBUG MODE', action: () => this.beginNewRun(true) },
-            { label: 'CONTINUE', action: () => this.startGame(), disabled: !hasRunState },
             { label: 'SETTINGS', action: () => this.setMode('settings') },
             { label: 'CREDITS', action: () => this.setMode('credits') }
         ];
@@ -214,12 +212,13 @@ export default class MainMenuScene extends Phaser.Scene {
         });
         panel.add(previewPanel);
         const selectedCharacter = CHARACTER_CONFIG[this.selectedCharacterKey];
+        const compactPortrait = isPortrait && isCompact;
         previewPanel.add(createPixelText(this, 0, -previewHeight / 2 + 26, selectedCharacter.label ?? this.selectedCharacterKey, {
             fontSize: isCompact ? '16px' : '18px',
             color: '#fff0c5'
         }));
         previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, isPortrait ? -52 : -72, isPortrait ? 70 : 88));
-        previewPanel.add(this.add.text(0, isPortrait ? -8 : -18, selectedCharacter.description ?? '', {
+        previewPanel.add(this.add.text(0, compactPortrait ? -14 : isPortrait ? -8 : -18, selectedCharacter.description ?? '', {
             fontFamily: 'monospace',
             fontSize: isCompact ? '10px' : '11px',
             color: UI_COLORS.dimText,
@@ -231,14 +230,18 @@ export default class MainMenuScene extends Phaser.Scene {
         const skillKey = selectedCharacter.defaultSkill ?? 'thunder';
         const skillCfg = SKILL_CONFIG[skillKey] ?? {};
         const stats = [
-            `HP: 10000`,
+            `HP: ${selectedCharacter.hp ?? 0}`,
             `DAMAGE: ${skillCfg.damage ?? 0}`,
             `SKILL: ${(skillCfg.label ?? skillKey).toUpperCase()}`,
-            `SPEED: ${selectedCharacter.speed ?? 0}`
+            `SPEED: ${selectedCharacter.speed ?? 0}`,
+            `ARMOR: ${selectedCharacter.armor ?? 1}`
         ];
+        const statsStartY = compactPortrait ? 50 : isPortrait ? 64 : 82;
+        const statsGap = compactPortrait ? 14 : isCompact ? 18 : 22;
+        const statsFontSize = compactPortrait ? '10px' : isCompact ? '12px' : '13px';
         stats.forEach((line, index) => {
-            previewPanel.add(createPixelText(this, 0, (isPortrait ? 64 : 82) + index * (isCompact ? 18 : 22), line, {
-                fontSize: isCompact ? '12px' : '13px',
+            previewPanel.add(createPixelText(this, 0, statsStartY + index * statsGap, line, {
+                fontSize: statsFontSize,
                 color: index === 2 ? '#ffd888' : UI_COLORS.text
             }));
         });
@@ -276,21 +279,25 @@ export default class MainMenuScene extends Phaser.Scene {
     renderMapSelect() {
         const { width, height, safeX, safeY, isPortrait, isCompact } = this.getResponsiveMetrics();
         const maps = getAvailableMaps();
+        const compactPortrait = isPortrait && isCompact;
         this.mapOptionKeys = maps.map((mapEntry) => mapEntry.id);
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 420 : 920);
         const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 520 : 420);
         const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 6 : 10), panelWidth, panelHeight);
         this.uiRoot.add(panel);
-        panel.add(createPixelText(this, 0, -160, 'MAP SELECT', {
+        panel.add(createPixelText(this, 0, compactPortrait ? -panelHeight / 2 + 34 : -160, 'MAP SELECT', {
             fontSize: isCompact ? '16px' : '18px',
             color: '#ffe9b8'
         }));
 
-        const gap = isCompact ? 14 : 18;
+        const gap = compactPortrait ? 10 : isCompact ? 14 : 18;
         const availableWidth = panelWidth - 40;
-        const slotSize = Math.max(96, Math.min(Math.floor((availableWidth - gap * (maps.length - 1)) / maps.length), isCompact ? 128 : 150));
+        const slotSize = Math.max(80, Math.min(
+            Math.floor((availableWidth - gap * (maps.length - 1)) / maps.length),
+            compactPortrait ? 118 : isCompact ? 128 : 150
+        ));
         const contentWidth = maps.length * slotSize + Math.max(0, maps.length - 1) * gap;
-        const stripY = -22;
+        const stripY = compactPortrait ? -46 : -22;
         const mapContent = this.add.container(0, stripY);
         const startX = -contentWidth / 2 + slotSize / 2;
         maps.forEach((mapEntry, index) => {
@@ -303,14 +310,17 @@ export default class MainMenuScene extends Phaser.Scene {
         panel.add(mapContent);
 
         const selectedMap = getMapDefinition(this.selectedMapKey);
-        panel.add(createPixelText(this, 0, isPortrait ? 98 : 110, (selectedMap?.label ?? this.selectedMapKey).toUpperCase(), {
-            fontSize: isCompact ? '15px' : '16px',
+        const titleY = compactPortrait ? 52 : isPortrait ? 98 : 110;
+        const descriptionY = compactPortrait ? 72 : isPortrait ? 130 : 142;
+        panel.add(createPixelText(this, 0, titleY, (selectedMap?.label ?? this.selectedMapKey).toUpperCase(), {
+            fontSize: compactPortrait ? '13px' : isCompact ? '15px' : '16px',
             color: '#fff0c5'
         }));
-        panel.add(createPixelText(this, 0, isPortrait ? 130 : 142, selectedMap?.description ?? '', {
-            fontSize: isCompact ? '11px' : '12px',
+        panel.add(this.add.text(0, descriptionY, selectedMap?.description ?? '', {
+            fontFamily: 'monospace',
+            fontSize: compactPortrait ? '10px' : isCompact ? '11px' : '12px',
             color: UI_COLORS.dimText
-        }).setWordWrapWidth(Math.min(420, panelWidth - 36)));
+        }).setOrigin(0.5, 0).setAlign('center').setStroke('#000000', 2).setWordWrapWidth(Math.min(420, panelWidth - 36)));
 
         const actionButtonY = height - safeY - (isCompact ? 28 : 24);
         const actionGap = isCompact ? 14 : 18;
@@ -447,7 +457,7 @@ export default class MainMenuScene extends Phaser.Scene {
         frame.lineStyle(2, selected ? UI_COLORS.goldBright : UI_COLORS.border, 1);
         frame.strokeRect(-size / 2 + 2, -size / 2 + 2, size - 4, size - 4);
         const label = createPixelText(this, 0, -size / 2 + 20, definition?.label ?? mapKey, {
-            fontSize: size <= 120 ? '9px' : '10px',
+            fontSize: size <= 108 ? '7px' : size <= 120 ? '9px' : '10px',
             color: selected ? '#fff0c5' : UI_COLORS.dimText,
             strokeThickness: 2
         });

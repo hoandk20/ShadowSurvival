@@ -7,6 +7,7 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'heavenfall',
         hp: 110,
+        armor: 1,
         speed: 75,
         size: { width: 20, height: 20 }
     },
@@ -17,6 +18,7 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'nova',
         hp: 140,
+        armor: 1,
         speed: 75,
         size: { width: 20, height: 20 }
     },
@@ -26,8 +28,9 @@ export const CHARACTER_CONFIG = {
         assetKey: 'radian',
         assetFormat: 'spritesheet',
         defaultSkill: 'charm',
-        hp: 110,
-        speed: 78,
+        hp: 100,
+        armor: 1,
+        speed: 65,
         size: { width: 20, height: 20 }
     },
     frost: {
@@ -36,8 +39,9 @@ export const CHARACTER_CONFIG = {
         assetKey: 'frost',
         assetFormat: 'spritesheet',
         defaultSkill: 'ice',
-        hp: 120,
-        speed: 80,
+        hp: 100,
+        armor: 1,
+        speed: 78,
         size: { width: 20, height: 20 }
     },
     holy: {
@@ -47,7 +51,8 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'aura',
         hp: 85,
-        speed: 90,
+        armor: 1,
+        speed: 80,
         size: { width: 20, height: 20 }
     },
     witch: {
@@ -57,7 +62,19 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'avada',
         hp: 75,
-        speed: 95,
+        armor: 1,
+        speed: 82,
+        size: { width: 20, height: 20 }
+    },
+    gambler: {
+        label: 'Gambler',
+        description: 'A rogue cardsharp who bets everything on impossible rolls.',
+        assetKey: 'gambler',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'card_toss',
+        hp: 80,
+        armor: 1,
+        speed: 78,
         size: { width: 20, height: 20 }
     },
     raiji: {
@@ -67,7 +84,8 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'thunder',
         hp: 70,
-        speed: 80,
+        armor: 2,
+        speed: 85,
         size: { width: 20, height: 20 }
     },
     warden: {
@@ -77,6 +95,7 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'fire',
         hp: 100,
+        armor: 2,
         speed: 75,
         size: { width: 20, height: 20 }
     },
@@ -87,6 +106,7 @@ export const CHARACTER_CONFIG = {
         assetFormat: 'spritesheet',
         defaultSkill: 'iron_first',
         hp: 170,
+        armor: 3,
         speed: 70,
         size: { width: 25, height: 25 }
     }

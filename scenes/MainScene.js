@@ -13,16 +13,21 @@ import { preloadAllAssets, createAllAnimations } from '../utils/animationSystem.
 import { ELITE_CONFIGS, ELITE_KILL_MILESTONES } from '../config/elites.js';
 import {
     createStageScenarioState,
+    getScenarioEnemyHealthMultiplier,
     getStageScenario,
+    getScenarioEnemySpawnWeights,
+    getScenarioSpawnRate,
+    getScenarioSpawnInterval,
     getTriggeredWaves,
     handleAuraSystem,
+    getUnlockedEnemyTypes,
     spawnEnemyWithEliteChance
 } from '../config/stageScenarios.js';
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
 import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 
-const SPAWN_PADDING = 100;
-const DESPAWN_MARGIN = 300;
+const SPAWN_PADDING = 50;
+const DESPAWN_MARGIN = 150;
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -32,6 +37,7 @@ export default class MainScene extends Phaser.Scene {
         this.currentMapMusicKey = null;
         this.touchMoveState = null;
         this.touchControlsEnabled = false;
+        this.debugSpawnIntervalOverrideMs = null;
     }
 
     preload() {
@@ -129,7 +135,7 @@ export default class MainScene extends Phaser.Scene {
         this.setupDebugMenu();
 
         this.spawnTimer = 0;
-        this.spawnInterval = 500; // spawn every 0.5 second
+        this.spawnInterval = getScenarioSpawnInterval(this.stageScenario, 500);
         this.isChoosingCard = false;
         this.upgradeOverlay = null;
         this.upgradeContainer = null;
@@ -146,6 +152,12 @@ export default class MainScene extends Phaser.Scene {
     update(time, delta) {
         if (this.isGameOver) return;
         if (this.isChoosingCard) return;
+        if (typeof this.debugSpawnIntervalOverrideMs === 'number' && this.debugSpawnIntervalOverrideMs > 0) {
+            this.spawnInterval = this.debugSpawnIntervalOverrideMs;
+        } else {
+            const currentSpawnRate = getScenarioSpawnRate(this, this.stageScenario, 1000 / Math.max(1, this.spawnInterval));
+            this.spawnInterval = Math.max(1, Math.round(1000 / currentSpawnRate));
+        }
         // Update player
         this.player.update(time, delta);
         this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
@@ -345,6 +357,18 @@ export default class MainScene extends Phaser.Scene {
         if (!this.debugMode) {
             return;
         }
+        const toggleButton = panel.querySelector('#debug-panel-toggle');
+        if (toggleButton && !toggleButton.dataset.bound) {
+            toggleButton.dataset.bound = 'true';
+            const syncToggleLabel = () => {
+                toggleButton.textContent = panel.classList.contains('collapsed') ? 'Show' : 'Hide';
+            };
+            toggleButton.addEventListener('click', () => {
+                panel.classList.toggle('collapsed');
+                syncToggleLabel();
+            });
+            syncToggleLabel();
+        }
         const skillContainer = panel.querySelector('#skill-list');
         const enemyContainer = panel.querySelector('#enemy-list');
         if (!skillContainer || !enemyContainer) return;
@@ -506,6 +530,35 @@ export default class MainScene extends Phaser.Scene {
         hpLabel.appendChild(hpToggle);
         hpLabel.appendChild(document.createTextNode('Show enemy HP'));
         uiSection.appendChild(hpLabel);
+
+        const spawnIntervalLabel = document.createElement('label');
+        spawnIntervalLabel.textContent = 'Spawn interval (ms)';
+        spawnIntervalLabel.style.display = 'flex';
+        spawnIntervalLabel.style.flexDirection = 'column';
+        spawnIntervalLabel.style.gap = '4px';
+        spawnIntervalLabel.style.fontSize = '12px';
+        const spawnIntervalInput = document.createElement('input');
+        spawnIntervalInput.type = 'number';
+        spawnIntervalInput.min = '1';
+        spawnIntervalInput.step = '50';
+        spawnIntervalInput.value = String(Math.max(1, Math.round(this.debugSpawnIntervalOverrideMs ?? this.spawnInterval ?? 500)));
+        spawnIntervalInput.style.padding = '4px';
+        spawnIntervalInput.style.borderRadius = '4px';
+        spawnIntervalInput.style.background = '#222';
+        spawnIntervalInput.style.color = '#fff';
+        spawnIntervalInput.style.border = '1px solid rgba(255,255,255,0.2)';
+        spawnIntervalInput.addEventListener('change', () => {
+            const nextValue = Number(spawnIntervalInput.value);
+            if (!Number.isFinite(nextValue) || nextValue <= 0) {
+                spawnIntervalInput.value = String(Math.max(1, Math.round(this.debugSpawnIntervalOverrideMs ?? this.spawnInterval ?? 500)));
+                return;
+            }
+            this.debugSpawnIntervalOverrideMs = Math.max(1, Math.round(nextValue));
+            this.spawnInterval = this.debugSpawnIntervalOverrideMs;
+            spawnIntervalInput.value = String(this.debugSpawnIntervalOverrideMs);
+        });
+        spawnIntervalLabel.appendChild(spawnIntervalInput);
+        uiSection.appendChild(spawnIntervalLabel);
         this.updateEnemyCountDisplay();
     }
 
@@ -563,6 +616,16 @@ export default class MainScene extends Phaser.Scene {
     spawnEnemyAtPosition(x, y, enemyType) {
         if (!enemyType || !this.canSpawnMoreEnemies()) return null;
         const enemy = new Enemy(this, x, y, enemyType);
+        const healthMultiplier = getScenarioEnemyHealthMultiplier(this, this.stageScenario);
+        if (healthMultiplier !== 1) {
+            enemy.applyRuntimeStats?.({
+                maxHealth: Math.max(1, Math.round((enemy.maxHealth ?? 1) * healthMultiplier)),
+                damage: enemy.damage,
+                speed: enemy.speed,
+                scale: enemy.scaleSize ?? 1
+            }, { preserveHealthRatio: false });
+            enemy.captureBaseStats?.();
+        }
         spawnEnemyWithEliteChance(this, enemy, this.stageScenario);
         this.enemies.add(enemy);
         this.add.existing(enemy);
@@ -597,8 +660,11 @@ export default class MainScene extends Phaser.Scene {
     }
 
     pickEnemyTypeForWave(waveConfig) {
+        const unlockedEnemyTypes = getUnlockedEnemyTypes(this, this.stageScenario);
         const waveTypes = (waveConfig?.enemyTypes ?? []).filter((type) => {
-            return ENEMIES[type] && ((this.enemySpawnStatus?.[type] ?? false) || !this.debugMode);
+            return ENEMIES[type]
+                && (!unlockedEnemyTypes || unlockedEnemyTypes.has(type))
+                && ((this.enemySpawnStatus?.[type] ?? false) || !this.debugMode);
         });
         if (waveTypes.length) {
             return Phaser.Utils.Array.GetRandom(waveTypes);
@@ -730,7 +796,8 @@ export default class MainScene extends Phaser.Scene {
         if (!this.touchControlsEnabled || !pointer) return;
         if (!pointer.wasTouch && !pointer.pointerType?.includes?.('touch')) return;
         if (this.touchMoveState?.active) return;
-        if (pointer.x > this.scale.width * 0.55 || pointer.y < this.scale.height * 0.32) return;
+        const hudScene = this.scene.get('HudScene');
+        if (hudScene?.isPointOverHud?.(pointer.x, pointer.y)) return;
 
         this.touchMoveState.active = true;
         this.touchMoveState.pointerId = pointer.id;
@@ -874,11 +941,18 @@ export default class MainScene extends Phaser.Scene {
     }
 
     getSpawnableEnemyTypes() {
-        const level = this.player?.level ?? 1;
+        const unlockedEnemyTypes = getUnlockedEnemyTypes(this, this.stageScenario);
+        const scenarioSpawnWeights = getScenarioEnemySpawnWeights(this.stageScenario);
         return Object.entries(ENEMIES).filter(([type, cfg]) => {
-            const enabled = this.enemySpawnStatus[type] ?? false;
-            const minLevel = cfg.unlockLevel ?? 1;
-            return enabled && level >= minLevel && (cfg.spawnWeight ?? 0) > 0;
+            const enabled = this.debugMode
+                ? (this.enemySpawnStatus[type] ?? false)
+                : true;
+            const isUnlocked = unlockedEnemyTypes ? unlockedEnemyTypes.has(type) : true;
+            const spawnWeight = scenarioSpawnWeights?.get(type) ?? cfg.spawnWeight ?? 0;
+            return enabled && isUnlocked && spawnWeight > 0;
+        }).map(([type, cfg]) => {
+            const spawnWeight = scenarioSpawnWeights?.get(type) ?? cfg.spawnWeight ?? 0;
+            return [type, { ...cfg, spawnWeight }];
         });
     }
 

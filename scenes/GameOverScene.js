@@ -46,6 +46,7 @@ export default class GameOverScene extends Phaser.Scene {
         panel.add(createPixelButton(this, 0, 86, buttonWidth, buttonHeight, 'RETRY', () => {
             this.scene.stop('HudScene');
             this.scene.stop('MainScene');
+            this.scene.stop('GameOverScene');
             this.scene.start('MainScene');
         }, {
             fontSize: isCompact ? '15px' : '16px'
@@ -53,6 +54,7 @@ export default class GameOverScene extends Phaser.Scene {
         panel.add(createPixelButton(this, 0, 144, buttonWidth, buttonHeight, 'BACK TO MENU', () => {
             this.scene.stop('HudScene');
             this.scene.stop('MainScene');
+            this.scene.stop('GameOverScene');
             this.scene.start('MainMenuScene');
         }, {
             fontSize: isCompact ? '15px' : '16px'

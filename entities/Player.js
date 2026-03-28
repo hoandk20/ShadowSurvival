@@ -17,6 +17,8 @@ const selectAnimationName = (config) => {
 
 const buildFrameKey = (assetKey, animName, frameIndex = 0) => `${assetKey}_${animName}_${frameIndex}`;
 const DEFAULT_CHARACTER_HP = 10000;
+const DEFAULT_CHARACTER_ARMOR = 1;
+const TARGET_VIEW_MARGIN = 100;
 
 export default class Player extends BaseEntity {
     constructor(scene, x, y, characterKey = DEFAULT_CHARACTER_KEY) {
@@ -34,6 +36,7 @@ export default class Player extends BaseEntity {
         this.speed = 200;
         this.maxHealth = characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
         this.health = this.maxHealth;
+        this.armor = characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR;
         this.displayedHealth = this.health;
         this.level = 1;
         this.currentXP = 0;
@@ -127,7 +130,7 @@ export default class Player extends BaseEntity {
         let dropTargets = [];
         if (dropFromSky) {
             dropTargets = (this.scene?.enemies?.getChildren?.() ?? [])
-                .filter(enemy => enemy && enemy.active)
+                .filter(enemy => this.isEnemyWithinTargetView(enemy))
                 .sort((a, b) => {
                     const distA = Phaser.Math.Distance.Between(this.x, this.y, a.x, a.y);
                     const distB = Phaser.Math.Distance.Between(this.x, this.y, b.x, b.y);
@@ -135,8 +138,14 @@ export default class Player extends BaseEntity {
                 });
         }
         const autoAim = skillDefinition.autoAim ?? false;
+        const autoAimDistinctTargets = skillDefinition.autoAimDistinctTargets ?? false;
         const autoAimDelay = skillDefinition.autoAimBurstInterval ?? 70;
-        const autoAimTarget = autoAim ? this.getAutoAimTarget() : null;
+        const autoAimFanAngle = skillDefinition.autoAimFanAngle ?? 0;
+        const autoAimSpawnRadius = skillDefinition.autoAimSpawnRadius ?? 0;
+        const autoAimTargets = autoAim
+            ? this.getAutoAimTargets(autoAimDistinctTargets ? count : 1)
+            : [];
+        const autoAimTarget = autoAimTargets[0] ?? null;
 
         const spawnSkillObject = (index) => {
             const skill = new Skill(this.scene, this, skillType);
@@ -146,13 +155,27 @@ export default class Player extends BaseEntity {
             }
             skill.cast();
             if (skill.category === 'projectile') {
-                if (autoAim && autoAimTarget) {
-                    skill.autoAimTarget = autoAimTarget;
-                    skill.x = this.x;
-                    skill.y = this.y;
-                    skill.startX = this.x;
-                    skill.startY = this.y;
-                    this.aimProjectileAtTarget(skill, autoAimTarget);
+                const projectileTarget = autoAimDistinctTargets
+                    ? (autoAimTargets[index % autoAimTargets.length] ?? autoAimTarget)
+                    : autoAimTarget;
+                if (autoAim && projectileTarget) {
+                    const targetAngle = Phaser.Math.Angle.Between(this.x, this.y, projectileTarget.x, projectileTarget.y);
+                    const spreadStep = count > 1 ? autoAimFanAngle / (count - 1) : 0;
+                    const angleOffset = count > 1 ? -autoAimFanAngle / 2 + spreadStep * index : 0;
+                    const projectileAngle = targetAngle + angleOffset;
+                    const spawnX = this.x + Math.cos(projectileAngle) * autoAimSpawnRadius;
+                    const spawnY = this.y + Math.sin(projectileAngle) * autoAimSpawnRadius;
+                    skill.autoAimTarget = projectileTarget;
+                    skill.x = spawnX;
+                    skill.y = spawnY;
+                    skill.startX = spawnX;
+                    skill.startY = spawnY;
+                    skill.direction.set(
+                        projectileTarget.x - spawnX,
+                        projectileTarget.y - spawnY
+                    ).normalize();
+                    skill.setRotation(projectileAngle);
+                    skill.setFlipX(false);
                 } else {
                     let dx = Math.cos(angle);
                     let dy = Math.sin(angle);
@@ -347,13 +370,26 @@ export default class Player extends BaseEntity {
     }
 
     getAutoAimTarget() {
+        return this.getAutoAimTargets(1)[0] ?? null;
+    }
+
+    getAutoAimTargets(count = 1) {
         if (!this.scene || !this.scene.enemies) return null;
         const enemies = this.scene.enemies.getChildren?.() ?? [];
-        const activeEnemies = enemies.filter(enemy => enemy && enemy.active);
-        if (!activeEnemies.length) return null;
+        const activeEnemies = enemies.filter(enemy => this.isEnemyWithinTargetView(enemy));
+        if (!activeEnemies.length) return [];
         activeEnemies.sort((a, b) => Phaser.Math.Distance.Between(this.x, this.y, a.x, a.y)
             - Phaser.Math.Distance.Between(this.x, this.y, b.x, b.y));
-        return activeEnemies[0];
+        return activeEnemies.slice(0, Math.max(1, count));
+    }
+
+    isEnemyWithinTargetView(enemy, margin = TARGET_VIEW_MARGIN) {
+        if (!enemy?.active || !this.scene?.cameras?.main) return false;
+        const view = this.scene.cameras.main.worldView;
+        return enemy.x >= view.left - margin
+            && enemy.x <= view.right + margin
+            && enemy.y >= view.top - margin
+            && enemy.y <= view.bottom + margin;
     }
 
     aimProjectileAtTarget(skill, target) {
@@ -379,7 +415,8 @@ export default class Player extends BaseEntity {
         }
         this.lastDamageTime = now;
         if (this.isDead) return;
-        this.health = Phaser.Math.Clamp(this.health - amount, 0, this.maxHealth);
+        const mitigatedDamage = Math.max(1, Math.round((amount ?? 0) - (this.armor ?? DEFAULT_CHARACTER_ARMOR)));
+        this.health = Phaser.Math.Clamp(this.health - mitigatedDamage, 0, this.maxHealth);
         this.updateHealthBarUI();
         if (this.health <= 0) {
             this.isDead = true;
@@ -517,7 +554,8 @@ export default class Player extends BaseEntity {
     }
 
     getSkillObjectCount(skillKey) {
-        return this.skillObjectCounts[skillKey] ?? 1;
+        const defaultCount = SKILL_CONFIG[skillKey]?.defaultObjects ?? 1;
+        return this.skillObjectCounts[skillKey] ?? defaultCount;
     }
 
     getSkillObjectMaxCount(skillKey) {
@@ -576,6 +614,7 @@ export default class Player extends BaseEntity {
         if (this.characterKey === resolvedKey) {
             this.characterConfig = config;
             this.updateHealthFromCharacterConfig();
+            this.updateArmorFromConfig();
             this.updateSpeedFromConfig();
             return defaultSkill;
         }
@@ -606,12 +645,14 @@ export default class Player extends BaseEntity {
         this.state = null;
         this.previousState = null;
         this.setState('idle');
-        this.skillObjectCounts = { [defaultSkill]: 1 };
-        this.skillObjectCount = 1;
+        const defaultSkillObjectCount = SKILL_CONFIG[defaultSkill]?.defaultObjects ?? 1;
+        this.skillObjectCounts = { [defaultSkill]: defaultSkillObjectCount };
+        this.skillObjectCount = defaultSkillObjectCount;
         this.isCastingSkill = false;
         this.attackAnimationDuration = this.resolveAttackAnimationDuration();
         this.idleFrameIndex = config?.idleFrameIndex ?? this.idleFrameIndex;
         this.updateHealthFromCharacterConfig();
+        this.updateArmorFromConfig();
         this.updateSpeedFromConfig();
         return defaultSkill;
     }
@@ -627,6 +668,10 @@ export default class Player extends BaseEntity {
 
     updateSpeedFromConfig() {
         this.speed = this.characterConfig?.speed ?? 200;
+    }
+
+    updateArmorFromConfig() {
+        this.armor = this.characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR;
     }
 
     createHealthBarUI() {

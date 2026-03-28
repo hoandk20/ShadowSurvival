@@ -20,8 +20,8 @@ export default class Card extends Phaser.GameObjects.Container {
         const height = CARD_LAYOUT.height;
         const cardScale = CARD_LAYOUT.scale * scaleFactor;
         const hoverScale = CARD_LAYOUT.hoverScale * scaleFactor;
-        const bgWidth = width * cardScale + CARD_LAYOUT.padding;
-        const bgHeight = height * cardScale + CARD_LAYOUT.padding;
+        const bgWidth = width + CARD_LAYOUT.padding;
+        const bgHeight = height + CARD_LAYOUT.padding;
         const rarity = cardConfig.rarity || 'common';
         const style = CARD_RARITY_STYLES[rarity] || CARD_RARITY_STYLES.common;
         const glow = scene.add.rectangle(0, 0, bgWidth + 18, bgHeight + 18, style.glow)
@@ -42,7 +42,7 @@ export default class Card extends Phaser.GameObjects.Container {
             .setOrigin(0.5);
         const accentBar = scene.add.rectangle(0, -bgHeight / 2 + 22, bgWidth - 36, 22, 0x324766)
             .setOrigin(0.5);
-        const iconContainer = scene.add.container(-bgWidth / 2 + 72, 0);
+        const iconContainer = scene.add.container(-bgWidth / 2 + 78, 4);
         const iconGlow = scene.add.circle(0, 0, 40, style.glow).setAlpha(0.12);
         const iconRing = scene.add.circle(0, 0, 32, 0x0f1724).setStrokeStyle(2, style.border);
         const iconKey = `card_icon_${cardConfig.key}`;
@@ -57,20 +57,20 @@ export default class Card extends Phaser.GameObjects.Container {
             .setOrigin(0.5)
             .setAlpha(0.1);
         iconContainer.add(shadowLayer);
-        const textStartX = -bgWidth / 2 + 150;
+        const textStartX = -bgWidth / 2 + 160;
         const availableTextWidth = bgWidth - (textStartX + bgWidth / 2 - 36);
-        const textWidth = Math.max(180, Math.min(300, availableTextWidth));
-        const title = scene.add.text(textStartX, -46, cardConfig.name, {
-            fontSize: '32px',
+        const textWidth = Math.max(170, Math.min(280, availableTextWidth));
+        const title = scene.add.text(textStartX, -64, cardConfig.name, {
+            fontSize: '26px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
             color: '#eff5ff',
             stroke: '#000000',
             strokeThickness: 4
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0, 0);
         title.setShadow(2, 2, '#000000', 4, true, true);
-        const description = scene.add.text(textStartX, 18, cardConfig.description, {
-            fontSize: '24px',
+        const description = scene.add.text(textStartX, -8, cardConfig.description, {
+            fontSize: '18px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
             color: '#f3f8ff',
@@ -78,10 +78,10 @@ export default class Card extends Phaser.GameObjects.Container {
             wordWrap: { width: textWidth },
             stroke: '#000000',
             strokeThickness: 3
-        }).setOrigin(0, 0.5);
-        description.setLineSpacing(10);
+        }).setOrigin(0, 0);
+        description.setLineSpacing(6);
         description.setShadow(2, 2, '#000000', 3, true, true);
-        const badge = scene.add.rectangle(bgWidth / 2 - 96, bgHeight / 2 - 28, 132, 30, style.badge)
+        const badge = scene.add.rectangle(bgWidth / 2 - 90, bgHeight / 2 - 26, 118, 24, style.badge)
             .setOrigin(0.5)
             .setStrokeStyle(1, 0x000000, 0.2);
         scene.tweens.add({
@@ -93,7 +93,7 @@ export default class Card extends Phaser.GameObjects.Container {
             ease: 'Sine.easeInOut'
         });
         const badgeText = scene.add.text(badge.x, badge.y, rarity.toUpperCase(), {
-            fontSize: '14px',
+            fontSize: '11px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
             color: '#10131c',

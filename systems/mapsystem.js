@@ -241,6 +241,10 @@ export default class MapManager {
         }).filter(Boolean);
         const layerTilesets = tilesets.length === 1 ? tilesets[0] : tilesets;
         const segmentOffsetX = segmentIndex * tilemap.widthInPixels;
+        const isMirroredSegment = Boolean(
+            definition.alternatingMirroredChunks
+            && Math.abs(segmentIndex % 2) === 1
+        );
         const layers = this.resolveRuntimeLayers(tilemap, definition);
         const createdLayers = [];
 
@@ -264,6 +268,9 @@ export default class MapManager {
                 console.warn(`[MapManager] Failed to create layer "${layerInfo.name}" for map "${definition.mapKey}"`);
                 return;
             }
+            if (isMirroredSegment) {
+                this.mirrorTileLayerContents(layer);
+            }
             layer.setDepth(layerInfo.depth ?? 0);
             if (layerInfo.collidable) {
                 layer.setCollisionByExclusion([-1], true);
@@ -276,6 +283,28 @@ export default class MapManager {
         this.tilemaps.push(tilemap);
         this.segmentLayers.set(segmentIndex, { tilemap, layers: createdLayers });
         return tilemap;
+    }
+
+    mirrorTileLayerContents(layer) {
+        const rows = layer?.layer?.data;
+        if (!Array.isArray(rows) || !rows.length) return;
+
+        rows.forEach((row) => {
+            if (!Array.isArray(row) || row.length < 2) return;
+            const indexes = row.map((tile) => tile?.index ?? -1);
+            const flipsX = row.map((tile) => tile?.flipX ?? false);
+            const flipsY = row.map((tile) => tile?.flipY ?? false);
+            const rotations = row.map((tile) => tile?.rotation ?? 0);
+
+            row.forEach((tile, columnIndex) => {
+                if (!tile) return;
+                const sourceIndex = row.length - 1 - columnIndex;
+                tile.index = indexes[sourceIndex];
+                tile.flipX = !flipsX[sourceIndex];
+                tile.flipY = flipsY[sourceIndex];
+                tile.rotation = rotations[sourceIndex];
+            });
+        });
     }
 
     ensureHorizontalSegment(segmentIndex) {

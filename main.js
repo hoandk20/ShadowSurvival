@@ -1,3 +1,4 @@
+import BootScene from './scenes/BootScene.js';
 import MainMenuScene from './scenes/MainMenuScene.js';
 import MainScene from './scenes/MainScene.js';
 import HudScene from './scenes/HudScene.js';
@@ -23,7 +24,7 @@ const config = {
             debug: false
         }
     },
-    scene: [MainMenuScene, MainScene, HudScene, PauseMenuScene, GameOverScene]
+    scene: [BootScene, MainMenuScene, MainScene, HudScene, PauseMenuScene, GameOverScene]
 };
 
 new Phaser.Game(config);

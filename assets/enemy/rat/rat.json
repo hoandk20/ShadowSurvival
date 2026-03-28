@@ -1,10 +1,10 @@
 {
   "frames": [
     {
-      "filename": "frame0.png",
+      "filename": "image.png",
       "frame": {
-        "x": 0,
-        "y": 0,
+        "x": 2,
+        "y": 2,
         "w": 64,
         "h": 64
       },
@@ -21,8 +21,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 1686,
-        "h": 1064
+        "w": 509,
+        "h": 394
       },
       "renderSize": {
         "w": 64,
@@ -34,10 +34,10 @@
       }
     },
     {
-      "filename": "frame1.png",
+      "filename": "image_2.png",
       "frame": {
-        "x": 64,
-        "y": 0,
+        "x": 70,
+        "y": 2,
         "w": 64,
         "h": 64
       },
@@ -54,8 +54,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 1611,
-        "h": 1064
+        "w": 501,
+        "h": 401
       },
       "renderSize": {
         "w": 64,
@@ -67,10 +67,10 @@
       }
     },
     {
-      "filename": "frame2.png",
+      "filename": "image_3.png",
       "frame": {
-        "x": 128,
-        "y": 0,
+        "x": 138,
+        "y": 2,
         "w": 64,
         "h": 64
       },
@@ -87,8 +87,41 @@
         "h": 64
       },
       "inputSize": {
-        "w": 1722,
-        "h": 1064
+        "w": 501,
+        "h": 405
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    {
+      "filename": "image_4.png",
+      "frame": {
+        "x": 206,
+        "y": 2,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "inputSize": {
+        "w": 518,
+        "h": 404
       },
       "renderSize": {
         "w": 64,
@@ -106,10 +139,11 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 192,
-      "h": 64
+      "w": 272,
+      "h": 68
     },
     "scale": 1,
+    "atlasPadding": 2,
     "smartupdate": "#0f172a"
   }
 }

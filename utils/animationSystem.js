@@ -54,8 +54,15 @@ export function preloadAllAssets(scene) {
     // Load skill assets (per-frame or spritesheet)
     for (const skillType in SKILL_CONFIG) {
         const skillConfig = SKILL_CONFIG[skillType];
+        if (skillConfig.atlas) {
+            const atlas = skillConfig.atlas;
+            scene.load.atlas(atlas.key, atlas.texture, atlas.atlasJSON);
+        }
         for (const animName in skillConfig.animations) {
             const animConfig = skillConfig.animations[animName];
+            if (skillConfig.atlas && animConfig.frames && Array.isArray(animConfig.frames)) {
+                continue;
+            }
             if (animConfig.frames && Array.isArray(animConfig.frames)) {
                 const basePath = skillConfig.basePath || '';
                 animConfig.frames.forEach((frameFile, index) => {
@@ -143,12 +150,25 @@ export function createAllAnimations(scene) {
     // Create skill animations
     for (const skillType in SKILL_CONFIG) {
         const skillConfig = SKILL_CONFIG[skillType];
+        const atlasConfig = skillConfig.atlas;
         for (const animName in skillConfig.animations) {
             const animConfig = skillConfig.animations[animName];
             const animKey = `${skillType}_${animName}`;
             if (scene.anims.exists(animKey)) continue;
 
-            if (animConfig.frames && Array.isArray(animConfig.frames)) {
+            if (atlasConfig && animConfig.frames && Array.isArray(animConfig.frames)) {
+                if (!scene.textures.exists(atlasConfig.key)) {
+                    console.warn(`Skill atlas ${atlasConfig.key} missing, skipping animation ${animKey}.`);
+                    continue;
+                }
+                const frames = animConfig.frames.map(frameName => ({ key: atlasConfig.key, frame: frameName }));
+                scene.anims.create({
+                    key: animKey,
+                    frames,
+                    frameRate: animConfig.frameRate,
+                    repeat: animConfig.loop ? -1 : 0
+                });
+            } else if (animConfig.frames && Array.isArray(animConfig.frames)) {
                 const frames = animConfig.frames.map((_, index) => {
                     const frameKey = `${skillType}_${animName}_${index}`;
                     const keyToUse = scene.textures.exists(frameKey) ? frameKey : MISSING_TEXTURE_KEY;

@@ -16,9 +16,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 10,
+        damage: 12,
         duration: 300,
-        cooldown: 1600,
+        cooldown: 1200,
         hitboxWidth: 60,
         hitboxHeight: 30,
         knockback: 220,
@@ -171,6 +171,8 @@ export const SKILL_CONFIG = {
         category: 'projectile',
         homing: false,
         autoAim: true,
+        autoAimDistinctTargets: true,
+        autoAimBurstInterval: 300,
         multipleObject: true,
         maxObjects: 8,
         knockbackTakeDamage: false,
@@ -201,6 +203,53 @@ export const SKILL_CONFIG = {
         critChance: 0.15,
         critMultiplier: 2,
         critColor: '#B2BEB5'
+    },
+    card_toss: {
+        label: 'Card Toss',
+        category: 'projectile',
+        homing: false,
+        autoAim: true,
+        autoAimDistinctTargets: false,
+        autoAimBurstInterval: 80,
+        autoAimFanAngle: 2,
+        autoAimSpawnRadius: 10,
+        spinOnFlight: true,
+        spinSpeed: 18,
+        multipleObject: true,
+        defaultObjects: 7,
+        maxObjects: 15,
+        knockbackTakeDamage: false,
+        alignWithMovement: true,
+        maxKnockbackSpeed: 9999,
+        knockbackDistance: 10,
+        projectileSpeed: 700,
+        travelRange: 800,
+        basePath: 'assets/skills/card_toss/',
+        atlas: {
+            key: 'card_toss_atlas',
+            texture: 'assets/skills/card_toss/spritesheet.png',
+            atlasJSON: 'assets/skills/card_toss/spritesheet.json'
+        },
+        animations: {
+            cast: {
+                frames: ['image.png', 'image_2.png', 'image_3.png'],
+                frameRate: 8,
+                loop: false
+            }
+        },
+        damage: 3,
+        duration: 1800,
+        cooldown: 2500,
+        hitboxWidth: 10,
+        hitboxHeight: 15,
+        destroyOnHit: true,
+        knockback: 140,
+        knockbackDragFactor: 0.35,
+        knockbackDragDuration: 300,
+        numberKnockback: 1,
+        critChance: 0.15,
+        critMultiplier: 2,
+        critColor: '#d9c27a'
     },
     iron_first: {
         label: 'Iron Fist',
@@ -241,9 +290,9 @@ export const SKILL_CONFIG = {
         category: 'orbit',
         multipleObject: true,
         maxObjects: 5,
-        orbitRadius: 120,
+        orbitRadius: 80,
 
-        orbitSpeed: 6,
+        orbitSpeed: 5,
         orbitDirection: 1,
         basePath: 'assets/skills/charm/',
         animations: {
@@ -254,10 +303,10 @@ export const SKILL_CONFIG = {
             }
         },
         damage: 18,
-        duration: 10000,
-        cooldown: 10000,
-        hitboxWidth: 15,
-        hitboxHeight: 20,
+        duration: 3000,
+        cooldown: 5000,
+        hitboxWidth: 10,
+        hitboxHeight: 15,
         knockback: 120,
         knockbackDistance: 5,
 maxKnockbackSpeed: 99999,
