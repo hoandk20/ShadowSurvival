@@ -259,7 +259,7 @@ export const SKILL_CONFIG = {
         multipleObject: false,
         knockbackTakeDamage: true,
         alignWithMovement: true,
-        maxKnockbackSpeed: 400,
+        maxKnockbackSpeed: 300,
         knockbackDistance: 150,
         projectileSpeed: 300,
         travelRange: 60,
@@ -271,7 +271,7 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 30,
+        damage: 25,
         duration: 1200,
         cooldown: 1200,
         hitboxWidth: 20,

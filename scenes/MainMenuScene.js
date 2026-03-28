@@ -338,8 +338,11 @@ export default class MainMenuScene extends Phaser.Scene {
 
     renderSettings() {
         const { width, height, safeX, isCompact, isPortrait } = this.getResponsiveMetrics();
+        const showFullscreenButton = this.supportsFullscreen();
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 400 : 460);
-        const panelHeight = isCompact ? 320 : 300;
+        const panelHeight = showFullscreenButton
+            ? (isCompact ? 382 : 360)
+            : (isCompact ? 320 : 300);
         const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight);
         this.uiRoot.add(panel);
         panel.add(createPixelText(this, 0, -96, 'SETTINGS', {
@@ -355,9 +358,46 @@ export default class MainMenuScene extends Phaser.Scene {
             updateAudioSetting(this, 'sfxEnabled', value);
         });
         panel.add([musicToggle, sfxToggle]);
+        if (showFullscreenButton) {
+            const isFullscreen = this.scale.isFullscreen === true;
+            panel.add(createPixelButton(
+                this,
+                0,
+                112,
+                Math.min(240, panelWidth - 48),
+                isCompact ? 42 : 40,
+                isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN',
+                () => {
+                    this.toggleFullscreen();
+                    this.time.delayedCall(50, () => this.render());
+                },
+                {
+                    fontSize: isCompact ? '13px' : '14px'
+                }
+            ));
+        }
         this.uiRoot.add(createPixelButton(this, width / 2, height / 2 + panelHeight / 2 - 34, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
             fontSize: isCompact ? '14px' : '16px'
         }));
+    }
+
+    supportsFullscreen() {
+        const canvas = this.game?.canvas;
+        const documentSupportsFullscreen = Boolean(
+            document.fullscreenEnabled
+            || document.webkitFullscreenEnabled
+            || document.msFullscreenEnabled
+        );
+        return Boolean(canvas && documentSupportsFullscreen);
+    }
+
+    toggleFullscreen() {
+        if (!this.supportsFullscreen()) return;
+        if (this.scale.isFullscreen) {
+            this.scale.stopFullscreen();
+            return;
+        }
+        this.scale.startFullscreen();
     }
 
     renderCredits() {

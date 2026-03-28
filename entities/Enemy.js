@@ -53,6 +53,7 @@ export default class Enemy extends BaseEntity {
         this.baseStats = null;
         this.currentStats = null;
         this.stageEliteState = null;
+        this.pendingDeathSource = null;
 
         this.setVisible(false);
         this.setScale(1);
@@ -93,6 +94,10 @@ export default class Enemy extends BaseEntity {
             if (this.knockbackTimer <= 0) {
                 this.knockbackTimer = 0;
                 this.body.setVelocity(0, 0);
+                if (this.pendingDeathSource) {
+                    this.handleDeath(this.pendingDeathSource);
+                    return;
+                }
             }
         } else if (player) {
             const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
@@ -111,6 +116,7 @@ export default class Enemy extends BaseEntity {
         if (this.isDead || typeof amount !== 'number' || amount <= 0) return;
         const actualDamage = Math.min(amount, this.health);
         this.health = Phaser.Math.Clamp(this.health - actualDamage, 0, this.maxHealth);
+        this.pendingDeathSource = null;
         if (!this.isStunned) {
             this.flashDamageTint();
         }
@@ -122,7 +128,17 @@ export default class Enemy extends BaseEntity {
             this.body.velocity.copy(this.knockbackVelocity);
         }
         if (this.health <= 0) {
-            this.handleDeath(source);
+            const shouldDelayDeathForKnockback = Boolean(
+                skillConfig?.knockbackTakeDamage
+                && force > 0
+                && direction
+                && this.knockbackTimer > 0
+            );
+            if (shouldDelayDeathForKnockback) {
+                this.pendingDeathSource = source;
+            } else {
+                this.handleDeath(source);
+            }
         }
         if (skillConfig?.knockbackTakeDamage && !options?.fromChainDamage && direction) {
             this.scene?.applyKnockbackDamage?.(this, skillConfig, direction);
