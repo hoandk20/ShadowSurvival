@@ -78,7 +78,7 @@ export const CHARACTER_CONFIG = {
         size: { width: 20, height: 20 }
     },
     hoan: {
-        label: 'Hoan',
+        label: 'Hoandepzai',
         description: 'Hoan is a warrior from Vietnam who has come to this land to eliminate the monsters threatening it.',
         assetKey: 'hoan',
         assetFormat: 'spritesheet',
@@ -86,7 +86,7 @@ export const CHARACTER_CONFIG = {
         hp: 75,
         armor: 1,
         speed: 82,
-        size: { width: 20, height: 20 }
+        size: { width: 20, height: 23 }
     },
     gambler: {
         label: 'Gambler',
