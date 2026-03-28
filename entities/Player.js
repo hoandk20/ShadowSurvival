@@ -47,7 +47,7 @@ export default class Player extends BaseEntity {
         this.attackKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.healthBarWidth = 160;
         this.healthBarHeight = 10;
-        this.lastDamageTime = 0;
+        this.lastDamageTime = -Infinity;
         this.damageCooldown = 300;
         this.damageMultiplier = 1;
 
@@ -408,8 +408,7 @@ export default class Player extends BaseEntity {
     takeDamage(amount) {
         if (!this.scene) return;
         const now = this.scene.time.now;
-        const last = this.lastDamageTime || 0;
-        const diff = now - last;
+        const last = this.lastDamageTime ?? -Infinity;
         if (now - last < this.damageCooldown) {
             return;
         }
