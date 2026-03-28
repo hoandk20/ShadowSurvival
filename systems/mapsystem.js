@@ -210,6 +210,17 @@ export default class MapManager {
         return this.currentDefinition ?? getMapDefinition(this.currentMapKey ?? DEFAULT_MAP_KEY);
     }
 
+    isCollidableAtWorldXY(worldX, worldY) {
+        for (const { info, layer } of this.mapLayers) {
+            if (!info?.collidable || !layer?.getTileAtWorldXY) continue;
+            const tile = layer.getTileAtWorldXY(worldX, worldY, true);
+            if (tile && tile.index !== -1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     ensureSegmentsAroundWorldX(worldX) {
         if (!this.currentDefinition?.infiniteHorizontal || !this.segmentWidth) return false;
         const currentSegment = Math.floor(worldX / this.segmentWidth);

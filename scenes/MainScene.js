@@ -270,7 +270,9 @@ export default class MainScene extends Phaser.Scene {
                 fontSize: '7px'
             });
         }
-        if (skill.config?.destroyOnHit) {
+        const bounced = skill.bounceFromEnemy?.(enemy) ?? false;
+        const retargeted = bounced ? false : (skill.retargetToNextEnemy?.() ?? false);
+        if (skill.config?.destroyOnHit && !bounced && !retargeted) {
             skill.destroy();
         }
     }

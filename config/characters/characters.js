@@ -66,6 +66,28 @@ export const CHARACTER_CONFIG = {
         speed: 82,
         size: { width: 20, height: 20 }
     },
+    asian_dragon: {
+        label: 'Asian Dragon',
+        description: 'A mystical dragon spirit channeling arcane force with elegant precision.',
+        assetKey: 'asian_dragon',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'flame',
+        hp: 75,
+        armor: 1,
+        speed: 82,
+        size: { width: 20, height: 20 }
+    },
+    hoan: {
+        label: 'Hoan',
+        description: 'Hoan is a warrior from Vietnam who has come to this land to eliminate the monsters threatening it.',
+        assetKey: 'hoan',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'mu_coi',
+        hp: 75,
+        armor: 1,
+        speed: 82,
+        size: { width: 20, height: 20 }
+    },
     gambler: {
         label: 'Gambler',
         description: 'A rogue cardsharp who bets everything on impossible rolls.',

@@ -40,6 +40,9 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.travelRange = config.travelRange ?? 0;
         this.homing = config.homing ?? false;
         this.destroyOnHit = config.destroyOnHit ?? false;
+        this.bounceOnHit = config.bounceOnHit ?? false;
+        this.retargetOnHit = config.retargetOnHit ?? false;
+        this.maxChainTargets = config.maxChainTargets ?? 0;
         this.alignWithMovement = config.alignWithMovement ?? false;
         this.orbitRadius = config.orbitRadius ?? 0;
         this.orbitSpeed = config.orbitSpeed ?? 0;
@@ -106,6 +109,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
 
         this.hitTargets.clear();
+        this.remainingChainTargets = this.maxChainTargets;
         if (this.category === 'area' && !this.isAura) {
             const horizontalOrigin = this.owner.flipX ? 1 : 0;
             this.setOrigin(horizontalOrigin, 0.5);
@@ -199,8 +203,18 @@ export default class Skill extends Phaser.GameObjects.Sprite {
                 this.applySkyTracking(delta);
             }
             const moveDist = (this.projectileSpeed * delta) / 1000;
-            this.x += this.direction.x * moveDist;
-            this.y += this.direction.y * moveDist;
+            let nextX = this.x + this.direction.x * moveDist;
+            let nextY = this.y + this.direction.y * moveDist;
+            if (this.bounceOnHit) {
+                const bounceResult = this.resolveBlockBounce(nextX, nextY);
+                nextX = bounceResult.x;
+                nextY = bounceResult.y;
+                const viewportBounceResult = this.resolveViewportBounce(nextX, nextY);
+                nextX = viewportBounceResult.x;
+                nextY = viewportBounceResult.y;
+            }
+            this.x = nextX;
+            this.y = nextY;
             if (this.spinOnFlight && this.spinSpeed !== 0) {
                 this.rotation += (this.spinSpeed * delta) / 1000;
             }
@@ -219,7 +233,88 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
     }
 
-    getNearestEnemyTarget() {
+    resolveBlockBounce(nextX, nextY) {
+        const mapManager = this.scene?.mapManager;
+        if (!mapManager?.isCollidableAtWorldXY) {
+            return { x: nextX, y: nextY };
+        }
+
+        const sampleRadius = Math.max(this.displayWidth ?? this.hitboxWidth ?? 0, this.displayHeight ?? this.hitboxHeight ?? 0) * 0.35;
+        const hitsAt = (x, y) => {
+            const samplePoints = [
+                [x, y],
+                [x - sampleRadius, y],
+                [x + sampleRadius, y],
+                [x, y - sampleRadius],
+                [x, y + sampleRadius]
+            ];
+            return samplePoints.some(([sampleX, sampleY]) => mapManager.isCollidableAtWorldXY(sampleX, sampleY));
+        };
+
+        const hitX = hitsAt(nextX, this.y);
+        const hitY = hitsAt(this.x, nextY);
+        const hitDiagonal = hitsAt(nextX, nextY);
+
+        if (!hitX && !hitY && !hitDiagonal) {
+            return { x: nextX, y: nextY };
+        }
+
+        if (hitX || hitDiagonal) {
+            this.direction.x *= -1;
+        }
+        if (hitY || hitDiagonal) {
+            this.direction.y *= -1;
+        }
+        if (this.direction.lengthSq() === 0) {
+            this.direction.set(this.owner.flipX ? -1 : 1, 0);
+        }
+        this.direction.normalize();
+        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+
+        const fallbackX = hitX || hitDiagonal ? this.x : nextX;
+        const fallbackY = hitY || hitDiagonal ? this.y : nextY;
+        return { x: fallbackX, y: fallbackY };
+    }
+
+    resolveViewportBounce(nextX, nextY) {
+        const view = this.scene?.cameras?.main?.worldView;
+        if (!view) {
+            return { x: nextX, y: nextY };
+        }
+
+        const halfWidth = (this.displayWidth ?? this.hitboxWidth ?? 0) * 0.5;
+        const halfHeight = (this.displayHeight ?? this.hitboxHeight ?? 0) * 0.5;
+        const minX = view.left + halfWidth;
+        const maxX = view.right - halfWidth;
+        const minY = view.top + halfHeight;
+        const maxY = view.bottom - halfHeight;
+
+        let bounced = false;
+
+        if (nextX <= minX || nextX >= maxX) {
+            this.direction.x *= -1;
+            nextX = Phaser.Math.Clamp(nextX, minX, maxX);
+            bounced = true;
+        }
+
+        if (nextY <= minY || nextY >= maxY) {
+            this.direction.y *= -1;
+            nextY = Phaser.Math.Clamp(nextY, minY, maxY);
+            bounced = true;
+        }
+
+        if (bounced) {
+            if (this.direction.lengthSq() === 0) {
+                this.direction.set(this.owner.flipX ? -1 : 1, 0);
+            }
+            this.direction.normalize();
+            this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+        }
+
+        return { x: nextX, y: nextY };
+    }
+
+    getNearestEnemyTarget(excludedTargets = this.hitTargets) {
         if (!this.scene || !this.scene.enemies) return null;
         const enemies = this.scene.enemies.getChildren();
         let nearest = null;
@@ -227,6 +322,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const view = this.scene?.cameras?.main?.worldView;
         for (const enemy of enemies) {
             if (!enemy || !enemy.active) continue;
+            if (excludedTargets?.has?.(enemy)) continue;
             if (view) {
                 const withinView = enemy.x >= view.left - TARGET_VIEW_MARGIN
                     && enemy.x <= view.right + TARGET_VIEW_MARGIN
@@ -241,6 +337,43 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             }
         }
         return nearest;
+    }
+
+    retargetToNextEnemy() {
+        if (!this.active || !this.retargetOnHit || this.remainingChainTargets <= 0) {
+            return false;
+        }
+        const nextTarget = this.getNearestEnemyTarget(this.hitTargets);
+        if (!nextTarget) return false;
+        this.remainingChainTargets -= 1;
+        this.direction.set(nextTarget.x - this.x, nextTarget.y - this.y).normalize();
+        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+        return true;
+    }
+
+    bounceFromEnemy(enemy) {
+        if (!this.active || !this.bounceOnHit || !enemy) return false;
+        const normal = new Phaser.Math.Vector2(this.x - enemy.x, this.y - enemy.y);
+        if (normal.lengthSq() === 0) {
+            normal.copy(this.direction).negate();
+        }
+        if (normal.lengthSq() === 0) {
+            normal.set(1, 0);
+        }
+        normal.normalize();
+
+        const incoming = this.direction.clone();
+        if (incoming.lengthSq() === 0) {
+            incoming.set(this.owner.flipX ? -1 : 1, 0);
+        }
+        incoming.normalize();
+
+        const dot = incoming.dot(normal);
+        this.direction = incoming.subtract(normal.scale(2 * dot)).normalize();
+        this.x = enemy.x + normal.x * ((enemy.displayWidth ?? enemy.body?.width ?? 24) * 0.65);
+        this.y = enemy.y + normal.y * ((enemy.displayHeight ?? enemy.body?.height ?? 24) * 0.65);
+        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+        return true;
     }
 
     applySkyTracking(delta) {
