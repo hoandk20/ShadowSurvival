@@ -104,7 +104,7 @@ export const CHARACTER_CONFIG = {
         description: 'A wrestler who crushes enemies with sheer physical power.',
         assetKey: 'grum',
         assetFormat: 'spritesheet',
-        defaultSkill: 'iron_first',
+        defaultSkill: 'iron_fist',
         hp: 170,
         armor: 3,
         speed: 70,

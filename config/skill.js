@@ -18,7 +18,7 @@ export const SKILL_CONFIG = {
         },
         damage: 12,
         duration: 300,
-        cooldown: 1200,
+        cooldown: 1000,
         hitboxWidth: 60,
         hitboxHeight: 30,
         knockback: 220,
@@ -141,7 +141,7 @@ export const SKILL_CONFIG = {
         alignWithMovement: true,
         maxKnockbackSpeed: 9999,
         knockbackDistance: 5,
-        projectileSpeed: 300,
+        projectileSpeed: 200,
         travelRange: 200,
         basePath: 'assets/skills/fire/',
         animations: {
@@ -151,7 +151,7 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 14,
+        damage: 20,
         duration: 3000,
         cooldown: 1800,
         hitboxWidth: 20,
@@ -189,7 +189,7 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 35,
+        damage: 25,
         duration: 1800,
         cooldown: 2500,
         hitboxWidth: 30,
@@ -239,7 +239,7 @@ export const SKILL_CONFIG = {
         },
         damage: 3,
         duration: 1800,
-        cooldown: 2500,
+        cooldown: 2000,
         hitboxWidth: 10,
         hitboxHeight: 15,
         destroyOnHit: true,
@@ -251,7 +251,7 @@ export const SKILL_CONFIG = {
         critMultiplier: 2,
         critColor: '#d9c27a'
     },
-    iron_first: {
+    iron_fist: {
         label: 'Iron Fist',
         category: 'projectile',
         homing: false,
@@ -271,14 +271,14 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 25,
+        damage: 22,
         duration: 1200,
         cooldown: 1200,
         hitboxWidth: 20,
         hitboxHeight: 40,
         destroyOnHit: false,
         knockback: 1600,
-        numberKnockback: 5
+        numberKnockback: 1
         ,
         critChance: 0.35,
         critMultiplier: 2.2,

@@ -663,7 +663,7 @@ export default class MainScene extends Phaser.Scene {
         const unlockedEnemyTypes = getUnlockedEnemyTypes(this, this.stageScenario);
         const waveTypes = (waveConfig?.enemyTypes ?? []).filter((type) => {
             return ENEMIES[type]
-                && (!unlockedEnemyTypes || unlockedEnemyTypes.has(type))
+                && (this.debugMode || !unlockedEnemyTypes || unlockedEnemyTypes.has(type))
                 && ((this.enemySpawnStatus?.[type] ?? false) || !this.debugMode);
         });
         if (waveTypes.length) {
@@ -947,7 +947,9 @@ export default class MainScene extends Phaser.Scene {
             const enabled = this.debugMode
                 ? (this.enemySpawnStatus[type] ?? false)
                 : true;
-            const isUnlocked = unlockedEnemyTypes ? unlockedEnemyTypes.has(type) : true;
+            const isUnlocked = this.debugMode
+                ? true
+                : (unlockedEnemyTypes ? unlockedEnemyTypes.has(type) : true);
             const spawnWeight = scenarioSpawnWeights?.get(type) ?? cfg.spawnWeight ?? 0;
             return enabled && isUnlocked && spawnWeight > 0;
         }).map(([type, cfg]) => {
