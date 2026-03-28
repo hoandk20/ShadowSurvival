@@ -45,9 +45,9 @@ export const ITEM_CONFIG = {
 };
 
 const DEFAULT_LOOT_TABLE = [
-    { itemKey: 'xp_orb', chance: 1, minAmount: 1, maxAmount: 2 },
+    { itemKey: 'xp_orb', chance: 0.98, minAmount: 1, maxAmount: 2 },
     { itemKey: 'gold_coin', chance: 0.01, minAmount: 1, maxAmount: 4 },
-    { itemKey: 'health_flask', chance: 0.5, minAmount: 10, maxAmount: 26 }
+    { itemKey: 'health_flask', chance: 0.03, minAmount: 10, maxAmount: 26 }
 ];
 
 const ENEMY_LOOT_TABLES = {
