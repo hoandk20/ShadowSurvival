@@ -273,6 +273,7 @@ export function handleAuraSystem(enemies, scenario) {
     activeEnemies.forEach((enemy) => {
         const nextStats = buildBaseRuntimeStats(enemy);
         if (enemy.stageEliteState?.modifierKeys?.length) {
+            applyEliteBaseStats(nextStats, scenario);
             applySelfModifiers(nextStats, enemy.stageEliteState.modifierKeys);
         }
         nextStatsByEnemy.set(enemy, nextStats);

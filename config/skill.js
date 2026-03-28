@@ -189,9 +189,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 20,
+        damage: 18,
         duration: 1800,
-        cooldown: 2500,
+        cooldown: 3000,
         hitboxWidth: 30,
         hitboxHeight: 5,
         destroyOnHit: true,
