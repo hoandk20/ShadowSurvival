@@ -1,11 +1,18 @@
+import MainMenuScene from './scenes/MainMenuScene.js';
 import MainScene from './scenes/MainScene.js';
 import HudScene from './scenes/HudScene.js';
+import PauseMenuScene from './scenes/PauseMenuScene.js';
+import GameOverScene from './scenes/GameOverScene.js';
 
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
     parent: 'game-container',
+    pixelArt: true,
+    antialias: false,
+    antialiasGL: false,
+    roundPixels: true,
     scale: {
         mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -16,7 +23,7 @@ const config = {
             debug: false
         }
     },
-    scene: [MainScene, HudScene]
+    scene: [MainMenuScene, MainScene, HudScene, PauseMenuScene, GameOverScene]
 };
 
 new Phaser.Game(config);

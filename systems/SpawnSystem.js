@@ -25,7 +25,7 @@ export default class SpawnSystem {
         }
     }
 
-    spawnEnemy(enemyKey = 'zombie') {
+    spawnEnemy(enemyKey = 'skeleton') {
         const enemy = this.enemyPool.get();
         if (enemy) {
             // Spawn at random edge

@@ -1,4 +1,5 @@
 import { ITEM_CONFIG } from '../config/items.js';
+import { playSfx } from '../utils/audioSettings.js';
 
 export default class Item extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, itemKey, amount = 1) {
@@ -69,6 +70,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             this.destroy();
             return;
         }
+        playSfx(this.scene, 'sfx_coin', { volume: 0.35 });
         const type = this.config?.type;
         const effectiveValue = this.getEffectiveValue();
         switch (type) {
@@ -94,11 +96,11 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
 
     playPickupText() {
         const text = this.scene.add.text(this.x, this.y - 12, `+${this.getEffectiveValue()}`, {
-            fontSize: '14px',
+            fontSize: '7px',
             fontFamily: 'Arial',
             color: this.config.pickupTextColor ?? '#ffffff',
             stroke: '#000000',
-            strokeThickness: 2
+            strokeThickness: 1
         }).setOrigin(0.5).setDepth(70);
         this.scene.tweens.add({
             targets: text,

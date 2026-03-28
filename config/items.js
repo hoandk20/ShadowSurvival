@@ -6,12 +6,12 @@ export const ITEM_CONFIG = {
         baseValue: 12,
         outerColor: 0x4fe4ff,
         innerColor: 0xffffff,
-        size: 15,
+        size: 11,
         displayScale: 1,
         pickupTextColor: '#a0f5ff',
         floatAmplitude: 3,
         assetPath: 'assets/items/exp.png',
-        displaySize: 15
+        displaySize: 11
     },
     gold_coin: {
         textureKey: 'item_gold_coin',
@@ -20,12 +20,12 @@ export const ITEM_CONFIG = {
         baseValue: 3,
         outerColor: 0xf5d350,
         innerColor: 0xc37f08,
-        size: 20,
-        displayScale: 0.6,
+        size: 11,
+        displayScale: 1,
         pickupTextColor: '#ffe066',
         floatAmplitude: 5
         ,
-        displaySize: 26
+        displaySize: 11
     },
     health_flask: {
         textureKey: 'item_hp',
@@ -34,13 +34,13 @@ export const ITEM_CONFIG = {
         baseValue: 18,
         outerColor: 0xff7fa3,
         innerColor: 0xffffff,
-        size: 20,
-        displayScale: 0.6,
+        size: 8,
+        displayScale: 1,
         pickupTextColor: '#ffb8c9',
         floatAmplitude: 5
         ,
         assetPath: 'assets/items/hp.png',
-        displaySize: 20
+        displaySize: 8
     }
 };
 
@@ -51,10 +51,6 @@ const DEFAULT_LOOT_TABLE = [
 ];
 
 const ENEMY_LOOT_TABLES = {
-    zombie: [
-           { itemKey: 'gold_coin', chance: 0.01, minAmount: 1, maxAmount: 5 },
-        { itemKey: 'health_flask', chance: 0.01, minAmount: 12, maxAmount: 24 }
-    ],
     skeleton: [
           { itemKey: 'gold_coin', chance: 0.01, minAmount: 2, maxAmount: 6 },
         { itemKey: 'health_flask', chance: 0.01, minAmount: 14, maxAmount: 28 }

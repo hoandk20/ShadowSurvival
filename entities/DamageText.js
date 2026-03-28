@@ -1,11 +1,11 @@
 export default class DamageText extends Phaser.GameObjects.Text {
     constructor(scene, x, y, value, options = {}) {
         const textConfig = {
-            fontSize: options.fontSize ?? '14px',
+            fontSize: options.fontSize ?? '7px',
             fontFamily: options.fontFamily ?? '"Press Start 2P", "PixelFont", monospace',
             color: options.color ?? '#ffde59',
             stroke: options.stroke ?? '#000000',
-            strokeThickness: options.strokeThickness ?? 4,
+            strokeThickness: options.strokeThickness ?? 2,
             align: 'center',
             resolution: 2
         };

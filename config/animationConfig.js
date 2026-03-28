@@ -7,7 +7,7 @@ export const ANIMATION_CONFIG = {
         hurt: { frames: [0, 2], frameRate: 8, loop: false },
         dead: { frames: [0, 5], frameRate: 10, loop: false }
     },
-    elf: {
+    witch: {
         idle: { frames: [0, 3], frameRate: 6, loop: true },
         move: { frames: [0, 5], frameRate: 10, loop: true },
         attack: { frames: [0, 4], frameRate: 12, loop: false },
@@ -34,27 +34,6 @@ export const ANIMATION_CONFIG = {
         attack: { frames: [0, 4], frameRate: 12, loop: false },
         hurt: { frames: [0, 2], frameRate: 8, loop: false },
         dead: { frames: [0, 5], frameRate: 10, loop: false }
-    },
-    succubus: {
-        idle: { frames: [0, 3], frameRate: 5, loop: true },
-        move: { frames: [0, 5], frameRate: 6, loop: true },
-        attack: { frames: [0, 4], frameRate: 8, loop: false },
-        hurt: { frames: [0, 2], frameRate: 6, loop: false },
-        dead: { frames: [0, 5], frameRate: 8, loop: false }
-    },
-    harpy: {
-        idle: { frames: [0, 3], frameRate: 5, loop: true },
-        move: { frames: [0, 5], frameRate: 6, loop: true },
-        attack: { frames: [0, 4], frameRate: 8, loop: false },
-        hurt: { frames: [0, 2], frameRate: 6, loop: false },
-        dead: { frames: [0, 5], frameRate: 8, loop: false }
-    },
-    siren: {
-        idle: { frames: [0, 3], frameRate: 5, loop: true },
-        move: { frames: [0, 5], frameRate: 6, loop: true },
-        attack: { frames: [0, 4], frameRate: 8, loop: false },
-        hurt: { frames: [0, 2], frameRate: 6, loop: false },
-        dead: { frames: [0, 5], frameRate: 8, loop: false }
     },
     medusa: {
         idle: { frames: [0, 3], frameRate: 5, loop: true },

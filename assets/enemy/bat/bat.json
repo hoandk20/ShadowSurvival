@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "filename": "frame2.png",
+      "filename": "image.png",
       "frame": {
         "x": 0,
         "y": 0,
@@ -20,13 +20,21 @@
         "w": 64,
         "h": 64
       },
+      "inputSize": {
+        "w": 416,
+        "h": 437
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
+      },
       "pivot": {
         "x": 0.5,
         "y": 0.5
       }
     },
     {
-      "filename": "frame0.png",
+      "filename": "image_2.png",
       "frame": {
         "x": 64,
         "y": 0,
@@ -45,13 +53,21 @@
         "w": 64,
         "h": 64
       },
+      "inputSize": {
+        "w": 510,
+        "h": 466
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
+      },
       "pivot": {
         "x": 0.5,
         "y": 0.5
       }
     },
     {
-      "filename": "frame3.png",
+      "filename": "image_3.png",
       "frame": {
         "x": 128,
         "y": 0,
@@ -70,13 +86,21 @@
         "w": 64,
         "h": 64
       },
+      "inputSize": {
+        "w": 485,
+        "h": 474
+      },
+      "renderSize": {
+        "w": 64,
+        "h": 64
+      },
       "pivot": {
         "x": 0.5,
         "y": 0.5
       }
     },
     {
-      "filename": "frame1.png",
+      "filename": "image_4.png",
       "frame": {
         "x": 192,
         "y": 0,
@@ -92,6 +116,14 @@
         "h": 64
       },
       "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "inputSize": {
+        "w": 498,
+        "h": 470
+      },
+      "renderSize": {
         "w": 64,
         "h": 64
       },

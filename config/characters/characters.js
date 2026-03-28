@@ -2,236 +2,93 @@
 export const CHARACTER_CONFIG = {
     lumina: {
         label: 'Lumina',
-        description: 'Radiant brawler who mirrors the Warlock build and skills.',
+        description: 'A light mage, the last beacon against the darkness.',
         assetKey: 'lumina',
-        atlas: {
-            key: 'lumina_atlas',
-            texture: 'assets/player/lumina/lumina.png',
-            atlasJSON: 'assets/player/lumina/lumina.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'heavenfall',
-        speed: 150,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 110,
+        speed: 75,
+        size: { width: 20, height: 20 }
+    },
     aqua: {
         label: 'Aqua',
-        description: 'Waterborn echo of Lumina with the same combat flow.',
+        description: 'A water sage who controls the flow to cleanse and protect.',
         assetKey: 'aqua',
-        atlas: {
-            key: 'aqua_atlas',
-            texture: 'assets/player/aqua/aqua.png',
-            atlasJSON: 'assets/player/aqua/aqua.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'nova',
-        speed: 100,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 4,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 4,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 140,
+        speed: 75,
+        size: { width: 20, height: 20 }
+    },
     radian: {
         label: 'Radian',
-        description: 'Radiant echo of Aqua with identical movement and skills.',
+        description: 'An eastern exorcist, sealing demons with talismans and barriers.',
         assetKey: 'radian',
-        atlas: {
-            key: 'radian_atlas',
-            texture: 'assets/player/radian/radian.png',
-            atlasJSON: 'assets/player/radian/radian.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'charm',
-        speed: 150,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 110,
+        speed: 78,
+        size: { width: 20, height: 20 }
+    },
     frost: {
         label: 'Frost',
-        description: 'Icy twin of Lumina wielding the same heavenly burst.',
+        description: 'An ice mage who freezes enemies and slows the horde.',
         assetKey: 'frost',
-        atlas: {
-            key: 'frost_atlas',
-            texture: 'assets/player/frost/frost.png',
-            atlasJSON: 'assets/player/frost/frost.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'ice',
-        speed: 150,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 120,
+        speed: 80,
+        size: { width: 20, height: 20 }
+    },
     holy: {
         label: 'Holy',
-        description: 'Radiant brawler who mirrors Lumina and shares the Aura discipline.',
+        description: 'An exorcist nun wielding sacred flames to purge evil.',
         assetKey: 'holy',
-        atlas: {
-            key: 'holy_atlas',
-            texture: 'assets/player/holy/holy.png',
-            atlasJSON: 'assets/player/holy/holy.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'aura',
-        speed: 210,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 4,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 4,
-                loop: true
-            }
-        }
-    }
-    ,
-    elf: {
-        label: 'Elf',
-        description: 'Radiant brawler with the same form as Lumina but preferring Avada.',
-        assetKey: 'elf',
-        atlas: {
-            key: 'elf_atlas',
-            texture: 'assets/player/elf/elf.png',
-            atlasJSON: 'assets/player/elf/elf.json'
-        },
+        hp: 85,
+        speed: 90,
+        size: { width: 20, height: 20 }
+    },
+    witch: {
+        label: 'Witch',
+        description: 'An ancient sorceress using forbidden magic to bend the battlefield.',
+        assetKey: 'witch',
+        assetFormat: 'spritesheet',
         defaultSkill: 'avada',
-        speed: 215,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 75,
+        speed: 95,
+        size: { width: 20, height: 20 }
+    },
     raiji: {
         label: 'Raiji',
-        description: 'Lightning-born fighter sharing Lumina’s flow with thunder skills.',
+        description: 'A lightning mage calling down thunder upon the swarm.',
         assetKey: 'raiji',
-        atlas: {
-            key: 'raiji_atlas',
-            texture: 'assets/player/raiji/raiji.png',
-            atlasJSON: 'assets/player/raiji/raiji.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'thunder',
-        speed: 225,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 70,
+        speed: 80,
+        size: { width: 20, height: 20 }
+    },
     warden: {
         label: 'Warden',
-        description: 'Armored defender mirroring the Elf form but wielding fire skills.',
+        description: 'A prison keeper who binds and suppresses dark entities.',
         assetKey: 'warden',
-        atlas: {
-            key: 'warden_atlas',
-            texture: 'assets/player/warden/warden.png',
-            atlasJSON: 'assets/player/warden/warden.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'fire',
-        speed: 190,
-        size: { width: 30, height: 30 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 5,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 5,
-                loop: true
-            }
-        }
-    }
-    ,
+        hp: 100,
+        speed: 75,
+        size: { width: 20, height: 20 }
+    },
     grum: {
         label: 'Grum',
-        description: 'Heavy sentinel echoing Aqua but defaults to Iron Fist.',
+        description: 'A wrestler who crushes enemies with sheer physical power.',
         assetKey: 'grum',
-        atlas: {
-            key: 'grum_atlas',
-            texture: 'assets/player/grum/grum.png',
-            atlasJSON: 'assets/player/grum/grum.json'
-        },
+        assetFormat: 'spritesheet',
         defaultSkill: 'iron_first',
-        speed: 185,
-        size: { width: 35, height: 35 },
-        animations: {
-            idle: {
-                frames: ['idle0.png', 'idle1.png', 'idle2.png'],
-                frameRate: 4,
-                loop: true
-            },
-            move: {
-                frames: ['move0.png', 'move1.png', 'move2.png'],
-                frameRate: 4,
-                loop: true
-            }
-        }
+        hp: 170,
+        speed: 70,
+        size: { width: 25, height: 25 }
     }
 };
 

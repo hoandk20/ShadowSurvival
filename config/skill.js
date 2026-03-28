@@ -16,9 +16,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 15,
+        damage: 10,
         duration: 300,
-        cooldown: 1000,
+        cooldown: 1600,
         hitboxWidth: 60,
         hitboxHeight: 30,
         knockback: 220,
@@ -26,7 +26,7 @@ export const SKILL_CONFIG = {
         knockbackDragDuration: 220,
         numberKnockback: 99
         ,
-        critChance: 0.32,
+        critChance: 0.25,
         critMultiplier: 1.6,
         critColor: '#ffb347'
     },
@@ -49,9 +49,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 15,
+        damage: 18,
         duration: 800,
-        cooldown: 1500,
+        cooldown: 1400,
         hitboxWidth: 20,
         hitboxHeight: 8,
         knockback: 120,
@@ -82,9 +82,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 10,
+        damage: 8,
         duration: 800,
-        cooldown: 3000,
+        cooldown: 2600,
         hitboxWidth: 30,
         hitboxHeight: 10,
         knockback: 120,
@@ -95,7 +95,7 @@ export const SKILL_CONFIG = {
         critChance: 0.3,
         critMultiplier: 1.45,
         critColor: '#7ce5ff',
-        stunDuration: 2000
+        stunDuration: 1000
         ,
         stunColor: '#7ce5ff'
     },
@@ -118,16 +118,16 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 45,
+        damage: 28,
         duration: 1600,
-        cooldown: 1500,
+        cooldown: 2800,
         hitboxWidth: 40,
         hitboxHeight: 15,
         destroyOnHit: true,
         knockback: 80,
         numberKnockback: 1
         ,
-        critChance: 0.35,
+        critChance: 0.25,
         critMultiplier: 1.75,
         critColor: '#2b1e1a'
     },
@@ -151,9 +151,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 25,
+        damage: 14,
         duration: 3000,
-        cooldown: 1500,
+        cooldown: 1800,
         hitboxWidth: 20,
         hitboxHeight: 20,
         destroyOnHit: true,
@@ -187,9 +187,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 45,
+        damage: 35,
         duration: 1800,
-        cooldown: 1500,
+        cooldown: 2500,
         hitboxWidth: 30,
         hitboxHeight: 5,
         destroyOnHit: true,
@@ -198,8 +198,8 @@ export const SKILL_CONFIG = {
         knockbackDragDuration: 300,
         numberKnockback: 1
         ,
-        critChance: 0.2,
-        critMultiplier: 1.9,
+        critChance: 0.15,
+        critMultiplier: 2,
         critColor: '#B2BEB5'
     },
     iron_first: {
@@ -222,9 +222,9 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 25,
+        damage: 30,
         duration: 1200,
-        cooldown: 1500,
+        cooldown: 1200,
         hitboxWidth: 20,
         hitboxHeight: 40,
         destroyOnHit: false,
@@ -253,9 +253,9 @@ export const SKILL_CONFIG = {
                 loop: true
             }
         },
-        damage: 25,
-        duration: 7200,
-        cooldown: 9200,
+        damage: 18,
+        duration: 10000,
+        cooldown: 10000,
         hitboxWidth: 15,
         hitboxHeight: 20,
         knockback: 120,
@@ -277,9 +277,9 @@ maxKnockbackSpeed: 99999,
         playAnimation: false,
         visibleDuringEffect: false,
         effectKey: 'auraGlow',
-        damage: 12,
+        damage: 18,
         duration: 2200,
-        cooldown: 1200,
+        cooldown: 1000,
         hitboxWidth: 80,
         hitboxHeight: 80,
         knockback: 120,
@@ -287,7 +287,7 @@ maxKnockbackSpeed: 99999,
         knockbackDragDuration: 220,
         numberKnockback: 99
         ,
-        critChance: 0.18,
+        critChance: 0.22,
         critMultiplier: 1.65,
         critColor: '#B2BEB5'
     }

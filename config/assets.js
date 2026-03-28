@@ -1,17 +1,23 @@
 // config/assets.js
 import { CHARACTER_CONFIG } from './characters/characters.js';
 
+const DEFAULT_CHARACTER_SPRITESHEET_ANIMATION_CONFIG = {
+    idle: { frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'], frameRate: 5, loop: true },
+    move: { frames: ['image_5.png', 'image_6.png', 'image_7.png', 'image_8.png'], frameRate: 5, loop: true }
+};
+
 const buildCharacterAssetEntries = () => {
     const entries = {};
     for (const characterKey in CHARACTER_CONFIG) {
         const character = CHARACTER_CONFIG[characterKey];
         const assetKey = character.assetKey ?? characterKey;
         entries[assetKey] = {
-            basePath: character.basePath,
-            animations: character.animations
-        };
-        if (character.atlas) {
-            entries[assetKey].atlas = character.atlas;
+            animations: DEFAULT_CHARACTER_SPRITESHEET_ANIMATION_CONFIG,
+            atlas: {
+                key: `${assetKey}_atlas`,
+                texture: `assets/player/${characterKey}/spritesheet.png`,
+                atlasJSON: `assets/player/${characterKey}/spritesheet.json`
+            }
         }
     }
     return entries;
@@ -33,13 +39,13 @@ const buildCharacterSizeEntries = () => {
 
 const CHARACTER_ASSET_ENTRIES = buildCharacterAssetEntries();
 const CHARACTER_SIZE_ENTRIES = buildCharacterSizeEntries();
+const ENEMY_MOVE_FRAMES = ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'];
 
 const ENEMY_ASSET_ENTRIES = {
-    succubus: buildEnemyAtlasEntry('succubus'),
-    harpy: buildEnemyAtlasEntry('harpy'),
     skeleton: buildEnemyAtlasEntry('skeleton'),
+    succubus: buildEnemyAtlasEntry('succubus'),
+    lamia: buildEnemyAtlasEntry('lamia'),
     moth_woman: buildEnemyAtlasEntry('moth_woman'),
-    siren: buildEnemyAtlasEntry('siren'),
     medusa: buildEnemyAtlasEntry('medusa'),
     minotau: buildEnemyAtlasEntry('minotau'),
     baphomet: buildEnemyAtlasEntry('baphomet'),
@@ -66,7 +72,7 @@ function buildEnemyAtlasEntry(key) {
             atlasJSON: `assets/enemy/${key}/${key}.json`
         },
         animations: {
-            move: { frames: ['frame0.png', 'frame1.png', 'frame2.png', 'frame3.png'], frameRate: 6, loop: true }
+            move: { frames: ENEMY_MOVE_FRAMES, frameRate: 6, loop: true }
         }
     };
 }
@@ -79,3 +85,5 @@ export const ASSET_CONFIG = {
 export const ENTITY_SIZE_CONFIG = {
     ...CHARACTER_SIZE_ENTRIES
 };
+
+export const CHARACTER_ASSET_CONFIG = CHARACTER_ASSET_ENTRIES;

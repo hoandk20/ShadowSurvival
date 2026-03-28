@@ -1,6 +1,6 @@
 // entities/effects/CriticalHitEffect.js
 const DEFAULT_CONFIG = {
-    glowRadii: [4, 3, 2, 1],
+    glowRadii: [2, 1.5, 1, 0.5],
     glowColors: [0x101010, 0x2a2a2a, 0x444444, 0xffffff],
     rayVectors: [
         { dx: 0, dy: -1 },
@@ -13,13 +13,13 @@ const DEFAULT_CONFIG = {
         { dx: 0.7, dy: 0.7 }
     ],
     rayLineColor: 0x888888,
-    rayLengthStart: 4,
-    rayLengthEnd: 6,
+    rayLengthStart: 2,
+    rayLengthEnd: 3,
     sparkCount: 12,
     sparkSpeed: { min: 30, max: 90 },
     sparkTravelFactor: 0.1,
     sparkTints: [0xddddff, 0xbbbbcc],
-    sparkScale: { min: 0.2, max: 0.35 },
+    sparkScale: { min: 0.1, max: 0.175 },
     sparkDuration: { min: 180, max: 320 }
 };
 
@@ -65,13 +65,13 @@ export default class CriticalHitEffect {
             flash.fillStyle(glowColors[i], 1);
             flash.fillCircle(0, 0, glowRadii[i]);
         }
-        flash.lineStyle(2, rayLineColor, 0.85);
+        flash.lineStyle(1, rayLineColor, 0.85);
         rayVectors.forEach(({ dx, dy }) => {
             const startX = dx * rayLengthStart;
             const startY = dy * rayLengthStart;
             const endX = dx * rayLengthEnd;
             const endY = dy * rayLengthEnd;
-            flash.strokeRect(startX - 2, startY - 2, 4, 4);
+            flash.strokeRect(startX - 1, startY - 1, 2, 2);
             flash.lineBetween(startX, startY, endX, endY);
         });
         for (let i = 0; i < sparkCount; i += 1) {
@@ -98,8 +98,8 @@ export default class CriticalHitEffect {
         }
         this.scene.tweens.add({
             targets: flash,
-            scaleX: 1.8,
-            scaleY: 1.8,
+            scaleX: 0.9,
+            scaleY: 0.9,
             alpha: 0,
             duration: 240,
             ease: 'Cubic.easeOut',

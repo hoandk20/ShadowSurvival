@@ -11,7 +11,15 @@ import DamageText from '../entities/DamageText.js';
 import { DEFAULT_MAP_KEY } from '../config/map.js';
 import { preloadAllAssets, createAllAnimations } from '../utils/animationSystem.js';
 import { ELITE_CONFIGS, ELITE_KILL_MILESTONES } from '../config/elites.js';
+import {
+    createStageScenarioState,
+    getStageScenario,
+    getTriggeredWaves,
+    handleAuraSystem,
+    spawnEnemyWithEliteChance
+} from '../config/stageScenarios.js';
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
+import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 
 const SPAWN_PADDING = 100;
 const DESPAWN_MARGIN = 300;
@@ -20,6 +28,10 @@ export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
         this.mapManager = new MapManager(this);
+        this.currentMapMusic = null;
+        this.currentMapMusicKey = null;
+        this.touchMoveState = null;
+        this.touchControlsEnabled = false;
     }
 
     preload() {
@@ -32,18 +44,29 @@ export default class MainScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         this.isGameOver = false;
+        this.debugMode = this.registry.get('debugMode') === true;
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+        ensureAudioSettings(this.registry);
+        this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+        this.input.keyboard.on('keydown-ESC', this.handlePauseToggle, this);
+        this.setupTouchControls();
 
         // Create all animations from config
         createAllAnimations(this);
-        const mapDef = this.mapManager.loadMap(DEFAULT_MAP_KEY);
+        const selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
+        this.stageScenario = getStageScenario(selectedMapKey);
+        this.stageScenarioState = createStageScenarioState(this.stageScenario);
+        const mapDef = this.mapManager.loadMap(selectedMapKey);
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             this.cameras.main.setZoom(2);
+            this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
-        this.activeCharacterKey = DEFAULT_CHARACTER_KEY;
+        this.activeCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
         const initialCharacter = CHARACTER_CONFIG[this.activeCharacterKey];
         this.activeSkillKey = initialCharacter?.defaultSkill ?? 'thunder';
+        this.activeSkillKeys = [this.activeSkillKey];
         this.skillInputs = {};
         this.characterInputs = {};
 
@@ -62,7 +85,7 @@ export default class MainScene extends Phaser.Scene {
             glowColors: [0x112240, 0x123966, 0x0f71d4, 0x8bf1ff],
             rayLineColor: 0x8cf8ff,
             sparkTints: [0x55d2ff, 0x82ecff, 0xbce8ff],
-            sparkScale: { min: 0.3, max: 0.6 },
+            sparkScale: { min: 0.15, max: 0.3 },
             sparkDuration: { min: 120, max: 260 }
         });
         this.lootSystem = new LootSystem(this);
@@ -74,7 +97,7 @@ export default class MainScene extends Phaser.Scene {
         }
         this.scene.bringToTop('HudScene');
 
-        this.cameras.main.startFollow(this.player, false, 0.08, 0.08);
+        this.cameras.main.startFollow(this.player, false, 1, 1);
         this.cameras.main.setDeadzone(0, 0);
 
         this.enemies = this.physics.add.group();
@@ -116,6 +139,8 @@ export default class MainScene extends Phaser.Scene {
         this.cardFocusIndex = 0;
         this.keyboardNavigationActive = false;
         this.input.keyboard.on('keydown', this.handleCardNavigation, this);
+        this.runStartTime = this.time.now;
+        this.registry.set('hasStartedGame', true);
     }
 
     update(time, delta) {
@@ -123,6 +148,9 @@ export default class MainScene extends Phaser.Scene {
         if (this.isChoosingCard) return;
         // Update player
         this.player.update(time, delta);
+        this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
+        handleAuraSystem(this.enemies?.getChildren?.() ?? [], this.stageScenario);
+        this.processStageWaves();
 
         this.despawnOffscreenEnemies();
         if (this.respawnPool > 0 && this.canSpawnMoreEnemies()) {
@@ -227,7 +255,7 @@ export default class MainScene extends Phaser.Scene {
             }
             new DamageText(this, enemy.x, enemy.y - (enemy.body?.height ?? 20), roll.value, {
                 color: roll.isCritical ? (skill.critColor ?? '#ffde59') : '#ffde59',
-                fontSize: '14px'
+                fontSize: '7px'
             });
         }
         if (skill.config?.destroyOnHit) {
@@ -313,6 +341,10 @@ export default class MainScene extends Phaser.Scene {
     setupDebugMenu() {
         const panel = document.getElementById('debug-panel');
         if (!panel) return;
+        panel.style.display = this.debugMode ? 'flex' : 'none';
+        if (!this.debugMode) {
+            return;
+        }
         const skillContainer = panel.querySelector('#skill-list');
         const enemyContainer = panel.querySelector('#enemy-list');
         if (!skillContainer || !enemyContainer) return;
@@ -336,14 +368,14 @@ export default class MainScene extends Phaser.Scene {
         Object.entries(SKILL_CONFIG).forEach(([key, config]) => {
             const label = document.createElement('label');
             const input = document.createElement('input');
-            input.type = 'radio';
-            input.name = 'skill-selector';
+            input.type = 'checkbox';
             input.value = key;
-            input.checked = key === this.activeSkillKey;
+            input.checked = (this.activeSkillKeys ?? []).includes(key);
             input.addEventListener('change', () => {
-                if (input.checked) {
-                    this.activeSkillKey = key;
-                }
+                const selectedKeys = Object.entries(this.skillInputs ?? {})
+                    .filter(([, skillInput]) => skillInput.checked)
+                    .map(([skillKey]) => skillKey);
+                this.setSelectedSkills(selectedKeys, input.checked ? key : this.activeSkillKey);
             });
             label.appendChild(input);
             label.appendChild(document.createTextNode(config.label || key));
@@ -402,7 +434,7 @@ export default class MainScene extends Phaser.Scene {
         });
         const clearButton = panel.querySelector('#clear-enemies-btn');
         if (clearButton) {
-            clearButton.addEventListener('click', () => this.clearEnemies());
+            clearButton.onclick = () => this.clearEnemies();
         }
 
         let mapSection = panel.querySelector('#map-section');
@@ -439,12 +471,16 @@ export default class MainScene extends Phaser.Scene {
         mapSelect.addEventListener('change', () => {
             const mapDef = this.mapManager.loadMap(mapSelect.value);
             if (mapDef) {
+                this.registry.set('selectedMapKey', mapSelect.value);
+                this.stageScenario = getStageScenario(mapSelect.value);
+                this.stageScenarioState = createStageScenarioState(this.stageScenario);
                 this.updateMapBounds();
                 this.mapManager.enableObjectCollisions(this.player);
                 this.mapManager.enableObjectCollisions(this.enemies);
                 this.repositionPlayerForCurrentMap();
-                this.cameras.main.startFollow(this.player, false, 0.08, 0.08);
+                this.cameras.main.startFollow(this.player, false, 1, 1);
                 this.cameras.main.centerOn(this.player.x, this.player.y);
+                this.syncMapMusic(mapDef);
             }
         });
         mapSection.appendChild(mapSelect);
@@ -493,14 +529,27 @@ export default class MainScene extends Phaser.Scene {
         const config = CHARACTER_CONFIG[characterKey];
         if (!config) return;
         this.activeCharacterKey = characterKey;
+        this.registry.set('selectedCharacterKey', characterKey);
         const defaultSkill = config.defaultSkill ?? 'thunder';
         const chosenSkill = this.player?.setCharacter?.(characterKey) ?? defaultSkill;
-        this.activeSkillKey = chosenSkill;
+        const currentSelected = Array.isArray(this.activeSkillKeys) ? [...this.activeSkillKeys] : [];
+        const nextSelected = currentSelected.length ? currentSelected : [chosenSkill];
+        this.setSelectedSkills(nextSelected, chosenSkill);
         Object.entries(this.characterInputs ?? {}).forEach(([key, input]) => {
             input.checked = key === characterKey;
         });
+    }
+
+    setSelectedSkills(skillKeys, preferredSkillKey = null) {
+        const uniqueSkillKeys = Array.from(new Set((skillKeys ?? []).filter(key => SKILL_CONFIG[key])));
+        const fallbackSkill = preferredSkillKey && SKILL_CONFIG[preferredSkillKey]
+            ? preferredSkillKey
+            : this.player?.getDefaultSkillKey?.() ?? this.activeSkillKey ?? 'thunder';
+        const nextSelected = uniqueSkillKeys.length ? uniqueSkillKeys : [fallbackSkill];
+        this.activeSkillKeys = nextSelected;
+        this.activeSkillKey = nextSelected.includes(preferredSkillKey) ? preferredSkillKey : nextSelected[0];
         Object.entries(this.skillInputs ?? {}).forEach(([key, input]) => {
-            input.checked = key === this.activeSkillKey;
+            input.checked = nextSelected.includes(key);
         });
     }
 
@@ -509,6 +558,52 @@ export default class MainScene extends Phaser.Scene {
         const enemies = this.enemies ? this.enemies.getChildren() : [];
         const activeCount = enemies.filter(enemy => enemy && enemy.active).length;
         this.enemyCountDisplay.textContent = `Enemies on map: ${activeCount}`;
+    }
+
+    spawnEnemyAtPosition(x, y, enemyType) {
+        if (!enemyType || !this.canSpawnMoreEnemies()) return null;
+        const enemy = new Enemy(this, x, y, enemyType);
+        spawnEnemyWithEliteChance(this, enemy, this.stageScenario);
+        this.enemies.add(enemy);
+        this.add.existing(enemy);
+        this.mapManager.enableObjectCollisions(enemy);
+        if (enemy?.setHealthVisible) {
+            enemy.setHealthVisible(this.showEnemyHP);
+        }
+        return enemy;
+    }
+
+    processStageWaves() {
+        const waves = getTriggeredWaves(this, this.stageScenario, this.stageScenarioState);
+        waves.forEach((waveConfig) => this.spawnEnemyWave(waveConfig));
+    }
+
+    spawnEnemyWave(waveConfig) {
+        if (!waveConfig) return;
+        const center = this.getSpawnEdgePosition();
+        if (!center) return;
+        const count = Math.max(1, waveConfig.count ?? 1);
+        const clusterRadius = Math.max(0, waveConfig.clusterRadius ?? 72);
+        const waveEnemyType = this.pickEnemyTypeForWave(waveConfig);
+        if (!waveEnemyType) return;
+        for (let index = 0; index < count; index += 1) {
+            if (!this.canSpawnMoreEnemies()) break;
+            const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            const distance = Phaser.Math.FloatBetween(0, clusterRadius);
+            const x = center.x + Math.cos(angle) * distance;
+            const y = center.y + Math.sin(angle) * distance;
+            this.spawnEnemyAtPosition(x, y, waveEnemyType);
+        }
+    }
+
+    pickEnemyTypeForWave(waveConfig) {
+        const waveTypes = (waveConfig?.enemyTypes ?? []).filter((type) => {
+            return ENEMIES[type] && ((this.enemySpawnStatus?.[type] ?? false) || !this.debugMode);
+        });
+        if (waveTypes.length) {
+            return Phaser.Utils.Array.GetRandom(waveTypes);
+        }
+        return this.pickEnemyTypeForSpawn();
     }
 
     spawnRandomEnemy(type) {
@@ -537,20 +632,149 @@ export default class MainScene extends Phaser.Scene {
                 y = Phaser.Math.Between(view.top - padding, view.bottom + padding);
                 break;
         }
-        if (!this.canSpawnMoreEnemies()) return;
-        const enemy = new Enemy(this, x, y, enemyType);
-        this.enemies.add(enemy);
-        this.add.existing(enemy);
-        this.mapManager.enableObjectCollisions(enemy);
-        if (enemy?.setHealthVisible) {
-            enemy.setHealthVisible(this.showEnemyHP);
-        }
+        this.spawnEnemyAtPosition(x, y, enemyType);
     }
 
     handleEnemyDeath({ enemy }) {
         if (!enemy) return;
+        playSfx(this, 'sfx_enemy_kill', { volume: 0.25 });
         this.killCount += 1;
         this.tryTriggerEliteKillMilestone();
+    }
+
+    handlePauseToggle(event) {
+        if (this.isGameOver || this.isChoosingCard) return;
+        if (this.scene.isActive('PauseMenuScene')) return;
+        event?.preventDefault?.();
+        this.resetTouchMoveState();
+        this.physics.world.pause();
+        this.scene.pause('HudScene');
+        this.scene.launch('PauseMenuScene');
+        this.scene.pause();
+    }
+
+    syncMapMusic(mapDef) {
+        const nextMusicKey = mapDef?.music?.key ?? null;
+        const musicEnabled = isMusicEnabled(this);
+        const canPlayNextMusic = Boolean(nextMusicKey && this.cache.audio.exists(nextMusicKey) && musicEnabled);
+
+        if (!canPlayNextMusic) {
+            if (this.currentMapMusic) {
+                this.currentMapMusic.stop();
+                this.currentMapMusic.destroy();
+                this.currentMapMusic = null;
+                this.currentMapMusicKey = null;
+            }
+            return;
+        }
+
+        if (this.currentMapMusicKey === nextMusicKey && this.currentMapMusic) {
+            if (!this.currentMapMusic.isPlaying) {
+                this.currentMapMusic.play();
+            }
+            return;
+        }
+
+        if (this.currentMapMusic) {
+            this.currentMapMusic.stop();
+            this.currentMapMusic.destroy();
+            this.currentMapMusic = null;
+            this.currentMapMusicKey = null;
+        }
+        this.currentMapMusic = this.sound.add(nextMusicKey, {
+            loop: mapDef?.music?.loop ?? true,
+            volume: mapDef?.music?.volume ?? 0.4
+        });
+        this.currentMapMusic.play();
+        this.currentMapMusicKey = nextMusicKey;
+    }
+
+    shutdown() {
+        this.input.keyboard.off('keydown-ESC', this.handlePauseToggle, this);
+        this.input.off('pointerdown', this.handleTouchPointerDown, this);
+        this.input.off('pointermove', this.handleTouchPointerMove, this);
+        this.input.off('pointerup', this.handleTouchPointerUp, this);
+        this.input.off('pointerupoutside', this.handleTouchPointerUp, this);
+        const panel = document.getElementById('debug-panel');
+        if (panel) {
+            panel.style.display = 'none';
+        }
+        if (this.currentMapMusic) {
+            this.currentMapMusic.stop();
+            this.currentMapMusic.destroy();
+            this.currentMapMusic = null;
+            this.currentMapMusicKey = null;
+        }
+    }
+
+    setupTouchControls() {
+        this.touchControlsEnabled = Boolean(this.sys.game.device.input.touch);
+        this.touchMoveState = {
+            active: false,
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            deadzone: 12,
+            maxDistance: 64
+        };
+        if (!this.touchControlsEnabled) return;
+        this.input.on('pointerdown', this.handleTouchPointerDown, this);
+        this.input.on('pointermove', this.handleTouchPointerMove, this);
+        this.input.on('pointerup', this.handleTouchPointerUp, this);
+        this.input.on('pointerupoutside', this.handleTouchPointerUp, this);
+    }
+
+    handleTouchPointerDown(pointer) {
+        if (!this.touchControlsEnabled || !pointer) return;
+        if (!pointer.wasTouch && !pointer.pointerType?.includes?.('touch')) return;
+        if (this.touchMoveState?.active) return;
+        if (pointer.x > this.scale.width * 0.55 || pointer.y < this.scale.height * 0.32) return;
+
+        this.touchMoveState.active = true;
+        this.touchMoveState.pointerId = pointer.id;
+        this.touchMoveState.startX = pointer.x;
+        this.touchMoveState.startY = pointer.y;
+        this.touchMoveState.currentX = pointer.x;
+        this.touchMoveState.currentY = pointer.y;
+    }
+
+    handleTouchPointerMove(pointer) {
+        if (!this.touchControlsEnabled || !pointer) return;
+        if (!this.touchMoveState?.active || this.touchMoveState.pointerId !== pointer.id) return;
+        this.touchMoveState.currentX = pointer.x;
+        this.touchMoveState.currentY = pointer.y;
+    }
+
+    handleTouchPointerUp(pointer) {
+        if (!this.touchControlsEnabled || !pointer) return;
+        if (!this.touchMoveState?.active || this.touchMoveState.pointerId !== pointer.id) return;
+        this.resetTouchMoveState();
+    }
+
+    resetTouchMoveState() {
+        if (!this.touchMoveState) return;
+        this.touchMoveState.active = false;
+        this.touchMoveState.pointerId = null;
+        this.touchMoveState.currentX = this.touchMoveState.startX;
+        this.touchMoveState.currentY = this.touchMoveState.startY;
+    }
+
+    getTouchMoveVector() {
+        if (!this.touchControlsEnabled || !this.touchMoveState?.active) {
+            return { x: 0, y: 0, magnitude: 0, active: false };
+        }
+        const dx = this.touchMoveState.currentX - this.touchMoveState.startX;
+        const dy = this.touchMoveState.currentY - this.touchMoveState.startY;
+        const vector = new Phaser.Math.Vector2(dx, dy);
+        const distance = vector.length();
+        if (distance <= this.touchMoveState.deadzone) {
+            return { x: 0, y: 0, magnitude: 0, active: true };
+        }
+        vector.normalize();
+        const magnitude = Phaser.Math.Clamp(distance / this.touchMoveState.maxDistance, 0, 1);
+        return { x: vector.x, y: vector.y, magnitude, active: true };
     }
 
     tryTriggerEliteKillMilestone() {
@@ -576,10 +800,23 @@ export default class MainScene extends Phaser.Scene {
         enemy.eliteConfig = eliteConfig;
         enemy.eliteAbilities = [...(eliteConfig.specialAbilities ?? [])];
         enemy.scaleSize = eliteConfig.scaleSize ?? 1;
-        enemy.setTint(eliteConfig.tint ?? 0xffcc00);
+        enemy.eliteTint = eliteConfig.tint ?? 0xffcc00;
+        enemy.setTint(enemy.eliteTint);
         enemy.maxHealth = enemy.health = Math.round((enemy.maxHealth || enemy.health) * (eliteConfig.hpMultiplier ?? 1));
         enemy.damage = Math.round((enemy.damage ?? 10) * (eliteConfig.damageMultiplier ?? 1));
         enemy.speed = (enemy.speed ?? 100) * (eliteConfig.speedMultiplier ?? 1);
+        enemy.captureBaseStats?.();
+        enemy.enableMotionTrail?.({
+            tint: eliteConfig.trailTint ?? eliteConfig.tint ?? 0xffcc00,
+            spawnInterval: eliteConfig.trailSpawnInterval ?? 10,
+            lifetime: eliteConfig.trailLifetime ?? 30,
+            depthOffset: eliteConfig.trailDepthOffset ?? -2,
+            blendMode: eliteConfig.trailBlendMode ?? 'ADD',
+            scale: eliteConfig.trailScale ?? 0.5,
+            minAlpha: eliteConfig.trailMinAlpha ?? 0.4,
+            offsetDistance: eliteConfig.trailOffsetDistance ?? 1,
+            sizeFactor: eliteConfig.trailSizeFactor ?? 0.9
+        });
         this.enemies.add(enemy);
         this.add.existing(enemy);
         this.mapManager.enableObjectCollisions(enemy);
@@ -617,13 +854,7 @@ export default class MainScene extends Phaser.Scene {
         const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
         const x = this.player.x + Math.cos(angle) * distance;
         const y = this.player.y + Math.sin(angle) * distance;
-        const enemy = new Enemy(this, x, y, type);
-        this.enemies.add(enemy);
-        this.add.existing(enemy);
-        this.mapManager.enableObjectCollisions(enemy);
-        if (enemy?.setHealthVisible) {
-            enemy.setHealthVisible(this.showEnemyHP);
-        }
+        this.spawnEnemyAtPosition(x, y, type);
     }
 
     pickEnemyTypeForSpawn() {
@@ -754,16 +985,19 @@ export default class MainScene extends Phaser.Scene {
     handlePlayerDeath() {
         if (this.isGameOver) return;
         this.isGameOver = true;
+        this.resetTouchMoveState();
         this.physics.world.pause();
-        const centerX = this.scale.width / 2;
-        const centerY = this.scale.height / 2;
-        this.add.text(centerX, centerY, 'GAME OVER', {
-            fontSize: '32px',
-            color: '#ff0000',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+        this.scene.pause('HudScene');
+        const elapsedMs = Math.max(0, this.time.now - (this.runStartTime ?? this.time.now));
+        const totalSeconds = Math.floor(elapsedMs / 1000);
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        this.scene.launch('GameOverScene', {
+            timeSurvived: `${minutes}:${seconds}`,
+            enemiesKilled: this.killCount ?? 0,
+            levelReached: this.player?.level ?? 1
+        });
+        this.scene.pause();
     }
 
     getWeightedCards(count) {

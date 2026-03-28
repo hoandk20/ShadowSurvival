@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "filename": "frame0.png",
+      "filename": "image.png",
       "frame": {
         "x": 0,
         "y": 0,
@@ -21,8 +21,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 836,
-        "h": 1064
+        "w": 524,
+        "h": 345
       },
       "renderSize": {
         "w": 64,
@@ -34,7 +34,7 @@
       }
     },
     {
-      "filename": "frame1.png",
+      "filename": "image_2.png",
       "frame": {
         "x": 64,
         "y": 0,
@@ -54,8 +54,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 877,
-        "h": 1064
+        "w": 526,
+        "h": 359
       },
       "renderSize": {
         "w": 64,
@@ -67,7 +67,7 @@
       }
     },
     {
-      "filename": "frame2.png",
+      "filename": "image_3.png",
       "frame": {
         "x": 128,
         "y": 0,
@@ -87,8 +87,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 880,
-        "h": 1063
+        "w": 523,
+        "h": 341
       },
       "renderSize": {
         "w": 64,
@@ -100,7 +100,7 @@
       }
     },
     {
-      "filename": "frame0_2.png",
+      "filename": "image_4.png",
       "frame": {
         "x": 192,
         "y": 0,
@@ -120,74 +120,8 @@
         "h": 64
       },
       "inputSize": {
-        "w": 1564,
-        "h": 1063
-      },
-      "renderSize": {
-        "w": 64,
-        "h": 64
-      },
-      "pivot": {
-        "x": 0.5,
-        "y": 0.5
-      }
-    },
-    {
-      "filename": "frame1_2.png",
-      "frame": {
-        "x": 0,
-        "y": 64,
-        "w": 64,
-        "h": 64
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 64
-      },
-      "sourceSize": {
-        "w": 64,
-        "h": 64
-      },
-      "inputSize": {
-        "w": 1704,
-        "h": 1063
-      },
-      "renderSize": {
-        "w": 64,
-        "h": 64
-      },
-      "pivot": {
-        "x": 0.5,
-        "y": 0.5
-      }
-    },
-    {
-      "filename": "frame2_2.png",
-      "frame": {
-        "x": 64,
-        "y": 64,
-        "w": 64,
-        "h": 64
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 64
-      },
-      "sourceSize": {
-        "w": 64,
-        "h": 64
-      },
-      "inputSize": {
-        "w": 1612,
-        "h": 1063
+        "w": 521,
+        "h": 347
       },
       "renderSize": {
         "w": 64,
@@ -206,7 +140,7 @@
     "format": "RGBA8888",
     "size": {
       "w": 256,
-      "h": 128
+      "h": 64
     },
     "scale": 1,
     "smartupdate": "#0f172a"

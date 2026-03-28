@@ -1,11 +1,12 @@
 // entities/Player.js
 import BaseEntity from './BaseEntity.js';
 import Skill from './Skill.js';
-import { ENTITY_SIZE_CONFIG } from '../config/assets.js';
+import { ENTITY_SIZE_CONFIG, CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { SKILL_CONFIG } from '../config/skill.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY, getCharacterConfig } from '../config/characters/characters.js';
 import { LOOT_CONFIG } from '../config/loot.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
+import { playSfx } from '../utils/audioSettings.js';
 
 const selectAnimationName = (config) => {
     if (!config?.animations) return 'idle';
@@ -15,21 +16,23 @@ const selectAnimationName = (config) => {
 };
 
 const buildFrameKey = (assetKey, animName, frameIndex = 0) => `${assetKey}_${animName}_${frameIndex}`;
+const DEFAULT_CHARACTER_HP = 10000;
 
 export default class Player extends BaseEntity {
     constructor(scene, x, y, characterKey = DEFAULT_CHARACTER_KEY) {
         const requestedKey = characterKey ?? DEFAULT_CHARACTER_KEY;
         const resolvedKey = CHARACTER_CONFIG[requestedKey] ? requestedKey : DEFAULT_CHARACTER_KEY;
         const characterConfig = getCharacterConfig(resolvedKey);
+        const characterAssetConfig = CHARACTER_ASSET_CONFIG[resolvedKey] ?? CHARACTER_ASSET_CONFIG[characterConfig?.assetKey ?? resolvedKey] ?? {};
         const assetKey = characterConfig?.assetKey ?? resolvedKey;
-        const animName = selectAnimationName(characterConfig);
-        const initialTexture = characterConfig?.atlas?.key ?? buildFrameKey(assetKey, animName, 0);
-        const initialFrame = characterConfig?.atlas
-            ? (characterConfig.animations?.move?.frames?.[0] ?? characterConfig.animations?.idle?.frames?.[0])
+        const animName = selectAnimationName(characterAssetConfig);
+        const initialTexture = characterAssetConfig?.atlas?.key ?? buildFrameKey(assetKey, animName, 0);
+        const initialFrame = characterAssetConfig?.atlas
+            ? (characterAssetConfig.animations?.move?.frames?.[0] ?? characterAssetConfig.animations?.idle?.frames?.[0])
             : undefined;
         super(scene, x, y, initialTexture, initialFrame);
         this.speed = 200;
-        this.maxHealth = 10000;
+        this.maxHealth = characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
         this.health = this.maxHealth;
         this.displayedHealth = this.health;
         this.level = 1;
@@ -84,17 +87,32 @@ export default class Player extends BaseEntity {
     }
 
     castBasicSpell() {
-        const skillType = this.scene?.activeSkillKey || 'thunder';
-        if (this.isCastingSkill) return;
+        const skillTypes = this.getActiveSkillKeys();
+        let castedAnySkill = false;
+        let latestCastReset = 0;
+        skillTypes.forEach((skillType) => {
+            const castDuration = this.castConfiguredSkill(skillType);
+            if (castDuration > 0) {
+                castedAnySkill = true;
+                latestCastReset = Math.max(latestCastReset, castDuration, 500);
+            }
+        });
+        if (!castedAnySkill || !this.scene?.time) return;
+        this.isCastingSkill = true;
+        this.scene.time.delayedCall(latestCastReset, () => {
+            this.isCastingSkill = false;
+        });
+    }
+
+    castConfiguredSkill(skillType) {
+        if (!this.scene?.time) return 0;
         const now = this.scene.time.now;
         const attackDuration = this.attackAnimationDuration || 400;
         const skillCooldown = Math.max(this.getSkillCooldown(skillType), attackDuration);
         const lastCast = this.lastSkillCastTimes[skillType] ?? -Infinity;
-        if (now - lastCast < skillCooldown) return;
+        if (now - lastCast < skillCooldown) return 0;
 
-        // Create and cast skill
-        const activeSkillKey = this.getActiveSkillKey();
-        const count = this.getSkillObjectCount(activeSkillKey);
+        const count = this.getSkillObjectCount(skillType);
         const movementDirection = this.lastMoveDirection.clone();
         if (movementDirection.lengthSq() === 0) {
             movementDirection.set(this.flipX ? -1 : 1, 0);
@@ -196,7 +214,7 @@ export default class Player extends BaseEntity {
 
         if (skillDefinition.category === 'orbit' && count === 1) {
             if (this.activeSingleOrbitSkill && this.activeSingleOrbitSkill.active) {
-                return;
+                return 0;
             }
             this.activeSingleOrbitSkill = spawnSkillObject(0);
             if (this.activeSingleOrbitSkill) {
@@ -211,16 +229,7 @@ export default class Player extends BaseEntity {
         }
 
         this.lastSkillCastTimes[skillType] = now;
-        this.isCastingSkill = true;
-        this.scene.time.delayedCall(attackDuration, () => {
-            this.isCastingSkill = false;
-        });
-        this.isCastingSkill = true;
-
-        // Reset casting flag after skill duration
-        this.scene.time.delayedCall(500, () => {
-            this.isCastingSkill = false;
-        });
+        return attackDuration;
     }
 
 
@@ -229,13 +238,27 @@ export default class Player extends BaseEntity {
 
         this.ensureVisibleState();
         // Handle input
-        let velocityX = 0;
-        let velocityY = 0;
+        let inputX = 0;
+        let inputY = 0;
 
-        if (this.keys.A.isDown || this.keys.LEFT.isDown) velocityX = -this.speed;
-        if (this.keys.D.isDown || this.keys.RIGHT.isDown) velocityX = this.speed;
-        if (this.keys.W.isDown || this.keys.UP.isDown) velocityY = -this.speed;
-        if (this.keys.S.isDown || this.keys.DOWN.isDown) velocityY = this.speed;
+        if (this.keys.A.isDown || this.keys.LEFT.isDown) inputX -= 1;
+        if (this.keys.D.isDown || this.keys.RIGHT.isDown) inputX += 1;
+        if (this.keys.W.isDown || this.keys.UP.isDown) inputY -= 1;
+        if (this.keys.S.isDown || this.keys.DOWN.isDown) inputY += 1;
+
+        const touchInput = this.scene?.getTouchMoveVector?.() ?? { x: 0, y: 0, magnitude: 0, active: false };
+        if (touchInput.active && touchInput.magnitude > 0) {
+            inputX = touchInput.x * touchInput.magnitude;
+            inputY = touchInput.y * touchInput.magnitude;
+        }
+
+        const movementInput = new Phaser.Math.Vector2(inputX, inputY);
+        if (movementInput.lengthSq() > 1) {
+            movementInput.normalize();
+        }
+
+        const velocityX = movementInput.x * this.speed;
+        const velocityY = movementInput.y * this.speed;
 
         this.setVelocity(velocityX, velocityY);
 
@@ -395,6 +418,7 @@ export default class Player extends BaseEntity {
     onLevelUp() {
         const scene = this.scene;
         if (!scene) return;
+        playSfx(scene, 'sfx_levelup', { volume: 0.4 });
         const camera = scene.cameras && scene.cameras.main;
         if (camera) {
             camera.shake(220, 0.01, true);
@@ -484,6 +508,14 @@ export default class Player extends BaseEntity {
         return this.scene?.activeSkillKey || 'thunder';
     }
 
+    getActiveSkillKeys() {
+        const activeSkillKeys = this.scene?.activeSkillKeys;
+        if (Array.isArray(activeSkillKeys) && activeSkillKeys.length) {
+            return activeSkillKeys;
+        }
+        return [this.getActiveSkillKey()];
+    }
+
     getSkillObjectCount(skillKey) {
         return this.skillObjectCounts[skillKey] ?? 1;
     }
@@ -543,6 +575,7 @@ export default class Player extends BaseEntity {
         const defaultSkill = config.defaultSkill ?? 'thunder';
         if (this.characterKey === resolvedKey) {
             this.characterConfig = config;
+            this.updateHealthFromCharacterConfig();
             this.updateSpeedFromConfig();
             return defaultSkill;
         }
@@ -555,9 +588,10 @@ export default class Player extends BaseEntity {
         this.targetHeight = charSize.height;
         this.baseWidth = charSize.width;
         this.baseHeight = charSize.height;
-        if (config.atlas) {
-            const frameName = config.animations?.move?.frames?.[0] ?? config.animations?.idle?.frames?.[0];
-            this.setTexture(config.atlas.key, frameName);
+        const characterAssetConfig = CHARACTER_ASSET_CONFIG[assetKey] ?? CHARACTER_ASSET_CONFIG[resolvedKey] ?? {};
+        if (characterAssetConfig.atlas) {
+            const frameName = characterAssetConfig.animations?.move?.frames?.[0] ?? characterAssetConfig.animations?.idle?.frames?.[0];
+            this.setTexture(characterAssetConfig.atlas.key, frameName);
         } else {
             const animName = selectAnimationName(config);
             const frameKey = buildFrameKey(assetKey, animName, 0);
@@ -577,8 +611,18 @@ export default class Player extends BaseEntity {
         this.isCastingSkill = false;
         this.attackAnimationDuration = this.resolveAttackAnimationDuration();
         this.idleFrameIndex = config?.idleFrameIndex ?? this.idleFrameIndex;
+        this.updateHealthFromCharacterConfig();
         this.updateSpeedFromConfig();
         return defaultSkill;
+    }
+
+    updateHealthFromCharacterConfig() {
+        const nextMaxHealth = this.characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
+        const previousMaxHealth = Math.max(this.maxHealth ?? nextMaxHealth, 1);
+        const healthRatio = Phaser.Math.Clamp((this.health ?? nextMaxHealth) / previousMaxHealth, 0, 1);
+        this.maxHealth = nextMaxHealth;
+        this.health = Math.round(this.maxHealth * healthRatio);
+        this.displayedHealth = this.health;
     }
 
     updateSpeedFromConfig() {

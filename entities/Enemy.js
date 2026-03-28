@@ -1,5 +1,6 @@
 import BaseEntity from './BaseEntity.js';
 import { ENEMIES } from '../config/enemies.js';
+import MotionTrailEffect from './effects/MotionTrailEffect.js';
 
 const HITBOX_DISTANCE = 100;
 const REPELL_FORCE = 220;
@@ -18,6 +19,7 @@ export default class Enemy extends BaseEntity {
         const rawDisplay = enemyConfig.displaySize || { width: 34, height: 50 };
         const rawHitbox = enemyConfig.hitboxSize || { width: HITBOX_DISTANCE, height: HITBOX_DISTANCE };
         this.baseDisplaySize = { width: rawDisplay.width, height: rawDisplay.height };
+        this.baseHitboxSize = { width: rawHitbox.width, height: rawHitbox.height };
         this.displaySize = {
             width: rawDisplay.width,
             height: rawDisplay.height
@@ -32,6 +34,7 @@ export default class Enemy extends BaseEntity {
         this.knockbackResist = enemyConfig.knockbackResist ?? 1;
         this.isStunned = false;
         this.damageTintTimer = null;
+        this.stunTimer = null;
         this.knockbackVelocity = new Phaser.Math.Vector2(0, 0);
         this.knockbackTimer = 0;
         this.knockbackDragFactor = 0.92;
@@ -42,8 +45,14 @@ export default class Enemy extends BaseEntity {
         this.stuckTimer = 0;
         this.ghostTimer = 0;
         this.ghostDuration = enemyConfig.ghostDuration ?? 900;
+        this.eliteTint = null;
         this.lastSafePosition = new Phaser.Math.Vector2(x, y);
         this.lastPosition = new Phaser.Math.Vector2(x, y);
+        this.motionTrailEffect = null;
+        this.scaleSize = 1;
+        this.baseStats = null;
+        this.currentStats = null;
+        this.stageEliteState = null;
 
         this.setVisible(false);
         this.setScale(1);
@@ -52,13 +61,16 @@ export default class Enemy extends BaseEntity {
         this.baseWidth = this.displaySize.width;
         this.baseHeight = this.displaySize.height;
         this.enforceHitboxSize();
+        this.captureBaseStats();
 
         this.separation = new Phaser.Math.Vector2(0, 0);
         this.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.handleAnimationUpdate, this);
+        this.once(Phaser.GameObjects.Events.DESTROY, this.cleanupEffectTimers, this);
         this.once(Phaser.GameObjects.Events.ADDED_TO_SCENE, () => {
             this.setState('move');
             this.anims.play(`${type}_move`, true);
             this.scene?.time?.delayedCall(16, () => {
+                if (!this.active || !this.scene) return;
                 this.setVisible(true);
             });
         });
@@ -66,6 +78,7 @@ export default class Enemy extends BaseEntity {
 
     update(time, delta, player, allEnemies) {
         if (!this.scene) return;
+        this.motionTrailEffect?.update(time, delta);
         if (this.ghostTimer > 0) {
             this.ghostTimer -= delta;
             if (this.ghostTimer <= 0) {
@@ -130,6 +143,8 @@ export default class Enemy extends BaseEntity {
         if (this.isDead) return;
         this.isDead = true;
         this.setState('dead');
+        this.motionTrailEffect?.destroy?.();
+        this.motionTrailEffect = null;
         this.scene?.mapManager?.removeObjectCollisions?.(this);
         if (this.body) {
             this.body.stop();
@@ -231,6 +246,59 @@ export default class Enemy extends BaseEntity {
         this.enforceHitboxSize();
     }
 
+    captureBaseStats() {
+        this.baseStats = {
+            maxHealth: this.maxHealth,
+            damage: this.damage,
+            speed: this.speed,
+            scale: this.scaleSize ?? 1
+        };
+        this.currentStats = { ...this.baseStats };
+    }
+
+    applyRuntimeStats(nextStats = {}, options = {}) {
+        const preserveHealthRatio = options.preserveHealthRatio !== false;
+        const previousMaxHealth = Math.max(this.maxHealth ?? 1, 1);
+        const healthRatio = preserveHealthRatio
+            ? Phaser.Math.Clamp((this.health ?? previousMaxHealth) / previousMaxHealth, 0, 1)
+            : 1;
+        const resolvedStats = {
+            maxHealth: Math.max(1, Math.round(nextStats.maxHealth ?? this.maxHealth ?? 1)),
+            damage: nextStats.damage ?? this.damage ?? 0,
+            speed: nextStats.speed ?? this.speed ?? 0,
+            scale: nextStats.scale ?? this.scaleSize ?? 1
+        };
+
+        this.currentStats = { ...resolvedStats };
+        this.maxHealth = resolvedStats.maxHealth;
+        this.health = preserveHealthRatio
+            ? Math.round(this.maxHealth * healthRatio)
+            : this.maxHealth;
+        this.damage = resolvedStats.damage;
+        this.speed = resolvedStats.speed;
+        this.scaleSize = resolvedStats.scale;
+        this.displaySize = {
+            width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize)),
+            height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize))
+        };
+        this.hitboxSize = {
+            width: Math.max(2, Math.round(this.baseHitboxSize.width * this.scaleSize)),
+            height: Math.max(2, Math.round(this.baseHitboxSize.height * this.scaleSize))
+        };
+        this.baseWidth = this.displaySize.width;
+        this.baseHeight = this.displaySize.height;
+        this.setDisplaySize(this.displaySize.width, this.displaySize.height);
+        this.enforceHitboxSize();
+    }
+
+    enableMotionTrail(config = {}) {
+        if (this.motionTrailEffect) {
+            this.motionTrailEffect.destroy();
+        }
+        this.motionTrailEffect = new MotionTrailEffect(this.scene, this, config);
+        return this.motionTrailEffect;
+    }
+
     handleAnimationUpdate() {
         // Phaser replaces display size with frame dimensions on every animation tick.
         // Enforce the renderer size without touching the physics body.
@@ -238,34 +306,54 @@ export default class Enemy extends BaseEntity {
         this.setDisplaySize(this.displaySize.width, this.displaySize.height);
     }
 
+    cleanupEffectTimers() {
+        this.damageTintTimer?.remove?.(false);
+        this.damageTintTimer = null;
+        this.stunTimer?.remove?.(false);
+        this.stunTimer = null;
+    }
+
     applyStun(duration, tint = 0x000000) {
-        if (!duration || this.isStunned) return;
+        if (!duration || this.isStunned || !this.active || !this.scene) return;
         this.isStunned = true;
         this.stunTint = tint;
         this.setTint(tint);
         if (this.body) {
             this.body.setVelocity(0, 0);
         }
-        if (this.anims.currentAnim && !this.anims.isPaused) {
+        if (this.anims?.currentAnim && !this.anims.isPaused) {
             this.anims.pause();
         }
-        this.scene?.time?.delayedCall(duration, () => {
+        this.stunTimer?.remove?.(false);
+        this.stunTimer = this.scene.time.delayedCall(duration, () => {
+            if (!this.active || !this.scene) return;
             this.isStunned = false;
-            this.clearTint();
-            if (this.anims.currentAnim && this.anims.isPaused) {
+            this.restorePersistentTint();
+            if (this.anims?.currentAnim && this.anims.isPaused) {
                 this.anims.resume();
             }
+            this.stunTimer = null;
         });
     }
 
     flashDamageTint() {
-        if (!this.scene) return;
+        if (!this.scene || !this.active) return;
         if (this.damageTintTimer) {
             this.damageTintTimer.remove(false);
         }
         this.setTint(0xff0000);
         this.damageTintTimer = this.scene.time.delayedCall(120, () => {
-            this.clearTint();
+            if (!this.active || !this.scene) return;
+            this.restorePersistentTint();
+            this.damageTintTimer = null;
         });
+    }
+
+    restorePersistentTint() {
+        if (this.isElite) {
+            this.setTint(this.eliteTint ?? 0xffcc00);
+            return;
+        }
+        this.clearTint();
     }
 }

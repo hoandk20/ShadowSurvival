@@ -5,6 +5,11 @@ import { CARD_CONFIG } from '../config/card.js';
 import { ITEM_CONFIG } from '../config/items.js';
 
 const MISSING_TEXTURE_KEY = '__missing_texture__';
+const AUDIO_ASSET_CONFIG = {
+    sfx_coin: 'assets/audio/coin.mp3',
+    sfx_enemy_kill: 'assets/audio/enemies-kill.mp3',
+    sfx_levelup: 'assets/audio/levelup.mp3'
+};
 
 export function preloadAllAssets(scene) {
     // Tạo texture placeholder cho frame thiếu
@@ -84,6 +89,11 @@ export function preloadAllAssets(scene) {
         if (!config.assetPath || !key) continue;
         if (scene.textures.exists(key)) continue;
         scene.load.image(key, config.assetPath);
+    }
+
+    for (const [key, path] of Object.entries(AUDIO_ASSET_CONFIG)) {
+        if (scene.cache.audio.exists(key)) continue;
+        scene.load.audio(key, path);
     }
 }
 

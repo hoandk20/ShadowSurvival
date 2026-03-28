@@ -9,11 +9,11 @@ const DEFAULT_CONFIG = {
     rayColor: 0xffd15a,
     rayLengthStart: 10,
     rayLengthEnd: 18,
-    pulseScale: 1.1,
-    particleCount: 14,
-    particleRise: 40,
-    particleWidth: 3,
-    particleHeight: 6,
+    pulseScale: 1.04,
+    particleCount: 10,
+    particleRise: 24,
+    particleWidth: 2,
+    particleHeight: 4,
     particleDuration: { min: 600, max: 900 },
     particleTint: 0xffe3b3,
     depthOffset: 6,
@@ -60,10 +60,10 @@ export default class HolyAuraEffect {
         this.container = scene.add.container(skill.x, skill.y);
         const ownerDepth = skill.owner?.depth ?? 0;
         this.container.setDepth(ownerDepth + Math.max(this.config.depthOffset ?? 0, DEFAULT_CONFIG.depthOffset));
-        this.container.setBlendMode(Phaser.BlendModes.ADD);
+        this.container.setBlendMode(Phaser.BlendModes.NORMAL);
         this.container.setScrollFactor(1);
         this.container.setVisible(true);
-        this.container.setAlpha(1);
+        this.container.setAlpha(0.82);
         this.container.setScale(1);
         this.createGlow();
         if (this.config.useParticles) {
@@ -80,18 +80,42 @@ export default class HolyAuraEffect {
         });
     }
 
+    drawPixelRing(graphics, radius, color, alpha, pixelSize) {
+        const points = Math.max(12, Math.round((Math.PI * 2 * radius) / (pixelSize * 2.4)));
+        graphics.fillStyle(color, alpha);
+        for (let i = 0; i < points; i += 1) {
+            const angle = (Math.PI * 2 * i) / points;
+            const x = Math.round(Math.cos(angle) * radius / pixelSize) * pixelSize;
+            const y = Math.round(Math.sin(angle) * radius / pixelSize) * pixelSize;
+            graphics.fillRect(x - pixelSize / 2, y - pixelSize / 2, pixelSize, pixelSize);
+        }
+    }
+
     createGlow() {
-        const { glowRadii, glowColors } = this.config;
+        const { glowRadii, glowColors, rayVectors, rayColor, rayLengthStart, rayLengthEnd } = this.config;
         const glow = this.scene.add.graphics();
         glow.setDepth(this.container.depth - 1);
         const renderRadii = glowRadii.slice(0, 2);
         for (let i = 0; i < renderRadii.length; i += 1) {
             const radius = renderRadii[i];
-            const thickness = Math.max(radius / 12, 2);
-            const alpha = i === 0 ? 0.25 : 0.18;
-            glow.lineStyle(thickness, glowColors[i] ?? glowColors[0], alpha);
-            glow.strokeCircle(0, 0, radius);
+            const alpha = i === 0 ? 0.16 : 0.1;
+            const pixelSize = i === 0 ? 3 : 2;
+            this.drawPixelRing(glow, radius, glowColors[i] ?? glowColors[0], alpha, pixelSize);
         }
+        glow.fillStyle(rayColor, 0.14);
+        rayVectors.forEach(({ dx, dy }) => {
+            const startX = Math.round(dx * rayLengthStart / 2) * 2;
+            const startY = Math.round(dy * rayLengthStart / 2) * 2;
+            const endX = Math.round(dx * rayLengthEnd / 2) * 2;
+            const endY = Math.round(dy * rayLengthEnd / 2) * 2;
+            const stepCount = Math.max(1, Math.round(Phaser.Math.Distance.Between(startX, startY, endX, endY) / 4));
+            for (let i = 0; i <= stepCount; i += 1) {
+                const t = i / stepCount;
+                const x = Math.round(Phaser.Math.Linear(startX, endX, t) / 2) * 2;
+                const y = Math.round(Phaser.Math.Linear(startY, endY, t) / 2) * 2;
+                glow.fillRect(x - 1, y - 1, 2, 2);
+            }
+        });
         this.container.add(glow);
         this.glow = glow;
     }
@@ -110,7 +134,7 @@ export default class HolyAuraEffect {
                 particleHeight,
                 this.config.particleTint
             );
-            particle.setAlpha(0.85);
+            particle.setAlpha(0.5);
             this.container.add(particle);
             const tween = this.scene.tweens.add({
                 targets: particle,
@@ -121,7 +145,7 @@ export default class HolyAuraEffect {
                 repeat: -1,
                 onRepeat: () => {
                     particle.y = offsetY + particleRise / 2;
-                    particle.alpha = 0.85;
+                    particle.alpha = 0.5;
                 }
             });
             this.particleTweens.push(tween);

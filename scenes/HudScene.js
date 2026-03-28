@@ -21,6 +21,18 @@ export default class HudScene extends Phaser.Scene {
         this.levelUpSelectionCallback = null;
         this.levelUpCardFocusIndex = 0;
         this.levelUpKeyboardActive = false;
+        this.inventoryPanel = null;
+        this.inventoryPanelBg = null;
+        this.inventorySlots = [];
+        this.inventoryColumns = 2;
+        this.inventoryRows = 6;
+        this.pauseButton = null;
+        this.pauseButtonBg = null;
+        this.pauseButtonHitArea = null;
+        this.pauseButtonLines = [];
+        this.touchJoystick = null;
+        this.touchJoystickBase = null;
+        this.touchJoystickThumb = null;
     }
 
     create() {
@@ -63,6 +75,10 @@ export default class HudScene extends Phaser.Scene {
             strokeThickness: 2
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1003);
 
+        this.createPauseButton();
+        this.createInventoryPanel();
+        this.createTouchJoystick();
+
         this.layoutHud();
     }
 
@@ -88,6 +104,7 @@ export default class HudScene extends Phaser.Scene {
         if (this.killCountText) {
             this.killCountText.setText(`Kills: ${kills}`);
         }
+        this.updateTouchJoystick();
         this.drawHpBar(hpProgress, rawHealth, maxHealth);
         this.drawExpBar(progress, level, rawXP, xpToNextLevel);
     }
@@ -117,8 +134,11 @@ export default class HudScene extends Phaser.Scene {
         };
 
         if (this.killCountText) {
-            this.killCountText.setPosition(10, 10);
+            const pauseOffset = width < 640 ? 58 : 64;
+            this.killCountText.setPosition(pauseOffset, 14);
         }
+        this.layoutPauseButton();
+        this.layoutTouchJoystick();
         if (this.expLevelText) {
             this.expLevelText.setPosition(width / 2, expBarY - 9);
         }
@@ -128,6 +148,189 @@ export default class HudScene extends Phaser.Scene {
         if (this.hpText) {
             this.hpText.setPosition(barX + 6, hpBarY + barHeight / 2 - 1);
         }
+        this.layoutInventoryPanel();
+    }
+
+    createInventoryPanel() {
+        this.inventoryPanel?.destroy(true);
+        this.inventoryPanel = this.add.container(0, 0).setScrollFactor(0).setDepth(1001);
+        this.inventoryPanelBg = this.add.graphics();
+
+        this.inventoryPanel.add(this.inventoryPanelBg);
+        this.inventorySlots = [];
+        const totalSlots = this.inventoryColumns * this.inventoryRows;
+        for (let i = 0; i < totalSlots; i++) {
+            const slotContainer = this.add.container(0, 0);
+            const slotGraphics = this.add.graphics();
+            slotContainer.add(slotGraphics);
+            this.inventorySlots.push({
+                container: slotContainer,
+                graphics: slotGraphics
+            });
+            this.inventoryPanel.add(slotContainer);
+        }
+
+        this.layoutInventoryPanel();
+    }
+
+    createPauseButton() {
+        this.pauseButton?.destroy(true);
+        this.pauseButton = this.add.container(0, 0).setScrollFactor(0).setDepth(1005);
+        this.pauseButtonBg = this.add.graphics();
+        this.pauseButtonHitArea = this.add.rectangle(0, 0, 1, 1, 0xffffff, 0.001)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true });
+        this.pauseButtonHitArea
+            .on('pointerdown', () => {
+                this.scene.get('MainScene')?.handlePauseToggle?.();
+            })
+            .on('pointerover', () => this.pauseButton?.setAlpha(1))
+            .on('pointerout', () => this.pauseButton?.setAlpha(0.9));
+
+        this.pauseButton.add(this.pauseButtonBg);
+        this.pauseButtonLines = [];
+        for (let i = 0; i < 3; i += 1) {
+            const line = this.add.rectangle(0, 0, 1, 1, 0xf8d67f, 1).setOrigin(0.5);
+            this.pauseButtonLines.push(line);
+            this.pauseButton.add(line);
+        }
+        this.pauseButton.add(this.pauseButtonHitArea);
+        this.pauseButton.setAlpha(0.9);
+    }
+
+    createTouchJoystick() {
+        this.touchJoystick?.destroy(true);
+        this.touchJoystick = this.add.container(0, 0).setScrollFactor(0).setDepth(1004);
+        this.touchJoystickBase = this.add.circle(0, 0, 30, 0x140f17, 0.34)
+            .setStrokeStyle(2, 0xd8b15a, 0.35);
+        this.touchJoystickThumb = this.add.circle(0, 0, 12, 0xf8d67f, 0.45)
+            .setStrokeStyle(2, 0x000000, 0.4);
+        this.touchJoystick.add([this.touchJoystickBase, this.touchJoystickThumb]);
+        this.touchJoystick.setVisible(false);
+    }
+
+    layoutPauseButton() {
+        if (!this.pauseButton || !this.pauseButtonBg || !this.pauseButtonHitArea) return;
+        const width = this.scale.width;
+        const compact = width < 640;
+        const buttonSize = compact ? 38 : 44;
+        const margin = compact ? 10 : 14;
+        const lineWidth = compact ? 16 : 18;
+        const lineHeight = 3;
+        const lineGap = compact ? 6 : 7;
+
+        this.pauseButton.setPosition(margin + buttonSize / 2, margin + buttonSize / 2);
+        this.pauseButtonBg.clear();
+        this.pauseButtonBg.fillStyle(0x140f17, 0.94);
+        this.pauseButtonBg.fillRect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+        this.pauseButtonBg.lineStyle(2, 0x000000, 1);
+        this.pauseButtonBg.strokeRect(-buttonSize / 2, -buttonSize / 2, buttonSize, buttonSize);
+        this.pauseButtonBg.lineStyle(2, 0xd8b15a, 1);
+        this.pauseButtonBg.strokeRect(-buttonSize / 2 + 2, -buttonSize / 2 + 2, buttonSize - 4, buttonSize - 4);
+        this.pauseButtonBg.lineStyle(1, 0x4d3b25, 1);
+        this.pauseButtonBg.strokeRect(-buttonSize / 2 + 6, -buttonSize / 2 + 6, buttonSize - 12, buttonSize - 12);
+
+        this.pauseButtonLines.forEach((line, index) => {
+            line.setSize(lineWidth, lineHeight);
+            line.setPosition(0, (index - 1) * lineGap);
+        });
+        this.pauseButtonHitArea.setSize(buttonSize, buttonSize);
+    }
+
+    layoutTouchJoystick() {
+        if (!this.touchJoystick || !this.mainScene?.touchControlsEnabled) {
+            this.touchJoystick?.setVisible(false);
+            return;
+        }
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const compact = width < 640;
+        const marginX = compact ? 64 : 76;
+        const marginY = compact ? 68 : 84;
+        const radius = compact ? 28 : 34;
+        const thumbRadius = compact ? 11 : 13;
+
+        this.touchJoystick.setVisible(true);
+        this.touchJoystick.setPosition(marginX, height - marginY);
+        this.touchJoystickBase.setRadius(radius);
+        this.touchJoystickThumb.setRadius(thumbRadius);
+    }
+
+    updateTouchJoystick() {
+        if (!this.touchJoystick || !this.mainScene?.touchControlsEnabled) return;
+        const touchState = this.mainScene.touchMoveState;
+        const vector = this.mainScene.getTouchMoveVector?.() ?? { x: 0, y: 0, magnitude: 0, active: false };
+        this.touchJoystick.setVisible(true);
+        this.touchJoystick.setAlpha(touchState?.active ? 1 : 0.7);
+
+        if (!touchState?.active) {
+            this.touchJoystickThumb.setPosition(0, 0);
+            return;
+        }
+
+        const maxThumbDistance = Math.max(12, (this.touchJoystickBase.radius ?? 30) - 12);
+        this.touchJoystick.setPosition(touchState.startX, touchState.startY);
+        this.touchJoystickThumb.setPosition(
+            vector.x * maxThumbDistance * vector.magnitude,
+            vector.y * maxThumbDistance * vector.magnitude
+        );
+    }
+
+    drawInventorySlot(graphics, size) {
+        const half = size / 2;
+        graphics.clear();
+        graphics.fillStyle(0x2a221b, 1);
+        graphics.fillRect(-half, -half, size, size);
+        graphics.fillStyle(0x413327, 1);
+        graphics.fillRect(-half + 1, -half + 1, size - 2, size - 2);
+        graphics.lineStyle(1, 0x000000, 1);
+        graphics.strokeRect(-half, -half, size, size);
+        graphics.lineStyle(1, 0x6e5a43, 1);
+        graphics.strokeRect(-half + 1, -half + 1, size - 2, size - 2);
+        graphics.lineStyle(1, 0x8f7a5b, 0.45);
+        graphics.lineBetween(-half + 2, -half + 2, half - 2, -half + 2);
+        graphics.lineBetween(-half + 2, -half + 2, -half + 2, half - 2);
+    }
+
+    layoutInventoryPanel() {
+        if (!this.inventoryPanel || !this.hudLayout) return;
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const isCompact = width < 640;
+        const slotSize = isCompact ? 11 : 13;
+        const gap = isCompact ? 2 : 3;
+        const paddingX = isCompact ? 4 : 5;
+        const paddingY = isCompact ? 4 : 5;
+        const paddingBottom = 5;
+        const gridWidth = this.inventoryColumns * slotSize + (this.inventoryColumns - 1) * gap;
+        const gridHeight = this.inventoryRows * slotSize + (this.inventoryRows - 1) * gap;
+        const panelWidth = gridWidth + paddingX * 2;
+        const panelHeight = gridHeight + paddingY * 2 + paddingBottom;
+        const panelX = panelWidth / 2 + 8;
+        const { hpBarY } = this.hudLayout;
+        const panelY = Math.max(panelHeight / 2 + 8, hpBarY - panelHeight / 2 - 10);
+
+        this.inventoryPanel.setPosition(panelX, panelY);
+
+        this.inventoryPanelBg.clear();
+        this.inventoryPanelBg.fillStyle(0x1c1714, 0.92);
+        this.inventoryPanelBg.fillRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight);
+        this.inventoryPanelBg.lineStyle(2, 0x000000, 1);
+        this.inventoryPanelBg.strokeRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight);
+        this.inventoryPanelBg.lineStyle(1, 0x7b6147, 1);
+        this.inventoryPanelBg.strokeRect(-panelWidth / 2 + 2, -panelHeight / 2 + 2, panelWidth - 4, panelHeight - 4);
+
+        const startX = -gridWidth / 2 + slotSize / 2;
+        const startY = -panelHeight / 2 + paddingY + slotSize / 2;
+        this.inventorySlots.forEach((slot, index) => {
+            const col = index % this.inventoryColumns;
+            const row = Math.floor(index / this.inventoryColumns);
+            slot.container.setPosition(
+                startX + col * (slotSize + gap),
+                startY + row * (slotSize + gap)
+            );
+            this.drawInventorySlot(slot.graphics, slotSize);
+        });
     }
 
     drawHpBar(progress, rawHealth, maxHealth) {
@@ -209,7 +412,7 @@ export default class HudScene extends Phaser.Scene {
         const footerSpace = 24;
         const scaleByWidth = (usablePanelWidth - 24) / CARD_LAYOUT.width;
         const scaleByHeight = (maxPanelHeight - headerSpace - footerSpace - cardGutterY * (rows - 1)) / Math.max(1, rows * CARD_LAYOUT.height);
-        const cardScaleFactor = Phaser.Math.Clamp(Math.min(scaleByWidth, scaleByHeight), 0.42, 0.82);
+        const cardScaleFactor = Phaser.Math.Clamp(Math.min(scaleByWidth, scaleByHeight), 0.38, 0.58);
         const cardWidth = CARD_LAYOUT.width * cardScaleFactor + CARD_LAYOUT.padding;
         const cardHeight = CARD_LAYOUT.height * cardScaleFactor + CARD_LAYOUT.padding;
         const totalCardsWidth = columns * cardWidth + (columns - 1) * cardGutterX;
@@ -223,11 +426,12 @@ export default class HudScene extends Phaser.Scene {
             .setOrigin(0.5)
             .setStrokeStyle(1, 0x000000, 0.35);
         const title = this.add.text(width / 2, safeY + 8, 'Choose an upgrade', {
-            fontSize: width < 600 ? '16px' : '18px',
+            fontSize: width < 600 ? '20px' : '24px',
             fontFamily: 'monospace',
+            fontStyle: 'bold',
             color: '#f7fbff',
             stroke: '#000000',
-            strokeThickness: 3
+            strokeThickness: 4
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(203);
         const startX = -totalCardsWidth / 2 + cardWidth / 2;
         const startY = -panelHeight / 2 + headerSpace + cardHeight / 2;
@@ -288,7 +492,7 @@ export default class HudScene extends Phaser.Scene {
         const usablePanelWidth = panelWidth - 32;
         const scaleByWidth = (usablePanelWidth - 24) / CARD_LAYOUT.width;
         const scaleByHeight = (maxPanelHeight - headerSpace - footerSpace - cardGutterY * (rows - 1)) / Math.max(1, rows * CARD_LAYOUT.height);
-        const cardScaleFactor = Phaser.Math.Clamp(Math.min(scaleByWidth, scaleByHeight), 0.42, 0.82);
+        const cardScaleFactor = Phaser.Math.Clamp(Math.min(scaleByWidth, scaleByHeight), 0.38, 0.58);
         const cardWidth = CARD_LAYOUT.width * cardScaleFactor + CARD_LAYOUT.padding;
         const cardHeight = CARD_LAYOUT.height * cardScaleFactor + CARD_LAYOUT.padding;
         const totalCardsWidth = columns * cardWidth + (columns - 1) * cardGutterX;
@@ -362,6 +566,19 @@ export default class HudScene extends Phaser.Scene {
         this.expProgressText = null;
         this.killCountText?.destroy();
         this.killCountText = null;
+        this.pauseButton?.destroy(true);
+        this.pauseButton = null;
+        this.pauseButtonBg = null;
+        this.pauseButtonHitArea = null;
+        this.pauseButtonLines = [];
+        this.touchJoystick?.destroy(true);
+        this.touchJoystick = null;
+        this.touchJoystickBase = null;
+        this.touchJoystickThumb = null;
+        this.inventoryPanel?.destroy(true);
+        this.inventoryPanel = null;
+        this.inventoryPanelBg = null;
+        this.inventorySlots = [];
         this.mainScene = null;
     }
 }

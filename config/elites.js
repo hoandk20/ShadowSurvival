@@ -1,23 +1,13 @@
 // config/elites.js
 export const ELITE_CONFIGS = [
     {
-        id: 'ember_succubus',
-        baseMonsterId: 'succubus',
-        hpMultiplier: 2.4,
-        damageMultiplier: 1.35,
-        speedMultiplier: 1.1,
-        specialAbilities: ['ember_aura'],
-        scaleSize: 1.7,
-        canBeKnockedBack: false
-    },
-    {
         id: 'venom_rat',
         baseMonsterId: 'rat',
         hpMultiplier: 1.8,
         damageMultiplier: 1.6,
         speedMultiplier: 1.25,
         specialAbilities: ['poison_trail', 'agile_leap'],
-        scaleSize: 1.7
+        scaleSize: 2
     },
     {
         id: 'torrent_moth',
@@ -26,7 +16,7 @@ export const ELITE_CONFIGS = [
         damageMultiplier: 1.45,
         speedMultiplier: 1.15,
         specialAbilities: ['frost_chill'],
-        scaleSize: 1.7
+        scaleSize: 2
     }
     ,
     {
@@ -36,7 +26,7 @@ export const ELITE_CONFIGS = [
         damageMultiplier: 1.5,
         speedMultiplier: 1.3,
         specialAbilities: ['shadow_dash', 'vicious_arc'],
-        scaleSize: 1.7,
+        scaleSize: 2,
         canBeKnockedBack: false
     },
     {
@@ -58,7 +48,6 @@ export const ELITE_SPAWN_SETTINGS = {
 };
 
 export const ELITE_KILL_MILESTONES = [
-    { kills: 10, eliteId: 'ember_succubus', spawnCount: 1 },
-    { kills: 20, eliteId: 'zombie_woman_elite', spawnCount: 2 },
-    { kills: 30, eliteId: 'kitsume_elite', spawnCount: 3 }
+    { kills: 10, eliteId: 'zombie_woman_elite', spawnCount: 2 },
+    { kills: 20, eliteId: 'kitsume_elite', spawnCount: 3 }
 ];
