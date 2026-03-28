@@ -1,9 +1,11 @@
 import { SKILL_CONFIG } from '../config/skill.js';
 import HolyAuraEffect from './effects/HolyAuraEffect.js';
+import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
 
 const EFFECT_CLASS_MAP = {
     auraGlow: HolyAuraEffect,
+    codeProjectile: CodeProjectileEffect,
 };
 const TARGET_VIEW_MARGIN = 100;
 
@@ -17,7 +19,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             ? config.atlas.key
             : primaryAnim && primaryAnim.frames && primaryAnim.frames.length
                 ? `${skillType}_${primaryAnimName}_0`
-            : `${skillType}_${primaryAnimName}`;
+            : '__WHITE';
         const baseFrame = config.atlas && primaryAnim?.frames?.length
             ? primaryAnim.frames[0]
             : undefined;
@@ -27,16 +29,19 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.skillType = skillType;
         this.config = config;
         this.primaryAnimName = primaryAnimName;
-        this.hitboxWidth = config.hitboxWidth ?? 150;
-        this.hitboxHeight = config.hitboxHeight ?? 60;
+        const areaMultiplier = owner.getSkillAreaMultiplier?.(skillType) ?? 1;
+        this.hitboxWidth = Math.max(1, Math.round((config.hitboxWidth ?? 150) * areaMultiplier));
+        this.hitboxHeight = Math.max(1, Math.round((config.hitboxHeight ?? 60) * areaMultiplier));
         this.duration = config.duration ?? 500;
         const ownerDamageMul = owner.damageMultiplier ?? 1;
-        this.baseDamage = (config.damage ?? 10) * ownerDamageMul;
+        const skillDamageMul = owner.getSkillDamageMultiplier?.(skillType) ?? 1;
+        const skillDamageFlat = owner.getSkillDamageFlatBonus?.(skillType) ?? 0;
+        this.baseDamage = Math.max(0, (config.damage ?? 10) + skillDamageFlat) * ownerDamageMul * skillDamageMul;
         this.damage = this.baseDamage;
         this.tintColor = config.tint ?? null;
         this.category = config.category ?? 'area';
         this.isAura = this.category === 'aura';
-        this.projectileSpeed = config.projectileSpeed ?? 0;
+        this.projectileSpeed = Math.max(0, (config.projectileSpeed ?? 0) * (owner.getSkillProjectileSpeedMultiplier?.(skillType) ?? 1));
         this.travelRange = config.travelRange ?? 0;
         this.homing = config.homing ?? false;
         this.destroyOnHit = config.destroyOnHit ?? false;
@@ -44,7 +49,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.retargetOnHit = config.retargetOnHit ?? false;
         this.maxChainTargets = config.maxChainTargets ?? 0;
         this.alignWithMovement = config.alignWithMovement ?? false;
-        this.orbitRadius = config.orbitRadius ?? 0;
+        this.orbitRadius = (config.orbitRadius ?? 0) * areaMultiplier;
         this.orbitSpeed = config.orbitSpeed ?? 0;
         this.orbitDirection = config.orbitDirection ?? 1;
         this.orbitAngle = 0;
@@ -57,6 +62,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.direction = new Phaser.Math.Vector2(0, 0);
         this.startX = 0;
         this.startY = 0;
+        this.prevX = 0;
+        this.prevY = 0;
         this.hitTargets = new Set();
         this.dropFromSky = config.dropFromSky ?? false;
         this.dropTarget = null;
@@ -64,9 +71,15 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.dropXOffset = 0;
         this.playAnimation = config.playAnimation ?? true;
         this.visibleDuringEffect = config.visibleDuringEffect ?? true;
-        this.critChance = Phaser.Math.Clamp(config.critChance ?? 0, 0, 1);
+        this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
         this.critMultiplier = config.critMultiplier ?? 1.5;
         this.critColor = config.critColor ?? '#ffde59';
+        this.stunDuration = Math.max(0, Math.round((config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1)));
+        const baseKnockbackCount = config.numberKnockback ?? Infinity;
+        const bonusKnockbackCount = owner.getSkillKnockbackCountBonus?.(skillType) ?? 0;
+        this.numberKnockback = Number.isFinite(baseKnockbackCount)
+            ? Math.max(0, Math.round(baseKnockbackCount + bonusKnockbackCount))
+            : Infinity;
         this.lastRoll = { value: this.baseDamage, isCritical: false };
         scene.add.existing(this);
         this.setActive(false);
@@ -140,6 +153,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         if (this.category === 'projectile') {
             this.startX = this.owner.x;
             this.startY = this.owner.y;
+            this.prevX = this.x;
+            this.prevY = this.y;
             if (this.alignWithMovement) {
                 const velX = this.owner.body?.velocity?.x ?? 0;
                 const velY = this.owner.body?.velocity?.y ?? 0;
@@ -189,6 +204,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             this.setPosition(this.owner.x, this.owner.y);
         }
         if (this.active && this.category === 'projectile') {
+            this.prevX = this.x;
+            this.prevY = this.y;
             if (this.homing) {
                 const target = this.getNearestEnemyTarget();
                 if (target) {
@@ -259,21 +276,25 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             return { x: nextX, y: nextY };
         }
 
-        if (hitX || hitDiagonal) {
-            this.direction.x *= -1;
+        let normal = null;
+        if (hitX && !hitY) {
+            normal = new Phaser.Math.Vector2(nextX > this.x ? -1 : 1, 0);
+        } else if (hitY && !hitX) {
+            normal = new Phaser.Math.Vector2(0, nextY > this.y ? -1 : 1);
+        } else {
+            const deltaX = nextX - this.x;
+            const deltaY = nextY - this.y;
+            if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+                normal = new Phaser.Math.Vector2(deltaX >= 0 ? -1 : 1, 0);
+            } else {
+                normal = new Phaser.Math.Vector2(0, deltaY >= 0 ? -1 : 1);
+            }
         }
-        if (hitY || hitDiagonal) {
-            this.direction.y *= -1;
-        }
-        if (this.direction.lengthSq() === 0) {
-            this.direction.set(this.owner.flipX ? -1 : 1, 0);
-        }
-        this.direction.normalize();
-        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
 
         const fallbackX = hitX || hitDiagonal ? this.x : nextX;
         const fallbackY = hitY || hitDiagonal ? this.y : nextY;
-        return { x: fallbackX, y: fallbackY };
+        this.applyBounceNormal(normal, fallbackX, fallbackY, Math.max(2, sampleRadius * 0.25));
+        return { x: this.x, y: this.y };
     }
 
     resolveViewportBounce(nextX, nextY) {
@@ -290,25 +311,23 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const maxY = view.bottom - halfHeight;
 
         let bounced = false;
+        let normal = new Phaser.Math.Vector2(0, 0);
 
         if (nextX <= minX || nextX >= maxX) {
-            this.direction.x *= -1;
             nextX = Phaser.Math.Clamp(nextX, minX, maxX);
+            normal.x = nextX <= minX ? 1 : -1;
             bounced = true;
         }
 
         if (nextY <= minY || nextY >= maxY) {
-            this.direction.y *= -1;
             nextY = Phaser.Math.Clamp(nextY, minY, maxY);
+            normal.y = nextY <= minY ? 1 : -1;
             bounced = true;
         }
 
         if (bounced) {
-            if (this.direction.lengthSq() === 0) {
-                this.direction.set(this.owner.flipX ? -1 : 1, 0);
-            }
-            this.direction.normalize();
-            this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+            this.applyBounceNormal(normal, nextX, nextY, 2);
+            return { x: this.x, y: this.y };
         }
 
         return { x: nextX, y: nextY };
@@ -317,9 +336,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
     getNearestEnemyTarget(excludedTargets = this.hitTargets) {
         if (!this.scene || !this.scene.enemies) return null;
         const enemies = this.scene.enemies.getChildren();
-        let nearest = null;
-        let minDist = Number.POSITIVE_INFINITY;
         const view = this.scene?.cameras?.main?.worldView;
+        const candidates = [];
         for (const enemy of enemies) {
             if (!enemy || !enemy.active) continue;
             if (excludedTargets?.has?.(enemy)) continue;
@@ -330,6 +348,15 @@ export default class Skill extends Phaser.GameObjects.Sprite {
                     && enemy.y <= view.bottom + TARGET_VIEW_MARGIN;
                 if (!withinView) continue;
             }
+            candidates.push(enemy);
+        }
+        if (!candidates.length) return null;
+
+        const preferredCandidates = candidates.filter(enemy => !enemy.isHacked);
+        const targetPool = preferredCandidates.length ? preferredCandidates : candidates;
+        let nearest = null;
+        let minDist = Number.POSITIVE_INFINITY;
+        for (const enemy of targetPool) {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
             if (dist < minDist) {
                 minDist = dist;
@@ -353,14 +380,45 @@ export default class Skill extends Phaser.GameObjects.Sprite {
 
     bounceFromEnemy(enemy) {
         if (!this.active || !this.bounceOnHit || !enemy) return false;
-        const normal = new Phaser.Math.Vector2(this.x - enemy.x, this.y - enemy.y);
+        const bounds = enemy.getBounds?.();
+        let normal = null;
+
+        if (bounds) {
+            const nearestX = Phaser.Math.Clamp(this.x, bounds.left, bounds.right);
+            const nearestY = Phaser.Math.Clamp(this.y, bounds.top, bounds.bottom);
+            normal = new Phaser.Math.Vector2(this.x - nearestX, this.y - nearestY);
+
+            if (normal.lengthSq() === 0) {
+                const distances = [
+                    { value: Math.abs(this.x - bounds.left), normal: new Phaser.Math.Vector2(-1, 0) },
+                    { value: Math.abs(bounds.right - this.x), normal: new Phaser.Math.Vector2(1, 0) },
+                    { value: Math.abs(this.y - bounds.top), normal: new Phaser.Math.Vector2(0, -1) },
+                    { value: Math.abs(bounds.bottom - this.y), normal: new Phaser.Math.Vector2(0, 1) }
+                ];
+                distances.sort((a, b) => a.value - b.value);
+                normal = distances[0].normal;
+            }
+        }
+
+        if (!normal || normal.lengthSq() === 0) {
+            normal = new Phaser.Math.Vector2(this.x - enemy.x, this.y - enemy.y);
+        }
         if (normal.lengthSq() === 0) {
             normal.copy(this.direction).negate();
         }
         if (normal.lengthSq() === 0) {
             normal.set(1, 0);
         }
-        normal.normalize();
+
+        this.applyBounceNormal(normal, this.x, this.y, Math.max(4, (this.displayWidth ?? this.hitboxWidth ?? 12) * 0.5));
+        return true;
+    }
+
+    applyBounceNormal(normal, anchorX, anchorY, separation = 2) {
+        if (!normal) return false;
+        const resolvedNormal = normal.clone();
+        if (resolvedNormal.lengthSq() === 0) return false;
+        resolvedNormal.normalize();
 
         const incoming = this.direction.clone();
         if (incoming.lengthSq() === 0) {
@@ -368,10 +426,14 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
         incoming.normalize();
 
-        const dot = incoming.dot(normal);
-        this.direction = incoming.subtract(normal.scale(2 * dot)).normalize();
-        this.x = enemy.x + normal.x * ((enemy.displayWidth ?? enemy.body?.width ?? 24) * 0.65);
-        this.y = enemy.y + normal.y * ((enemy.displayHeight ?? enemy.body?.height ?? 24) * 0.65);
+        let reflected = incoming.subtract(resolvedNormal.clone().scale(2 * incoming.dot(resolvedNormal)));
+        if (reflected.lengthSq() === 0) {
+            reflected = resolvedNormal.clone();
+        }
+
+        this.direction.copy(reflected.normalize());
+        this.x = anchorX + resolvedNormal.x * separation;
+        this.y = anchorY + resolvedNormal.y * separation;
         this.setRotation(Math.atan2(this.direction.y, this.direction.x));
         return true;
     }

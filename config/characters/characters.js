@@ -77,12 +77,23 @@ export const CHARACTER_CONFIG = {
         speed: 82,
         size: { width: 20, height: 20 }
     },
-    hoan: {
-        label: 'Hoandepzai',
-        description: 'Hoan is a warrior from Vietnam who has come to this land to eliminate the monsters threatening it.',
-        assetKey: 'hoan',
+    bodoi: {
+        label: 'Bodoi',
+        description: 'Bodoi is a warrior from Vietnam who has come to this land to eliminate the monsters threatening it.',
+        assetKey: 'bodoi',
         assetFormat: 'spritesheet',
         defaultSkill: 'mu_coi',
+        hp: 75,
+        armor: 1,
+        speed: 82,
+        size: { width: 20, height: 23 }
+    },
+    hoan: {
+        label: 'Hoan',
+        description: 'Hoan, an IT specialist from 2030, wakes up trapped in a monster-filled world. With no way back, he turns code into weapons to survive.',
+        assetKey: 'hoan',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'code',
         hp: 75,
         armor: 1,
         speed: 82,

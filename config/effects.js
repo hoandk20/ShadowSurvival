@@ -20,6 +20,16 @@ export const EFFECT_CONFIG = {
             depthOffset: 3
         },
         tags: ['pixel', 'holy', 'loop']
+    },
+    codeProjectile: {
+        label: 'Code Projectile',
+        description: 'Neon-green glyph burst used for code-themed projectiles.',
+        usage: ['skill-projectile'],
+        effectClass: 'CodeProjectileEffect',
+        settings: {
+            depthOffset: 2
+        },
+        tags: ['pixel', 'code', 'green']
     }
 };
 

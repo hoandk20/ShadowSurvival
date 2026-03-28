@@ -1,5 +1,5 @@
 export const LOOT_CONFIG = {
-    magnetRadius: 100,
+    magnetRadius: 50,
     magnetSpeed: 420,
     magnetThreshold: 20
 };

@@ -86,6 +86,10 @@ export function preloadAllAssets(scene) {
     const cardIconPath = cardBasePath + 'icons/';
     for (const card of CARD_CONFIG) {
         const iconKey = `card_icon_${card.key}`;
+        if (card.assetPath) {
+            scene.load.image(iconKey, card.assetPath);
+            continue;
+        }
         const iconFile = card.iconFile || `${card.key}.png`;
         scene.load.image(iconKey, cardIconPath + iconFile);
     }

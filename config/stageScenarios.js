@@ -3,38 +3,86 @@ const ELITE_MODIFIERS = {
         kind: 'self',
         apply(stats) {
             stats.maxHealth *= 10;
-            stats.speed *= 0.8;
+            stats.knockbackResist *= 0.1;
         }
     },
     fast: {
         kind: 'self',
         apply(stats) {
-            stats.speed *= 1.5;
+            stats.speed *= 5;
+            stats.scale *= 0.6;
+            stats.damage -= 9;
+            stats.maxHealth *= 0.5;
+            stats.knockbackResist *= 2;
         }
     },
     berserk: {
         kind: 'self',
         apply(stats) {
-            stats.damage *= 1.5;
+            stats.damage *= 5;
+            stats.knockbackResist *= 0.5;
         }
     },
     giant: {
         kind: 'self',
         apply(stats) {
-            stats.scale *= 1.5;
-            stats.maxHealth *= 1.5;
+            stats.scale *= 2;
+            stats.maxHealth *= 15;
+            stats.speed *= 0.5;
+            stats.knockbackResist *= 0.1;
         }
     },
     aura_speed: {
         kind: 'aura',
         applyAura(stats) {
-            stats.speed *= 1.2;
+            stats.speed *= 0.7;
         }
     },
     aura_damage: {
         kind: 'aura',
         applyAura(stats) {
-            stats.damage *= 1.15;
+            stats.damage *= 0.7;
+        }
+        
+    }
+};
+
+const ELITE_MODIFIER_VISUALS = {
+    tank: {
+        tint: 0x9aa0a6
+    },
+    fast: {
+        tint: 0xf2f5f7,
+        trail: {
+            tint: 0xffffff,
+            spawnInterval: 10,
+            lifetime: 80,
+            scale: 0.45,
+            minAlpha: 0.25
+        }
+    },
+    berserk: {
+        tint: 0xff5252
+    },
+    giant: {
+        tint: 0x8b5a2b
+    },
+    aura_speed: {
+        tint: 0xffe066,
+        aura: {
+            color: 0xffe066,
+            alpha: 0.11,
+            pulseScale: 1.04,
+            radius: 34
+        }
+    },
+    aura_damage: {
+        tint: 0xff5252,
+        aura: {
+            color: 0xff5252,
+            alpha: 0.11,
+            pulseScale: 1.04,
+            radius: 34
         }
     }
 };
@@ -43,7 +91,7 @@ export const STAGE_SCENARIOS = {
     church_sanctuary: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.1,
-        enemyHealthPercentPerMinute: 1.5,
+        enemyHealthPercentPerMinute: 2,
         enemyUnlockTimeline: [
              { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 6 },
             { enemyType: 'rat', unlockAtMinute: 3, spawnWeight: 8 },
@@ -56,13 +104,13 @@ export const STAGE_SCENARIOS = {
            
         ],
         elite: {
-            baseChance: 0.01,
-            chancePerMinute: 0.02,
+            baseChance: 0.001,
+            chancePerMinute: 0.015,
             maxChance: 0.5,
             baseStatMultipliers: {
-                maxHealth: 4,
+                maxHealth: 10,
                 damage: 1.5,
-                speed: 1.2,
+                speed: 1.5,
                 scale: 1.2
             },
             modifierCount: {
@@ -71,7 +119,9 @@ export const STAGE_SCENARIOS = {
             },
             auraRadius: 120,
             tint: 0xffd166,
+            modifiedTint: 0x5da9ff,
             trailTint: 0xffef99,
+            modifiedTrailTint: 0xb9d7ff,
             trailSpawnInterval: 18,
             trailLifetime: 90,
             trailScale: 0.4,
@@ -83,7 +133,7 @@ export const STAGE_SCENARIOS = {
                 id: 'church_opening_swarm',
                 startAtMs: 50000,
                 intervalMs: 40000,
-                count: 20,
+                count: 40,
                 clusterRadius: 60
             }
         ]
@@ -204,7 +254,8 @@ function buildBaseRuntimeStats(enemy) {
         maxHealth: baseStats.maxHealth ?? enemy.maxHealth ?? 1,
         damage: baseStats.damage ?? enemy.damage ?? 0,
         speed: baseStats.speed ?? enemy.speed ?? 0,
-        scale: baseStats.scale ?? enemy.scaleSize ?? 1
+        scale: baseStats.scale ?? enemy.scaleSize ?? 1,
+        knockbackResist: baseStats.knockbackResist ?? enemy.knockbackResist ?? 1
     };
 }
 
@@ -224,6 +275,46 @@ function applyEliteBaseStats(stats, scenario) {
     stats.damage *= multipliers.damage ?? 1;
     stats.speed *= multipliers.speed ?? 1;
     stats.scale *= multipliers.scale ?? 1;
+    stats.knockbackResist *= multipliers.knockbackResist ?? 1;
+}
+
+function applyEliteVisuals(enemy, modifierKeys, scenario) {
+    const primaryModifierKey = modifierKeys[0] ?? null;
+    const visual = primaryModifierKey ? ELITE_MODIFIER_VISUALS[primaryModifierKey] ?? null : null;
+    const defaultTint = scenario?.elite?.tint ?? 0xffd166;
+    const defaultTrailTint = scenario?.elite?.trailTint ?? defaultTint;
+
+    enemy.eliteTint = visual?.tint ?? defaultTint;
+    enemy.setTint(enemy.eliteTint);
+
+    enemy.disableMotionTrail?.();
+    enemy.disableAuraEffect?.();
+
+    if (visual?.trail) {
+        enemy.enableMotionTrail?.({
+            depthOffset: -2,
+            blendMode: 'ADD',
+            sizeFactor: 0.8,
+            ...visual.trail
+        });
+    }
+
+    if (visual?.aura) {
+        enemy.enableAuraEffect?.(visual.aura);
+    }
+
+    if (!visual?.trail && !visual?.aura && !primaryModifierKey) {
+        enemy.enableMotionTrail?.({
+            tint: defaultTrailTint,
+            spawnInterval: scenario?.elite?.trailSpawnInterval ?? 18,
+            lifetime: scenario?.elite?.trailLifetime ?? 90,
+            scale: scenario?.elite?.trailScale ?? 0.4,
+            minAlpha: scenario?.elite?.trailMinAlpha ?? 0.2,
+            depthOffset: -2,
+            blendMode: 'ADD',
+            sizeFactor: 0.8
+        });
+    }
 }
 
 export function applyEliteModifiers(enemy, modifierKeys, scenario) {
@@ -234,18 +325,7 @@ export function applyEliteModifiers(enemy, modifierKeys, scenario) {
         modifierKeys: [...modifierKeys],
         auraRadius: scenario?.elite?.auraRadius ?? 120
     };
-    enemy.eliteTint = scenario?.elite?.tint ?? 0xffd166;
-    enemy.setTint(enemy.eliteTint);
-    enemy.enableMotionTrail?.({
-        tint: scenario?.elite?.trailTint ?? enemy.eliteTint,
-        spawnInterval: scenario?.elite?.trailSpawnInterval ?? 18,
-        lifetime: scenario?.elite?.trailLifetime ?? 90,
-        scale: scenario?.elite?.trailScale ?? 0.4,
-        minAlpha: scenario?.elite?.trailMinAlpha ?? 0.2,
-        depthOffset: -2,
-        blendMode: 'ADD',
-        sizeFactor: 0.8
-    });
+    applyEliteVisuals(enemy, modifierKeys, scenario);
     const nextStats = buildBaseRuntimeStats(enemy);
     applyEliteBaseStats(nextStats, scenario);
     applySelfModifiers(nextStats, modifierKeys);

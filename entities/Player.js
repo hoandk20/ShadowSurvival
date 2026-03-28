@@ -50,6 +50,29 @@ export default class Player extends BaseEntity {
         this.lastDamageTime = -Infinity;
         this.damageCooldown = 300;
         this.damageMultiplier = 1;
+        this.bonusMaxHealthFlat = 0;
+        this.bonusMaxHealthPercent = 0;
+        this.bonusArmor = 0;
+        this.bonusSpeedFlat = 0;
+        this.bonusSpeedPercent = 0;
+        this.globalCritChanceBonus = 0;
+        this.xpGainMultiplier = 1;
+        this.lootMagnetRadiusMultiplier = 1;
+        this.healthRegenPerSecond = 0;
+        this.regenAccumulator = 0;
+        this.temporaryShield = 0;
+        this.shieldGainOnLevelUp = 0;
+        this.shieldRegenAmount = 0;
+        this.shieldRegenIntervalMs = 30000;
+        this.shieldRegenTimer = 0;
+        this.globalProjectileSpeedMultiplier = 1;
+        this.skillDamageBonusPercent = {};
+        this.skillDamageFlatBonus = {};
+        this.skillCooldownOffsets = {};
+        this.skillAreaMultipliers = {};
+        this.skillProjectileSpeedMultipliers = {};
+        this.skillStunDurationMultipliers = {};
+        this.skillKnockbackCountBonuses = {};
 
         this.readyAnimated = false;
 
@@ -327,9 +350,34 @@ export default class Player extends BaseEntity {
         this.smoothHealthBar(delta);
         this.motionTrailEffect?.update(time, delta);
         this.smoothExpBar(delta);
+        this.updateRegeneration(delta);
+        this.updateShieldRegeneration(delta);
         this.attractLoot(delta);
         super.update(time, delta);
         this.wasMovingLastFrame = isMoving;
+    }
+
+    updateRegeneration(delta) {
+        const regenPerSecond = this.healthRegenPerSecond ?? 0;
+        if (!regenPerSecond || regenPerSecond <= 0 || this.isDead) return;
+        this.regenAccumulator += (regenPerSecond * delta) / 1000;
+        const healAmount = Math.floor(this.regenAccumulator);
+        if (healAmount <= 0) return;
+        this.regenAccumulator -= healAmount;
+        this.heal(healAmount);
+    }
+
+    updateShieldRegeneration(delta) {
+        const shieldRegenAmount = this.shieldRegenAmount ?? 0;
+        const shieldRegenIntervalMs = this.shieldRegenIntervalMs ?? 0;
+        if (!shieldRegenAmount || shieldRegenAmount <= 0 || !shieldRegenIntervalMs || shieldRegenIntervalMs <= 0 || this.isDead) {
+            return;
+        }
+        this.shieldRegenTimer += delta;
+        while (this.shieldRegenTimer >= shieldRegenIntervalMs) {
+            this.shieldRegenTimer -= shieldRegenIntervalMs;
+            this.grantShield(shieldRegenAmount);
+        }
     }
 
     attractLoot(delta) {
@@ -339,7 +387,7 @@ export default class Player extends BaseEntity {
         if (!lootSystem) return;
         const group = lootSystem.itemGroup;
         if (!group || !group.getChildren) return;
-        const radius = LOOT_CONFIG.magnetRadius ?? 0;
+        const radius = (LOOT_CONFIG.magnetRadius ?? 0) * (this.lootMagnetRadiusMultiplier ?? 1);
         const speed = LOOT_CONFIG.magnetSpeed ?? 0;
         const threshold = LOOT_CONFIG.magnetThreshold ?? 0;
         if (radius <= 0 || speed <= 0) return;
@@ -378,9 +426,12 @@ export default class Player extends BaseEntity {
         const enemies = this.scene.enemies.getChildren?.() ?? [];
         const activeEnemies = enemies.filter(enemy => this.isEnemyWithinTargetView(enemy));
         if (!activeEnemies.length) return [];
-        activeEnemies.sort((a, b) => Phaser.Math.Distance.Between(this.x, this.y, a.x, a.y)
+
+        const preferredEnemies = activeEnemies.filter(enemy => !enemy.isHacked);
+        const fallbackEnemies = preferredEnemies.length ? preferredEnemies : activeEnemies;
+        fallbackEnemies.sort((a, b) => Phaser.Math.Distance.Between(this.x, this.y, a.x, a.y)
             - Phaser.Math.Distance.Between(this.x, this.y, b.x, b.y));
-        return activeEnemies.slice(0, Math.max(1, count));
+        return fallbackEnemies.slice(0, Math.max(1, count));
     }
 
     isEnemyWithinTargetView(enemy, margin = TARGET_VIEW_MARGIN) {
@@ -415,7 +466,15 @@ export default class Player extends BaseEntity {
         this.lastDamageTime = now;
         if (this.isDead) return;
         const mitigatedDamage = Math.max(1, Math.round((amount ?? 0) - (this.armor ?? DEFAULT_CHARACTER_ARMOR)));
-        this.health = Phaser.Math.Clamp(this.health - mitigatedDamage, 0, this.maxHealth);
+        let remainingDamage = mitigatedDamage;
+        if (this.temporaryShield > 0) {
+            const absorbedDamage = Math.min(this.temporaryShield, remainingDamage);
+            this.temporaryShield -= absorbedDamage;
+            remainingDamage -= absorbedDamage;
+        }
+        if (remainingDamage > 0) {
+            this.health = Phaser.Math.Clamp(this.health - remainingDamage, 0, this.maxHealth);
+        }
         this.updateHealthBarUI();
         if (this.health <= 0) {
             this.isDead = true;
@@ -436,7 +495,8 @@ export default class Player extends BaseEntity {
 
     addXP(amount) {
         if (typeof amount !== 'number' || amount <= 0) return;
-        this.currentXP += amount;
+        const effectiveAmount = Math.max(1, Math.round(amount * (this.xpGainMultiplier ?? 1)));
+        this.currentXP += effectiveAmount;
         while (this.currentXP >= this.xpToNextLevel) {
             this.currentXP -= this.xpToNextLevel;
             this.level += 1;
@@ -454,6 +514,9 @@ export default class Player extends BaseEntity {
     onLevelUp() {
         const scene = this.scene;
         if (!scene) return;
+        if ((this.shieldGainOnLevelUp ?? 0) > 0) {
+            this.grantShield(this.shieldGainOnLevelUp);
+        }
         playSfx(scene, 'sfx_levelup', { volume: 0.4 });
         const camera = scene.cameras && scene.cameras.main;
         if (camera) {
@@ -514,27 +577,124 @@ export default class Player extends BaseEntity {
     }
 
     applyCardEffect(cardConfig) {
-        if (!cardConfig || !cardConfig.effect) return;
-        const effect = cardConfig.effect;
+        if (!cardConfig) return;
+        const effects = Array.isArray(cardConfig.effects)
+            ? cardConfig.effects
+            : (cardConfig.effect ? [cardConfig.effect] : []);
+        effects.forEach((effect) => this.applyEffect(effect));
+    }
+
+    applyEffect(effect) {
+        if (!effect || typeof effect !== 'object') return;
         switch (effect.type) {
-            case 'maxHealth':
-                this.maxHealth += effect.value;
-                this.health = Math.min(this.health + effect.value, this.maxHealth);
+            case 'maxHealth': {
+                const previousMaxHealth = this.maxHealth;
+                const previousHealth = this.health;
+                this.bonusMaxHealthFlat += effect.value ?? 0;
+                this.updateHealthFromCharacterConfig();
+                const gainedHealth = Math.max(0, this.maxHealth - previousMaxHealth);
+                this.health = Math.min(this.maxHealth, previousHealth + gainedHealth);
+                this.displayedHealth = this.health;
                 break;
+            }
+            case 'maxHealthPercent': {
+                const previousMaxHealth = this.maxHealth;
+                const previousHealth = this.health;
+                this.bonusMaxHealthPercent += effect.value ?? 0;
+                this.updateHealthFromCharacterConfig();
+                const gainedHealth = Math.max(0, this.maxHealth - previousMaxHealth);
+                this.health = Math.min(this.maxHealth, previousHealth + gainedHealth);
+                this.displayedHealth = this.health;
+                break;
+            }
             case 'speed':
-                this.speed += effect.value;
+                this.bonusSpeedFlat += effect.value ?? 0;
+                this.updateSpeedFromConfig();
+                break;
+            case 'speedPercent':
+                this.bonusSpeedPercent += effect.value ?? 0;
+                this.updateSpeedFromConfig();
+                break;
+            case 'armor':
+                this.bonusArmor += effect.value ?? 0;
+                this.updateArmorFromConfig();
                 break;
             case 'heal':
-                this.health = Math.min(this.health + effect.value, this.maxHealth);
+                this.heal(effect.value ?? 0);
                 break;
             case 'skillCooldown':
-                this.skillCooldownOffset += effect.value;
+                this.skillCooldownOffset += effect.value ?? 0;
+                break;
+            case 'skillCooldownFor':
+                this.addSkillCooldownOffset(effect.skillKey, effect.value ?? 0);
                 break;
             case 'damage':
-                this.damageMultiplier = (this.damageMultiplier ?? 1) * (1 + effect.value);
+                this.damageMultiplier = (this.damageMultiplier ?? 1) * (1 + (effect.value ?? 0));
+                break;
+            case 'skillDamagePercent':
+                this.addSkillDamagePercent(effect.skillKey, effect.value ?? 0);
+                break;
+            case 'skillDamageFlat':
+                this.addSkillDamageFlat(effect.skillKey, effect.value ?? 0);
                 break;
             case 'skillObject':
-                this.incrementSkillObjectCount(effect.value);
+                if (effect.skillKey) {
+                    this.incrementSkillObjectCountForSkill(effect.skillKey, effect.value ?? 0);
+                } else {
+                    this.incrementSkillObjectCount(effect.value ?? 0);
+                }
+                break;
+            case 'allSkillObjects':
+                this.incrementAllSkillObjectCounts(effect.value ?? 0);
+                break;
+            case 'skillUnlock':
+                this.unlockSkill(effect.skillKey);
+                break;
+            case 'unlockSkillOrElse':
+                if (!this.hasSkill(effect.skillKey)) {
+                    this.unlockSkill(effect.skillKey);
+                } else {
+                    (effect.elseEffects ?? []).forEach((nestedEffect) => this.applyEffect(nestedEffect));
+                }
+                break;
+            case 'projectileSpeedPercent':
+                this.globalProjectileSpeedMultiplier *= (1 + (effect.value ?? 0));
+                break;
+            case 'skillProjectileSpeedPercent':
+                this.addSkillProjectileSpeedPercent(effect.skillKey, effect.value ?? 0);
+                break;
+            case 'xpGainPercent':
+                this.xpGainMultiplier *= (1 + (effect.value ?? 0));
+                break;
+            case 'healthRegenPerSecond':
+                this.healthRegenPerSecond += effect.value ?? 0;
+                break;
+            case 'lootMagnetRadiusPercent':
+                this.lootMagnetRadiusMultiplier *= (1 + (effect.value ?? 0));
+                break;
+            case 'shieldGrant':
+                this.grantShield(effect.value ?? 0);
+                break;
+            case 'shieldOnLevelUp':
+                this.shieldGainOnLevelUp += effect.value ?? 0;
+                break;
+            case 'shieldRegen':
+                this.shieldRegenAmount += effect.value ?? 0;
+                if (typeof effect.intervalMs === 'number' && effect.intervalMs > 0) {
+                    this.shieldRegenIntervalMs = effect.intervalMs;
+                }
+                break;
+            case 'skillAreaPercent':
+                this.addSkillAreaPercent(effect.skillKey, effect.value ?? 0);
+                break;
+            case 'skillStunDurationPercent':
+                this.addSkillStunDurationPercent(effect.skillKey, effect.value ?? 0);
+                break;
+            case 'skillKnockbackCount':
+                this.addSkillKnockbackCount(effect.skillKey, effect.value ?? 0);
+                break;
+            case 'critChance':
+                this.globalCritChanceBonus += effect.value ?? 0;
                 break;
             default:
         }
@@ -580,6 +740,42 @@ export default class Player extends BaseEntity {
         return newCount !== current;
     }
 
+    incrementSkillObjectCountForSkill(skillKey, increment) {
+        const currentSkill = SKILL_CONFIG[skillKey] || {};
+        if (!currentSkill || currentSkill.multipleObject === false) return false;
+        const current = this.getSkillObjectCount(skillKey);
+        const max = this.getSkillObjectMaxCount(skillKey);
+        if (current >= max) return false;
+        const newCount = Math.min(current + increment, max);
+        this.setSkillObjectCount(skillKey, newCount);
+        return newCount !== current;
+    }
+
+    incrementAllSkillObjectCounts(increment) {
+        let changed = false;
+        Object.keys(SKILL_CONFIG).forEach((skillKey) => {
+            changed = this.incrementSkillObjectCountForSkill(skillKey, increment) || changed;
+        });
+        return changed;
+    }
+
+    hasSkill(skillKey) {
+        return Array.isArray(this.scene?.activeSkillKeys) && this.scene.activeSkillKeys.includes(skillKey);
+    }
+
+    unlockSkill(skillKey) {
+        if (!skillKey || !SKILL_CONFIG[skillKey]) return false;
+        const currentSkills = Array.isArray(this.scene?.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
+        if (currentSkills.includes(skillKey)) return false;
+        currentSkills.push(skillKey);
+        this.scene.activeSkillKeys = currentSkills;
+        this.skillObjectCounts[skillKey] = this.getSkillObjectCount(skillKey);
+        if (this.scene?.skillInputs?.[skillKey]) {
+            this.scene.skillInputs[skillKey].checked = true;
+        }
+        return true;
+    }
+
     getDefaultSkillKey() {
         return this.characterConfig?.defaultSkill ?? 'thunder';
     }
@@ -593,8 +789,76 @@ export default class Player extends BaseEntity {
 
     getSkillCooldown(skillKey) {
         const baseCooldown = SKILL_CONFIG[skillKey]?.cooldown ?? 1000;
-        const adjusted = baseCooldown + this.skillCooldownOffset;
+        const adjusted = baseCooldown + this.skillCooldownOffset + (this.skillCooldownOffsets[skillKey] ?? 0);
         return Math.max(200, adjusted);
+    }
+
+    addSkillDamagePercent(skillKey, value) {
+        if (!skillKey) return;
+        this.skillDamageBonusPercent[skillKey] = (this.skillDamageBonusPercent[skillKey] ?? 1) * (1 + value);
+    }
+
+    addSkillDamageFlat(skillKey, value) {
+        if (!skillKey) return;
+        this.skillDamageFlatBonus[skillKey] = (this.skillDamageFlatBonus[skillKey] ?? 0) + value;
+    }
+
+    addSkillCooldownOffset(skillKey, value) {
+        if (!skillKey) return;
+        this.skillCooldownOffsets[skillKey] = (this.skillCooldownOffsets[skillKey] ?? 0) + value;
+    }
+
+    addSkillAreaPercent(skillKey, value) {
+        if (!skillKey) return;
+        this.skillAreaMultipliers[skillKey] = (this.skillAreaMultipliers[skillKey] ?? 1) * (1 + value);
+    }
+
+    addSkillProjectileSpeedPercent(skillKey, value) {
+        if (!skillKey) return;
+        this.skillProjectileSpeedMultipliers[skillKey] = (this.skillProjectileSpeedMultipliers[skillKey] ?? 1) * (1 + value);
+    }
+
+    addSkillStunDurationPercent(skillKey, value) {
+        if (!skillKey) return;
+        this.skillStunDurationMultipliers[skillKey] = (this.skillStunDurationMultipliers[skillKey] ?? 1) * (1 + value);
+    }
+
+    addSkillKnockbackCount(skillKey, value) {
+        if (!skillKey) return;
+        this.skillKnockbackCountBonuses[skillKey] = (this.skillKnockbackCountBonuses[skillKey] ?? 0) + value;
+    }
+
+    grantShield(value) {
+        if (!value || value <= 0) return;
+        this.temporaryShield += value;
+    }
+
+    getSkillDamageMultiplier(skillKey) {
+        return this.skillDamageBonusPercent[skillKey] ?? 1;
+    }
+
+    getSkillDamageFlatBonus(skillKey) {
+        return this.skillDamageFlatBonus[skillKey] ?? 0;
+    }
+
+    getSkillProjectileSpeedMultiplier(skillKey) {
+        return (this.skillProjectileSpeedMultipliers[skillKey] ?? 1) * (this.globalProjectileSpeedMultiplier ?? 1);
+    }
+
+    getSkillAreaMultiplier(skillKey) {
+        return this.skillAreaMultipliers[skillKey] ?? 1;
+    }
+
+    getSkillStunDurationMultiplier(skillKey) {
+        return this.skillStunDurationMultipliers[skillKey] ?? 1;
+    }
+
+    getSkillKnockbackCountBonus(skillKey) {
+        return this.skillKnockbackCountBonuses[skillKey] ?? 0;
+    }
+
+    getSkillCritChanceBonus() {
+        return this.globalCritChanceBonus ?? 0;
     }
 
     resolveAttackAnimationDuration() {
@@ -657,7 +921,11 @@ export default class Player extends BaseEntity {
     }
 
     updateHealthFromCharacterConfig() {
-        const nextMaxHealth = this.characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
+        const baseMaxHealth = this.characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
+        const nextMaxHealth = Math.max(
+            1,
+            Math.round((baseMaxHealth * (1 + (this.bonusMaxHealthPercent ?? 0))) + (this.bonusMaxHealthFlat ?? 0))
+        );
         const previousMaxHealth = Math.max(this.maxHealth ?? nextMaxHealth, 1);
         const healthRatio = Phaser.Math.Clamp((this.health ?? nextMaxHealth) / previousMaxHealth, 0, 1);
         this.maxHealth = nextMaxHealth;
@@ -666,11 +934,12 @@ export default class Player extends BaseEntity {
     }
 
     updateSpeedFromConfig() {
-        this.speed = this.characterConfig?.speed ?? 200;
+        const baseSpeed = this.characterConfig?.speed ?? 200;
+        this.speed = Math.max(1, Math.round((baseSpeed * (1 + (this.bonusSpeedPercent ?? 0))) + (this.bonusSpeedFlat ?? 0)));
     }
 
     updateArmorFromConfig() {
-        this.armor = this.characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR;
+        this.armor = (this.characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR) + (this.bonusArmor ?? 0);
     }
 
     createHealthBarUI() {

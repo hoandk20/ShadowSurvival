@@ -26,7 +26,14 @@ export default class HudScene extends Phaser.Scene {
         this.inventoryPanelBg = null;
         this.inventorySlots = [];
         this.inventoryColumns = 2;
-        this.inventoryRows = 6;
+        this.inventoryRows = 5;
+        this.inventoryExpanded = false;
+        this.inventoryPreviewOverlay = null;
+        this.inventoryPreviewContainer = null;
+        this.inventoryPreviewPanel = null;
+        this.inventoryPreviewIcon = null;
+        this.inventoryPreviewTitle = null;
+        this.inventoryPreviewLevel = null;
         this.pauseButton = null;
         this.pauseButtonBg = null;
         this.pauseButtonHitArea = null;
@@ -86,6 +93,7 @@ export default class HudScene extends Phaser.Scene {
 
         this.createPauseButton();
         this.createInventoryPanel();
+        this.createInventoryPreview();
         this.createTouchJoystick();
 
         this.layoutHud();
@@ -107,6 +115,7 @@ export default class HudScene extends Phaser.Scene {
         const rawHealth = typeof player.displayedHealth === 'number' ? player.displayedHealth : player.health;
         const maxHealth = Math.max(1, player.maxHealth ?? 1);
         const hpProgress = Phaser.Math.Clamp(rawHealth / maxHealth, 0, 1);
+        const shield = Math.max(0, player.temporaryShield ?? 0);
         const level = player.level ?? 1;
         const kills = this.mainScene?.killCount ?? 0;
         const elapsedMs = Math.max(0, (this.mainScene?.time?.now ?? 0) - (this.mainScene?.runStartTime ?? 0));
@@ -120,8 +129,9 @@ export default class HudScene extends Phaser.Scene {
         if (this.runTimerText) {
             this.runTimerText.setText(`${minutes}:${seconds}`);
         }
+        this.refreshInventory(this.mainScene?.inventoryItems ?? []);
         this.updateTouchJoystick();
-        this.drawHpBar(hpProgress, rawHealth, maxHealth);
+        this.drawHpBar(hpProgress, rawHealth, maxHealth, shield);
         this.drawExpBar(progress, level, rawXP, xpToNextLevel);
     }
 
@@ -182,15 +192,59 @@ export default class HudScene extends Phaser.Scene {
         for (let i = 0; i < totalSlots; i++) {
             const slotContainer = this.add.container(0, 0);
             const slotGraphics = this.add.graphics();
+            const slotIcon = this.add.image(0, 0, '__missing_texture__')
+                .setVisible(false)
+                .setOrigin(0.5);
+            const levelText = this.add.text(0, 0, '', {
+                fontSize: '8px',
+                fontFamily: 'monospace',
+                fontStyle: 'bold',
+                color: '#fff4cc',
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(1, 1).setVisible(false);
+            const slotHitArea = this.add.rectangle(0, 0, 1, 1, 0xffffff, 0.001)
+                .setOrigin(0.5)
+                .setInteractive({ useHandCursor: true });
+            slotHitArea.on('pointerdown', () => {
+                const item = slotContainer.getData('inventoryItem');
+                if (item && !this.inventoryExpanded) {
+                    this.toggleInventoryExpanded();
+                }
+            });
             slotContainer.add(slotGraphics);
+            slotContainer.add(slotIcon);
+            slotContainer.add(levelText);
+            slotContainer.add(slotHitArea);
             this.inventorySlots.push({
                 container: slotContainer,
-                graphics: slotGraphics
+                graphics: slotGraphics,
+                icon: slotIcon,
+                levelText,
+                hitArea: slotHitArea
             });
             this.inventoryPanel.add(slotContainer);
         }
 
         this.layoutInventoryPanel();
+    }
+
+    createInventoryPreview() {
+        this.inventoryPreviewOverlay?.destroy();
+        this.inventoryPreviewContainer?.destroy(true);
+
+        this.inventoryPreviewOverlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.55)
+            .setOrigin(0)
+            .setScrollFactor(0)
+            .setDepth(1000)
+            .setInteractive()
+            .setVisible(false);
+        this.inventoryPreviewOverlay.on('pointerdown', () => this.hideInventoryPreview());
+        this.inventoryPreviewContainer = null;
+        this.inventoryPreviewPanel = null;
+        this.inventoryPreviewIcon = null;
+        this.inventoryPreviewTitle = null;
+        this.inventoryPreviewLevel = null;
     }
 
     createPauseButton() {
@@ -309,6 +363,7 @@ export default class HudScene extends Phaser.Scene {
 
         if (containsPoint(this.pauseButtonHitArea)) return true;
         if (containsPoint(this.inventoryPanel)) return true;
+        if (this.inventoryExpanded && this.inventoryPreviewOverlay?.visible) return true;
         if (containsPoint(this.killCountText)) return true;
         if (containsPoint(this.runTimerText)) return true;
 
@@ -345,22 +400,32 @@ export default class HudScene extends Phaser.Scene {
     layoutInventoryPanel() {
         if (!this.inventoryPanel || !this.hudLayout) return;
         const width = this.scale.width;
-        const height = this.scale.height;
         const isCompact = width < 640;
-        const slotSize = isCompact ? 11 : 13;
-        const gap = isCompact ? 2 : 3;
-        const paddingX = isCompact ? 4 : 5;
-        const paddingY = isCompact ? 4 : 5;
-        const paddingBottom = 5;
+        const slotSize = this.inventoryExpanded
+            ? (isCompact ? 36 : 42)
+            : (isCompact ? 11 : 13);
+        const gap = this.inventoryExpanded
+            ? (isCompact ? 8 : 10)
+            : (isCompact ? 2 : 3);
+        const paddingX = this.inventoryExpanded
+            ? (isCompact ? 12 : 16)
+            : (isCompact ? 4 : 5);
+        const paddingY = this.inventoryExpanded
+            ? (isCompact ? 12 : 16)
+            : (isCompact ? 4 : 5);
+        const paddingBottom = this.inventoryExpanded ? 12 : 5;
         const gridWidth = this.inventoryColumns * slotSize + (this.inventoryColumns - 1) * gap;
         const gridHeight = this.inventoryRows * slotSize + (this.inventoryRows - 1) * gap;
         const panelWidth = gridWidth + paddingX * 2;
         const panelHeight = gridHeight + paddingY * 2 + paddingBottom;
-        const panelX = panelWidth / 2 + 8;
-        const { hpBarY } = this.hudLayout;
-        const panelY = Math.max(panelHeight / 2 + 8, hpBarY - panelHeight / 2 - 10);
+        const panelX = this.inventoryExpanded ? width / 2 : panelWidth / 2 + 8;
+        const { hpBarY, height } = this.hudLayout;
+        const panelY = this.inventoryExpanded
+            ? height / 2
+            : Math.max(panelHeight / 2 + 8, hpBarY - panelHeight / 2 - 10);
 
         this.inventoryPanel.setPosition(panelX, panelY);
+        this.inventoryPanel.setDepth(this.inventoryExpanded ? 1301 : 1001);
 
         this.inventoryPanelBg.clear();
         this.inventoryPanelBg.fillStyle(0x1c1714, 0.92);
@@ -380,10 +445,72 @@ export default class HudScene extends Phaser.Scene {
                 startY + row * (slotSize + gap)
             );
             this.drawInventorySlot(slot.graphics, slotSize);
+            slot.icon.setDisplaySize(slotSize - 4, slotSize - 4);
+            slot.icon.setPosition(0, 0);
+            slot.levelText.setPosition(slotSize / 2 - 1, slotSize / 2 - 1);
+            slot.levelText.setFontSize(this.inventoryExpanded ? (isCompact ? '16px' : '18px') : '8px');
+            slot.hitArea.setSize(slotSize, slotSize);
+            slot.hitArea.setPosition(0, 0);
+        });
+
+        if (this.inventoryPreviewOverlay) {
+            this.inventoryPreviewOverlay.setSize(width, height);
+            this.inventoryPreviewOverlay.setVisible(this.inventoryExpanded);
+        }
+    }
+
+    refreshInventory(items = []) {
+        if (!Array.isArray(this.inventorySlots)) return;
+        this.inventorySlots.forEach((slot, index) => {
+            const item = items[index];
+            if (!item) {
+                slot.icon.setVisible(false);
+                slot.levelText.setVisible(false);
+                slot.container.setData('inventoryItem', null);
+                return;
+            }
+
+            const textureKey = this.textures.exists(`card_icon_${item.cardKey}`)
+                ? `card_icon_${item.cardKey}`
+                : '__missing_texture__';
+            slot.icon.setTexture(textureKey);
+            slot.icon.setTint(0xffffff);
+            slot.icon.setVisible(true);
+            slot.levelText.setText(`${item.level}`);
+            slot.levelText.setVisible(true);
+            slot.container.setData('inventoryItem', item);
         });
     }
 
-    drawHpBar(progress, rawHealth, maxHealth) {
+    showInventoryPreview() {
+        this.inventoryExpanded = true;
+        this.layoutInventoryPanel();
+        this.tweens.killTweensOf(this.inventoryPanel);
+        this.inventoryPanel.setScale(0.92);
+        this.tweens.add({
+            targets: this.inventoryPanel,
+            scale: 1,
+            duration: 140,
+            ease: 'Back.Out'
+        });
+    }
+
+    hideInventoryPreview() {
+        if (!this.inventoryExpanded) return;
+        this.inventoryExpanded = false;
+        this.inventoryPanel.setScale(1);
+        this.layoutInventoryPanel();
+    }
+
+    toggleInventoryExpanded() {
+        if (this.inventoryExpanded) {
+            this.hideInventoryPreview();
+            return;
+        }
+        this.showInventoryPreview();
+    }
+
+    drawHpBar(progress, rawHealth, maxHealth, shield = 0) {
         if (!this.hpBarBg || !this.hpBarFill || !this.hudLayout) return;
         const { barX, hpBarY, barWidth, barHeight } = this.hudLayout;
 
@@ -394,16 +521,37 @@ export default class HudScene extends Phaser.Scene {
         this.hpBarBg.strokeRect(barX - 2, hpBarY - 2, barWidth + 4, barHeight + 4);
 
         this.hpBarFill.clear();
-        if (progress > 0) {
-            const fillWidth = Math.max(0, Math.floor(barWidth * progress));
+        const fillWidth = Math.max(0, Math.floor(barWidth * progress));
+        if (fillWidth > 0) {
             this.hpBarFill.fillStyle(0xff5b5b, 1);
             this.hpBarFill.fillRect(barX, hpBarY, fillWidth, barHeight);
             this.hpBarFill.lineStyle(1, 0xffd6d6, 0.35);
             this.hpBarFill.strokeRect(barX, hpBarY, fillWidth, barHeight);
         }
 
+        if (shield > 0) {
+            const shieldProgress = Math.max(0, shield / maxHealth);
+            const shieldWidth = Math.max(0, Math.floor(barWidth * Math.min(1, shieldProgress)));
+            const remainingWidth = Math.max(0, barWidth - fillWidth);
+            if (remainingWidth > 0) {
+                const overflowShieldWidth = Math.min(remainingWidth, shieldWidth);
+                this.hpBarFill.fillStyle(0xa8afb8, 0.95);
+                this.hpBarFill.fillRect(barX + fillWidth, hpBarY, overflowShieldWidth, barHeight);
+                this.hpBarFill.lineStyle(1, 0xe3e7eb, 0.35);
+                this.hpBarFill.strokeRect(barX + fillWidth, hpBarY, overflowShieldWidth, barHeight);
+            } else if (shieldWidth > 0) {
+                const shieldOverlayHeight = Math.max(2, Math.floor(barHeight * 0.45));
+                this.hpBarFill.fillStyle(0xa8afb8, 0.95);
+                this.hpBarFill.fillRect(barX, hpBarY, shieldWidth, shieldOverlayHeight);
+                this.hpBarFill.lineStyle(1, 0xe3e7eb, 0.35);
+                this.hpBarFill.strokeRect(barX, hpBarY, shieldWidth, shieldOverlayHeight);
+            }
+        }
+
         if (this.hpText) {
-            this.hpText.setText(`HP ${Math.floor(rawHealth)} / ${maxHealth}`);
+            const roundedShield = Math.floor(shield);
+            const shieldText = roundedShield > 0 ? ` + ${roundedShield}` : '';
+            this.hpText.setText(`HP ${Math.floor(rawHealth)} / ${maxHealth}${shieldText}`);
         }
     }
 
@@ -600,6 +748,7 @@ export default class HudScene extends Phaser.Scene {
     shutdown() {
         this.scale.off('resize', this.layoutHud, this);
         this.hideLevelUpSelection();
+        this.hideInventoryPreview();
         this.hpBarFill?.destroy();
         this.hpBarFill = null;
         this.hpBarBg?.destroy();
@@ -631,6 +780,14 @@ export default class HudScene extends Phaser.Scene {
         this.inventoryPanel = null;
         this.inventoryPanelBg = null;
         this.inventorySlots = [];
+        this.inventoryPreviewOverlay?.destroy();
+        this.inventoryPreviewOverlay = null;
+        this.inventoryPreviewContainer?.destroy(true);
+        this.inventoryPreviewContainer = null;
+        this.inventoryPreviewPanel = null;
+        this.inventoryPreviewIcon = null;
+        this.inventoryPreviewTitle = null;
+        this.inventoryPreviewLevel = null;
         this.mainScene = null;
     }
 }

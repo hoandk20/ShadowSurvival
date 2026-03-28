@@ -141,12 +141,15 @@ export default class MainScene extends Phaser.Scene {
         this.upgradeContainer = null;
         this.levelUpQueue = 0;
         this.cardSelectionCounts = {};
+        this.inventoryItems = [];
+        this.inventoryItemLevels = {};
         this.levelUpCards = [];
         this.cardFocusIndex = 0;
         this.keyboardNavigationActive = false;
         this.input.keyboard.on('keydown', this.handleCardNavigation, this);
         this.runStartTime = this.time.now;
         this.registry.set('hasStartedGame', true);
+        this.scene.get('HudScene')?.refreshInventory?.(this.inventoryItems);
     }
 
     update(time, delta) {
@@ -245,7 +248,7 @@ export default class MainScene extends Phaser.Scene {
         if (enemy && enemy.takeDamage) {
             const force = skill.config?.knockback ?? 0;
             const distance = skill.config?.knockbackDistance ?? 0;
-            const limit = skill.config?.numberKnockback ?? Infinity;
+            const limit = skill.numberKnockback ?? skill.config?.numberKnockback ?? Infinity;
             const currentHits = skill.knockbackCount ?? 0;
             if (currentHits >= limit) {
                 return;
@@ -257,7 +260,7 @@ export default class MainScene extends Phaser.Scene {
             const roll = skill.rollCriticalDamage();
             skill.damage = roll.value;
             enemy.takeDamage(skill.damage, force, dir, skill, { damageSource: skill }, skill.config);
-            const stunDuration = skill.config?.stunDuration ?? 0;
+            const stunDuration = skill.stunDuration ?? skill.config?.stunDuration ?? 0;
             if (stunDuration > 0) {
                 const rawColor = skill.config?.stunColor ?? 0x000000;
                 const tintColor = typeof rawColor === 'string'
@@ -280,6 +283,7 @@ export default class MainScene extends Phaser.Scene {
 
     onPlayerHitEnemy(player, enemy) {
         if (!player || !enemy) return;
+        if (enemy.isHacked) return;
         if (player.takeDamage && !player.isDead) {
             player.takeDamage(enemy.damage ?? 10);
             const effectConfig = {
@@ -1008,6 +1012,8 @@ export default class MainScene extends Phaser.Scene {
         if (cardConfig?.key) {
             this.cardSelectionCounts[cardConfig.key] = (this.cardSelectionCounts[cardConfig.key] ?? 0) + 1;
         }
+        this.addCardToInventory(cardConfig);
+        hudScene?.refreshInventory?.(this.inventoryItems);
         if (this.levelUpQueue > 0) {
             this.time.delayedCall(250, () => {
                 this.tryPresentLevelUpCards();
@@ -1081,14 +1087,13 @@ export default class MainScene extends Phaser.Scene {
     getWeightedCards(count) {
         let pool = this.getAvailableCardPool();
         if (!pool.length) {
-            this.cardSelectionCounts = {};
-            pool = this.getAvailableCardPool();
+            return [];
         }
         const picks = [];
         const desired = Math.min(count, pool.length);
         const groupBuckets = new Map();
         pool.forEach(card => {
-            const groupKey = card.group ?? card.key;
+            const groupKey = card.inventoryKey ?? card.group ?? card.key;
             if (!groupBuckets.has(groupKey)) {
                 groupBuckets.set(groupKey, []);
             }
@@ -1124,7 +1129,7 @@ export default class MainScene extends Phaser.Scene {
             const groupKey = selectedGroup.groupKey;
             for (let i = pool.length - 1; i >= 0; i--) {
                 const candidate = pool[i];
-                const candidateGroup = candidate.group ?? candidate.key;
+                const candidateGroup = candidate.inventoryKey ?? candidate.group ?? candidate.key;
                 if (candidateGroup === groupKey) {
                     pool.splice(i, 1);
                 }
@@ -1137,28 +1142,109 @@ export default class MainScene extends Phaser.Scene {
     }
 
     getAvailableCardPool() {
-        const activeSkillCfg = SKILL_CONFIG[this.activeSkillKey] || {};
-        const allowMultipleObject = activeSkillCfg.multipleObject !== false;
-        const maxObjects = this.player?.getSkillObjectMaxCount(this.activeSkillKey) ?? 1;
-        const currentObjects = this.player?.getSkillObjectCount(this.activeSkillKey) ?? 1;
         return CARD_CONFIG
             .filter(card => {
                 const selected = this.cardSelectionCounts[card.key] ?? 0;
                 const limit = card.stackLimit ?? Infinity;
                 return selected < limit;
             })
+            .filter(card => this.isCardAllowedByInventory(card))
             .filter(card => {
-                if (card.effect?.type === 'skillObject') {
-                    if (!allowMultipleObject) {
+                const requirements = card.requirements ?? {};
+                const skillUnlocked = requirements.skillUnlocked;
+                if (skillUnlocked && !this.player?.hasSkill(skillUnlocked)) {
+                    return false;
+                }
+
+                const skillLocked = requirements.skillLocked;
+                if (skillLocked && this.player?.hasSkill(skillLocked)) {
+                    return false;
+                }
+
+                const multipleObjectSkill = requirements.supportsMultipleObject;
+                if (multipleObjectSkill) {
+                    const skillConfig = SKILL_CONFIG[multipleObjectSkill] ?? {};
+                    if (skillConfig.multipleObject === false) {
                         return false;
                     }
+                    if (!this.player?.hasSkill(multipleObjectSkill)) {
+                        return false;
+                    }
+                    const maxObjects = this.player?.getSkillObjectMaxCount(multipleObjectSkill) ?? 1;
+                    const currentObjects = this.player?.getSkillObjectCount(multipleObjectSkill) ?? 1;
                     if (currentObjects >= maxObjects) {
                         return false;
                     }
                 }
+
+                const areaSkill = requirements.supportsArea;
+                if (areaSkill) {
+                    const skillConfig = SKILL_CONFIG[areaSkill] ?? {};
+                    const hasAreaUpgradeCategory = skillConfig.category === 'orbit' || skillConfig.category === 'aura';
+                    if (!this.player?.hasSkill(areaSkill)) {
+                        return false;
+                    }
+                    if (!hasAreaUpgradeCategory) {
+                        return false;
+                    }
+                }
+
                 return true;
             })
             .map(card => ({ ...card }));
+    }
+
+    getInventoryKeyFromCard(cardConfig) {
+        return cardConfig?.inventoryKey ?? cardConfig?.key ?? null;
+    }
+
+    getInventoryMaxLevel(cardConfig) {
+        return Math.max(1, cardConfig?.inventoryMaxLevel ?? 8);
+    }
+
+    isCardAllowedByInventory(cardConfig) {
+        const inventoryKey = this.getInventoryKeyFromCard(cardConfig);
+        if (!inventoryKey) return false;
+        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
+        if (currentLevel >= this.getInventoryMaxLevel(cardConfig)) {
+            return false;
+        }
+        const inventoryIsFull = (this.inventoryItems?.length ?? 0) >= 10;
+        if (inventoryIsFull && currentLevel <= 0) {
+            return false;
+        }
+        return true;
+    }
+
+    addCardToInventory(cardConfig) {
+        const inventoryKey = this.getInventoryKeyFromCard(cardConfig);
+        if (!inventoryKey) return;
+
+        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
+        const maxLevel = this.getInventoryMaxLevel(cardConfig);
+        if (currentLevel >= maxLevel) {
+            return;
+        }
+
+        this.inventoryItemLevels[inventoryKey] = currentLevel + 1;
+        const existingEntry = this.inventoryItems.find(item => item.inventoryKey === inventoryKey);
+        if (existingEntry) {
+            existingEntry.level = this.inventoryItemLevels[inventoryKey];
+            existingEntry.cardKey = cardConfig.key;
+            existingEntry.name = cardConfig.inventoryName ?? cardConfig.name;
+            return;
+        }
+
+        if (this.inventoryItems.length >= 10) {
+            return;
+        }
+
+        this.inventoryItems.push({
+            inventoryKey,
+            cardKey: cardConfig.key,
+            name: cardConfig.inventoryName ?? cardConfig.name,
+            level: this.inventoryItemLevels[inventoryKey]
+        });
     }
 
     initializeEnemySpawnStatus() {

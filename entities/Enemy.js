@@ -1,10 +1,12 @@
 import BaseEntity from './BaseEntity.js';
 import { ENEMIES } from '../config/enemies.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
+import EnemyAuraEffect from './effects/EnemyAuraEffect.js';
 
-const HITBOX_DISTANCE = 100;
+const HITBOX_DISTANCE = 30;
 const REPELL_FORCE = 220;
 const ENEMY_SIZE_MULTIPLIER = 2;
+const DEFAULT_HACK_TINT = 0x59ff8b;
 
 export default class Enemy extends BaseEntity {
     constructor(scene, x, y, type) {
@@ -49,11 +51,19 @@ export default class Enemy extends BaseEntity {
         this.lastSafePosition = new Phaser.Math.Vector2(x, y);
         this.lastPosition = new Phaser.Math.Vector2(x, y);
         this.motionTrailEffect = null;
+        this.auraEffect = null;
         this.scaleSize = 1;
         this.baseStats = null;
         this.currentStats = null;
         this.stageEliteState = null;
         this.pendingDeathSource = null;
+        this.isHacked = false;
+        this.hackTimer = 0;
+        this.hackTint = DEFAULT_HACK_TINT;
+        this.pendingHackDeath = false;
+        this.hackSource = null;
+        this.lastHackAttackTime = -Infinity;
+        this.hackedTarget = null;
 
         this.setVisible(false);
         this.setScale(1);
@@ -80,6 +90,18 @@ export default class Enemy extends BaseEntity {
     update(time, delta, player, allEnemies) {
         if (!this.scene) return;
         this.motionTrailEffect?.update(time, delta);
+        this.auraEffect?.update(time, delta);
+        if (this.hackTimer > 0) {
+            this.hackTimer -= delta;
+            if (this.hackTimer <= 0) {
+                const shouldDieAfterHack = this.pendingHackDeath;
+                this.endHackMode();
+                if (shouldDieAfterHack) {
+                    this.handleDeath(this.hackSource);
+                    return;
+                }
+            }
+        }
         if (this.ghostTimer > 0) {
             this.ghostTimer -= delta;
             if (this.ghostTimer <= 0) {
@@ -99,6 +121,19 @@ export default class Enemy extends BaseEntity {
                     return;
                 }
             }
+        } else if (this.isHacked) {
+            const targetEnemy = this.getHackTarget(allEnemies);
+            this.hackedTarget = targetEnemy;
+            if (targetEnemy) {
+                const angle = Phaser.Math.Angle.Between(this.x, this.y, targetEnemy.x, targetEnemy.y);
+                const vx = Math.cos(angle) * this.speed;
+                const vy = Math.sin(angle) * this.speed;
+                this.body.setVelocity(vx, vy);
+                this.setFlipX(vx < 0);
+                this.tryHackAttack(targetEnemy, time);
+            } else {
+                this.body.setVelocity(0, 0);
+            }
         } else if (player) {
             const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
             const vx = Math.cos(angle) * this.speed;
@@ -117,6 +152,7 @@ export default class Enemy extends BaseEntity {
         const actualDamage = Math.min(amount, this.health);
         this.health = Phaser.Math.Clamp(this.health - actualDamage, 0, this.maxHealth);
         this.pendingDeathSource = null;
+        const canBeHacked = Boolean(skillConfig?.appliesHack && !this.isElite);
         if (!this.isStunned) {
             this.flashDamageTint();
         }
@@ -127,7 +163,20 @@ export default class Enemy extends BaseEntity {
             this.knockbackDragFactor = skillConfig?.knockbackDragFactor ?? 0.92;
             this.body.velocity.copy(this.knockbackVelocity);
         }
+        if (canBeHacked) {
+            const rawHackTint = skillConfig?.hackTint ?? DEFAULT_HACK_TINT;
+            const hackTint = typeof rawHackTint === 'string'
+                ? Phaser.Display.Color.HexStringToColor(rawHackTint).color
+                : rawHackTint;
+            this.applyHack(skillConfig?.hackDuration ?? 20000, hackTint, {
+                source,
+                lethalTrigger: this.health <= 0
+            });
+        }
         if (this.health <= 0) {
+            if (this.isHacked && this.pendingHackDeath) {
+                return;
+            }
             const shouldDelayDeathForKnockback = Boolean(
                 skillConfig?.knockbackTakeDamage
                 && force > 0
@@ -143,6 +192,67 @@ export default class Enemy extends BaseEntity {
         if (skillConfig?.knockbackTakeDamage && !options?.fromChainDamage && direction) {
             this.scene?.applyKnockbackDamage?.(this, skillConfig, direction);
         }
+    }
+
+    applyHack(duration = 20000, tint = DEFAULT_HACK_TINT, options = {}) {
+        if (this.isDead || this.isElite) return false;
+        this.isHacked = true;
+        this.hackTimer = Math.max(this.hackTimer, duration);
+        this.hackTint = tint ?? DEFAULT_HACK_TINT;
+        this.hackSource = options?.source ?? this.hackSource;
+        if (options?.lethalTrigger) {
+            this.pendingHackDeath = true;
+            this.health = Math.max(1, this.health);
+        }
+        this.restorePersistentTint();
+        return true;
+    }
+
+    endHackMode() {
+        this.isHacked = false;
+        this.hackTimer = 0;
+        this.hackedTarget = null;
+        this.pendingHackDeath = false;
+        this.restorePersistentTint();
+    }
+
+    getHackTarget(allEnemies) {
+        if (!Array.isArray(allEnemies)) return null;
+        const candidates = allEnemies.filter((enemy) => (
+            enemy
+            && enemy !== this
+            && enemy.active
+            && !enemy.isDead
+            && !enemy.isHacked
+        ));
+        const pool = candidates.length ? candidates : allEnemies.filter((enemy) => (
+            enemy
+            && enemy !== this
+            && enemy.active
+            && !enemy.isDead
+        ));
+        let nearest = null;
+        let minDist = Number.POSITIVE_INFINITY;
+        for (const enemy of pool) {
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = enemy;
+            }
+        }
+        return nearest;
+    }
+
+    tryHackAttack(target, time) {
+        if (!target || !target.active || target.isDead) return;
+        if ((time - this.lastHackAttackTime) < this.attackCooldown) return;
+        const ownRadius = Math.max(this.hitboxSize?.width ?? 0, this.hitboxSize?.height ?? 0) * 0.5;
+        const targetRadius = Math.max(target.hitboxSize?.width ?? 0, target.hitboxSize?.height ?? 0) * 0.5;
+        const attackDistance = Math.max(this.attackRange ?? 0, ownRadius + targetRadius);
+        const distance = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
+        if (distance > attackDistance) return;
+        this.lastHackAttackTime = time;
+        target.takeDamage(this.damage ?? 10, 0, null, this, { fromHack: true }, null);
     }
 
     enforceHitboxSize() {
@@ -161,6 +271,8 @@ export default class Enemy extends BaseEntity {
         this.setState('dead');
         this.motionTrailEffect?.destroy?.();
         this.motionTrailEffect = null;
+        this.auraEffect?.destroy?.();
+        this.auraEffect = null;
         this.scene?.mapManager?.removeObjectCollisions?.(this);
         if (this.body) {
             this.body.stop();
@@ -267,7 +379,8 @@ export default class Enemy extends BaseEntity {
             maxHealth: this.maxHealth,
             damage: this.damage,
             speed: this.speed,
-            scale: this.scaleSize ?? 1
+            scale: this.scaleSize ?? 1,
+            knockbackResist: this.knockbackResist ?? 1
         };
         this.currentStats = { ...this.baseStats };
     }
@@ -282,7 +395,8 @@ export default class Enemy extends BaseEntity {
             maxHealth: Math.max(1, Math.round(nextStats.maxHealth ?? this.maxHealth ?? 1)),
             damage: nextStats.damage ?? this.damage ?? 0,
             speed: nextStats.speed ?? this.speed ?? 0,
-            scale: nextStats.scale ?? this.scaleSize ?? 1
+            scale: nextStats.scale ?? this.scaleSize ?? 1,
+            knockbackResist: nextStats.knockbackResist ?? this.knockbackResist ?? 1
         };
 
         this.currentStats = { ...resolvedStats };
@@ -293,6 +407,7 @@ export default class Enemy extends BaseEntity {
         this.damage = resolvedStats.damage;
         this.speed = resolvedStats.speed;
         this.scaleSize = resolvedStats.scale;
+        this.knockbackResist = resolvedStats.knockbackResist;
         this.displaySize = {
             width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize)),
             height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize))
@@ -313,6 +428,26 @@ export default class Enemy extends BaseEntity {
         }
         this.motionTrailEffect = new MotionTrailEffect(this.scene, this, config);
         return this.motionTrailEffect;
+    }
+
+    disableMotionTrail() {
+        this.motionTrailEffect?.destroy?.();
+        this.motionTrailEffect = null;
+    }
+
+    enableAuraEffect(config = {}) {
+        this.auraEffect?.destroy?.();
+        const radius = config.radius ?? Math.max(this.displaySize.width, this.displaySize.height) * 0.9;
+        this.auraEffect = new EnemyAuraEffect(this.scene, this, {
+            radius,
+            ...config
+        });
+        return this.auraEffect;
+    }
+
+    disableAuraEffect() {
+        this.auraEffect?.destroy?.();
+        this.auraEffect = null;
     }
 
     handleAnimationUpdate() {
@@ -366,6 +501,10 @@ export default class Enemy extends BaseEntity {
     }
 
     restorePersistentTint() {
+        if (this.isHacked) {
+            this.setTint(this.hackTint ?? DEFAULT_HACK_TINT);
+            return;
+        }
         if (this.isElite) {
             this.setTint(this.eliteTint ?? 0xffcc00);
             return;
