@@ -321,7 +321,7 @@ export const SKILL_CONFIG = {
         alignWithMovement: true,
         maxKnockbackSpeed: 9999,
         knockbackDistance: 10,
-        projectileSpeed: 200,
+        projectileSpeed: 100,
         travelRange: 700,
         basePath: 'assets/skills/mucoi/',
         animations: {
