@@ -1,11 +1,13 @@
 import { SKILL_CONFIG } from '../config/skill.js';
 import HolyAuraEffect from './effects/HolyAuraEffect.js';
 import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
+import IceParticleEffect from './effects/IceParticleEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
 
 const EFFECT_CLASS_MAP = {
     auraGlow: HolyAuraEffect,
     codeProjectile: CodeProjectileEffect,
+    iceTrail: IceParticleEffect,
 };
 const TARGET_VIEW_MARGIN = 100;
 
@@ -32,7 +34,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const areaMultiplier = owner.getSkillAreaMultiplier?.(skillType) ?? 1;
         this.hitboxWidth = Math.max(1, Math.round((config.hitboxWidth ?? 150) * areaMultiplier));
         this.hitboxHeight = Math.max(1, Math.round((config.hitboxHeight ?? 60) * areaMultiplier));
-        this.duration = config.duration ?? 500;
+        this.duration = owner.getSkillDuration?.(skillType) ?? config.duration ?? 500;
         const ownerDamageMul = owner.damageMultiplier ?? 1;
         const skillDamageMul = owner.getSkillDamageMultiplier?.(skillType) ?? 1;
         const skillDamageFlat = owner.getSkillDamageFlatBonus?.(skillType) ?? 0;
@@ -74,7 +76,9 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
         this.critMultiplier = config.critMultiplier ?? 1.5;
         this.critColor = config.critColor ?? '#ffde59';
-        this.stunDuration = Math.max(0, Math.round((config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1)));
+        const baseStunDuration = (config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1);
+        const bonusEffectDuration = owner.getSkillEffectDurationBonus?.(skillType) ?? 0;
+        this.stunDuration = Math.max(0, Math.round(baseStunDuration + bonusEffectDuration));
         const baseKnockbackCount = config.numberKnockback ?? Infinity;
         const bonusKnockbackCount = owner.getSkillKnockbackCountBonus?.(skillType) ?? 0;
         this.numberKnockback = Number.isFinite(baseKnockbackCount)

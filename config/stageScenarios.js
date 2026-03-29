@@ -105,7 +105,7 @@ export const STAGE_SCENARIOS = {
         ],
         elite: {
             baseChance: 0.001,
-            chancePerMinute: 0.015,
+            chancePerMinute: 0.005,
             maxChance: 0.5,
             baseStatMultipliers: {
                 maxHealth: 10,

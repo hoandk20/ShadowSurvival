@@ -30,6 +30,26 @@ export const EFFECT_CONFIG = {
             depthOffset: 2
         },
         tags: ['pixel', 'code', 'green']
+    },
+    iceTrail: {
+        label: 'Ice Particles',
+        description: 'Cold particle stream used for fast ice projectiles.',
+        usage: ['skill-projectile'],
+        effectClass: 'IceParticleEffect',
+        settings: {
+            tint: 0xb8f4ff,
+            secondaryTint: 0x7cdfff,
+            depthOffset: -1,
+            speed: { min: 10, max: 28 },
+            scale: { start: 0.8, end: 0 },
+            alpha: { start: 0.82, end: 0 },
+            lifespan: 220,
+            frequency: 16,
+            quantity: 3,
+            followOffset: 12,
+            spread: 5
+        },
+        tags: ['pixel', 'ice', 'particle']
     }
 };
 

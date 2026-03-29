@@ -119,6 +119,7 @@ export const SKILL_CONFIG = {
         cooldown: 2000,
         hitboxWidth: 30,
         hitboxHeight: 10,
+        effectKey: 'iceTrail',
         knockback: 10,
         knockbackDragFactor: 0.4,
         knockbackDragDuration: 220,
@@ -321,7 +322,7 @@ export const SKILL_CONFIG = {
         alignWithMovement: true,
         maxKnockbackSpeed: 9999,
         knockbackDistance: 10,
-        projectileSpeed: 100,
+        projectileSpeed: 60,
         travelRange: 700,
         basePath: 'assets/skills/mucoi/',
         animations: {

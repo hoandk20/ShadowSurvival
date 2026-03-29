@@ -131,6 +131,91 @@ const createSkillUpgradeCards = ({
     return cards;
 };
 
+const createEffectSkillUpgradeCards = ({
+    baseKey,
+    name,
+    assetPath,
+    skillKey,
+    rarity = 'rare',
+    unlockWeight = 5,
+    objectWeight = 4,
+    cooldownWeight = 4,
+    effectDurationWeight = 4,
+    cooldownValue = -150,
+    effectDurationMs = 500
+}) => {
+    const cards = [
+        itemCard({
+            key: `${baseKey}_unlock`,
+            name: `${name} Unlock`,
+            description: `Unlock ${name}`,
+            assetPath,
+            rarity,
+            weight: unlockWeight,
+            stackLimit: 1,
+            group: `${baseKey}_unlock`,
+            effects: [{ type: 'skillUnlock', skillKey }],
+            inventoryKey: baseKey,
+            inventoryName: name,
+            requirements: {
+                skillLocked: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_cooldown`,
+            name: `${name} Cooldown`,
+            description: `-0.15s cooldown for ${name}`,
+            assetPath,
+            rarity,
+            weight: cooldownWeight,
+            stackLimit: 10,
+            group: `${baseKey}_cooldown`,
+            effects: [{ type: 'skillCooldownFor', skillKey, value: cooldownValue }],
+            inventoryKey: baseKey,
+            inventoryName: name,
+            requirements: {
+                skillUnlocked: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_effect_duration`,
+            name: `${name} Effect`,
+            description: `+0.5s effect duration for ${name}`,
+            assetPath,
+            rarity,
+            weight: effectDurationWeight,
+            stackLimit: 10,
+            group: `${baseKey}_effect_duration`,
+            effects: [{ type: 'skillEffectDurationMs', skillKey, value: effectDurationMs }],
+            inventoryKey: baseKey,
+            inventoryName: name,
+            requirements: {
+                skillUnlocked: skillKey,
+                supportsEffectDuration: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_object`,
+            name: `${name} Object`,
+            description: `+1 object for ${name}`,
+            assetPath,
+            rarity,
+            weight: objectWeight,
+            stackLimit: 10,
+            group: `${baseKey}_object`,
+            effects: [{ type: 'skillObject', skillKey, value: 1 }],
+            inventoryKey: baseKey,
+            inventoryName: name,
+            requirements: {
+                skillUnlocked: skillKey,
+                supportsMultipleObject: skillKey
+            }
+        })
+    ];
+
+    return cards;
+};
+
 export const CARD_CONFIG = [
     itemCard({
         key: 'armo',
@@ -151,6 +236,16 @@ export const CARD_CONFIG = [
         weight: 6,
         stackLimit: 8,
         effects: [{ type: 'skillCooldown', value: -150 }]
+    }),
+    itemCard({
+        key: 'candle',
+        name: 'Candle',
+        description: '+1s duration to all skills',
+        assetPath: 'assets/items/candle.png',
+        rarity: 'rare',
+        weight: 4,
+        stackLimit: 8,
+        effects: [{ type: 'allSkillDurationMs', value: 1000 }]
     }),
     itemCard({
         key: 'clownmask',
@@ -282,7 +377,7 @@ export const CARD_CONFIG = [
         skillKey: 'aura',
         rarity: 'rare'
     }),
-    ...createSkillUpgradeCards({
+    ...createEffectSkillUpgradeCards({
         baseKey: 'icewarn',
         name: 'Ice',
         assetPath: 'assets/items/icewarn.png',

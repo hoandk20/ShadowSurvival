@@ -67,12 +67,14 @@ export default class Player extends BaseEntity {
         this.shieldRegenTimer = 0;
         this.globalProjectileSpeedMultiplier = 1;
         this.globalSkillAreaMultiplier = 1;
+        this.globalSkillDurationOffsetMs = 0;
         this.skillDamageBonusPercent = {};
         this.skillDamageFlatBonus = {};
         this.skillCooldownOffsets = {};
         this.skillAreaMultipliers = {};
         this.skillProjectileSpeedMultipliers = {};
         this.skillStunDurationMultipliers = {};
+        this.skillEffectDurationBonuses = {};
         this.skillKnockbackCountBonuses = {};
 
         this.readyAnimated = false;
@@ -626,6 +628,9 @@ export default class Player extends BaseEntity {
             case 'skillCooldown':
                 this.skillCooldownOffset += effect.value ?? 0;
                 break;
+            case 'allSkillDurationMs':
+                this.globalSkillDurationOffsetMs += effect.value ?? 0;
+                break;
             case 'skillCooldownFor':
                 this.addSkillCooldownOffset(effect.skillKey, effect.value ?? 0);
                 break;
@@ -694,6 +699,9 @@ export default class Player extends BaseEntity {
             case 'skillStunDurationPercent':
                 this.addSkillStunDurationPercent(effect.skillKey, effect.value ?? 0);
                 break;
+            case 'skillEffectDurationMs':
+                this.addSkillEffectDurationMs(effect.skillKey, effect.value ?? 0);
+                break;
             case 'skillKnockbackCount':
                 this.addSkillKnockbackCount(effect.skillKey, effect.value ?? 0);
                 break;
@@ -757,7 +765,7 @@ export default class Player extends BaseEntity {
 
     incrementAllSkillObjectCounts(increment) {
         let changed = false;
-        Object.keys(SKILL_CONFIG).forEach((skillKey) => {
+        this.getActiveSkillKeys().forEach((skillKey) => {
             changed = this.incrementSkillObjectCountForSkill(skillKey, increment) || changed;
         });
         return changed;
@@ -773,7 +781,7 @@ export default class Player extends BaseEntity {
         if (currentSkills.includes(skillKey)) return false;
         currentSkills.push(skillKey);
         this.scene.activeSkillKeys = currentSkills;
-        this.skillObjectCounts[skillKey] = this.getSkillObjectCount(skillKey);
+        this.skillObjectCounts[skillKey] = SKILL_CONFIG[skillKey]?.defaultObjects ?? 1;
         if (this.scene?.skillInputs?.[skillKey]) {
             this.scene.skillInputs[skillKey].checked = true;
         }
@@ -795,6 +803,11 @@ export default class Player extends BaseEntity {
         const baseCooldown = SKILL_CONFIG[skillKey]?.cooldown ?? 1000;
         const adjusted = baseCooldown + this.skillCooldownOffset + (this.skillCooldownOffsets[skillKey] ?? 0);
         return Math.max(200, adjusted);
+    }
+
+    getSkillDuration(skillKey) {
+        const baseDuration = SKILL_CONFIG[skillKey]?.duration ?? 500;
+        return Math.max(1, baseDuration + (this.globalSkillDurationOffsetMs ?? 0));
     }
 
     addSkillDamagePercent(skillKey, value) {
@@ -825,6 +838,11 @@ export default class Player extends BaseEntity {
     addSkillStunDurationPercent(skillKey, value) {
         if (!skillKey) return;
         this.skillStunDurationMultipliers[skillKey] = (this.skillStunDurationMultipliers[skillKey] ?? 1) * (1 + value);
+    }
+
+    addSkillEffectDurationMs(skillKey, value) {
+        if (!skillKey) return;
+        this.skillEffectDurationBonuses[skillKey] = (this.skillEffectDurationBonuses[skillKey] ?? 0) + value;
     }
 
     addSkillKnockbackCount(skillKey, value) {
@@ -859,6 +877,10 @@ export default class Player extends BaseEntity {
 
     getSkillStunDurationMultiplier(skillKey) {
         return this.skillStunDurationMultipliers[skillKey] ?? 1;
+    }
+
+    getSkillEffectDurationBonus(skillKey) {
+        return this.skillEffectDurationBonuses[skillKey] ?? 0;
     }
 
     getSkillKnockbackCountBonus(skillKey) {

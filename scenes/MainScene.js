@@ -66,7 +66,7 @@ export default class MainScene extends Phaser.Scene {
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
-            this.cameras.main.setZoom(isMobileDevice ? 1.5 : 2);
+            this.cameras.main.setZoom(isMobileDevice ? 1.2 : 2);
             this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
@@ -1186,6 +1186,17 @@ export default class MainScene extends Phaser.Scene {
                         return false;
                     }
                     if (!hasAreaUpgradeCategory) {
+                        return false;
+                    }
+                }
+
+                const effectDurationSkill = requirements.supportsEffectDuration;
+                if (effectDurationSkill) {
+                    const skillConfig = SKILL_CONFIG[effectDurationSkill] ?? {};
+                    if (!this.player?.hasSkill(effectDurationSkill)) {
+                        return false;
+                    }
+                    if ((skillConfig.stunDuration ?? 0) <= 0) {
                         return false;
                     }
                 }
