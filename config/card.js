@@ -213,6 +213,16 @@ export const CARD_CONFIG = [
         effects: [{ type: 'maxHealthPercent', value: 0.3 }]
     }),
     itemCard({
+        key: 'plant',
+        name: 'Plant',
+        description: '+10% skill area, orbit radius, and projectile hitbox',
+        assetPath: 'assets/items/plant.png',
+        rarity: 'rare',
+        weight: 4,
+        stackLimit: 8,
+        effects: [{ type: 'allSkillAreaPercent', value: 0.1 }]
+    }),
+    itemCard({
         key: 'leaf',
         name: 'Leaf',
         description: '+0.5 HP regen per second',
@@ -298,6 +308,13 @@ export const CARD_CONFIG = [
         name: 'Thunder',
         assetPath: 'assets/items/lightning.png',
         skillKey: 'thunder',
+        rarity: 'rare'
+    }),
+    ...createSkillUpgradeCards({
+        baseKey: 'mucoi',
+        name: 'Mu Coi',
+        assetPath: 'assets/items/mucoi.png',
+        skillKey: 'mu_coi',
         rarity: 'rare'
     }),
     ...createSkillUpgradeCards({

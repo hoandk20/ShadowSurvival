@@ -66,6 +66,7 @@ export default class Player extends BaseEntity {
         this.shieldRegenIntervalMs = 30000;
         this.shieldRegenTimer = 0;
         this.globalProjectileSpeedMultiplier = 1;
+        this.globalSkillAreaMultiplier = 1;
         this.skillDamageBonusPercent = {};
         this.skillDamageFlatBonus = {};
         this.skillCooldownOffsets = {};
@@ -687,6 +688,9 @@ export default class Player extends BaseEntity {
             case 'skillAreaPercent':
                 this.addSkillAreaPercent(effect.skillKey, effect.value ?? 0);
                 break;
+            case 'allSkillAreaPercent':
+                this.globalSkillAreaMultiplier *= (1 + (effect.value ?? 0));
+                break;
             case 'skillStunDurationPercent':
                 this.addSkillStunDurationPercent(effect.skillKey, effect.value ?? 0);
                 break;
@@ -846,7 +850,11 @@ export default class Player extends BaseEntity {
     }
 
     getSkillAreaMultiplier(skillKey) {
-        return this.skillAreaMultipliers[skillKey] ?? 1;
+        const skillConfig = SKILL_CONFIG[skillKey] ?? {};
+        const category = skillConfig.category ?? 'area';
+        const supportsGlobalArea = category === 'projectile' || category === 'orbit' || category === 'area' || category === 'aura';
+        const skillMultiplier = this.skillAreaMultipliers[skillKey] ?? 1;
+        return skillMultiplier * (supportsGlobalArea ? (this.globalSkillAreaMultiplier ?? 1) : 1);
     }
 
     getSkillStunDurationMultiplier(skillKey) {

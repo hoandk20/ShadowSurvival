@@ -133,7 +133,7 @@ export const STAGE_SCENARIOS = {
                 id: 'church_opening_swarm',
                 startAtMs: 50000,
                 intervalMs: 40000,
-                count: 40,
+                count: 50,
                 clusterRadius: 60
             }
         ]
