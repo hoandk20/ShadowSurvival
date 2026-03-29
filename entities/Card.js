@@ -81,29 +81,9 @@ export default class Card extends Phaser.GameObjects.Container {
         }).setOrigin(0, 0);
         description.setLineSpacing(6);
         description.setShadow(2, 2, '#000000', 3, true, true);
-        const badge = scene.add.rectangle(bgWidth / 2 - 90, bgHeight / 2 - 26, 118, 24, style.badge)
-            .setOrigin(0.5)
-            .setStrokeStyle(1, 0x000000, 0.2);
-        scene.tweens.add({
-            targets: badge,
-            alpha: { from: 0.65, to: 1 },
-            duration: 2200,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-        const badgeText = scene.add.text(badge.x, badge.y, rarity.toUpperCase(), {
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            fontStyle: 'bold',
-            color: '#10131c',
-            stroke: '#ffffff',
-            strokeThickness: 1
-        }).setOrigin(0.5);
-
         const hitArea = scene.add.zone(0, 0, bgWidth, bgHeight).setOrigin(0.5);
         hitArea.setInteractive();
-        this.add([glow, gradient, background, vignette, fog, accentBar, iconContainer, title, description, badge, badgeText, hitArea]);
+        this.add([glow, gradient, background, vignette, fog, accentBar, iconContainer, title, description, hitArea]);
         scene.add.existing(this);
         this.setSize(width, height);
         this.baseScale = cardScale;

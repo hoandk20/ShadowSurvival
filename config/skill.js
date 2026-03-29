@@ -433,7 +433,7 @@ export const SKILL_CONFIG = {
         category: 'orbit',
         multipleObject: true,
         maxObjects: 5,
-        orbitRadius: 80,
+        orbitRadius: 50,
 
         orbitSpeed: 5,
         orbitDirection: 1,
