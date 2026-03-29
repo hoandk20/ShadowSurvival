@@ -2,7 +2,7 @@ const ELITE_MODIFIERS = {
     tank: {
         kind: 'self',
         apply(stats) {
-            stats.maxHealth *= 5;
+            stats.maxHealth *= 3;
             stats.knockbackResist *= 0.1;
         }
     },
@@ -19,7 +19,7 @@ const ELITE_MODIFIERS = {
     berserk: {
         kind: 'self',
         apply(stats) {
-            stats.damage *= 5;
+            stats.damage *= 2;
             stats.knockbackResist *= 0.5;
         }
     },
@@ -27,7 +27,7 @@ const ELITE_MODIFIERS = {
         kind: 'self',
         apply(stats) {
             stats.scale *= 2;
-            stats.maxHealth *= 10;
+            stats.maxHealth *= 5;
             stats.speed *= 0.5;
             stats.knockbackResist *= 0.1;
         }
@@ -41,7 +41,7 @@ const ELITE_MODIFIERS = {
     aura_damage: {
         kind: 'aura',
         applyAura(stats) {
-            stats.damage *= 3;
+            stats.damage *= 2;
         }
     },
     aura_hp: {
@@ -101,11 +101,75 @@ const ELITE_MODIFIER_VISUALS = {
     }
 };
 
+const SHARED_ELITE_CONFIG = {
+    baseChance: 0.001,
+    chancePerMinute: 0.005,
+    maxChance: 0.5,
+    lootTable: [
+        { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 }
+    ],
+    baseStatMultipliers: {
+        maxHealth: 10,
+        damage: 1.5,
+        speed: 1.5,
+        scale: 1.2
+    },
+    modifierCount: {
+        min: 1,
+        max: 1
+    },
+    auraRadius: 120,
+    tint: 0xffd166,
+    modifiedTint: 0x5da9ff,
+    trailTint: 0xffef99,
+    modifiedTrailTint: 0xb9d7ff,
+    trailSpawnInterval: 18,
+    trailLifetime: 90,
+    trailScale: 0.4,
+    trailMinAlpha: 0.2,
+    modifierPool: Object.keys(ELITE_MODIFIERS)
+};
+
+const SHARED_WAVE_CONFIG = [
+    {
+        id: 'opening_swarm',
+        startAtMs: 50000,
+        intervalMs: 40000,
+        count: 50,
+        clusterRadius: 60
+    }
+];
+
+function createEliteConfig(overrides = {}) {
+    return {
+        ...SHARED_ELITE_CONFIG,
+        ...overrides,
+        lootTable: overrides.lootTable ?? [...SHARED_ELITE_CONFIG.lootTable],
+        baseStatMultipliers: {
+            ...SHARED_ELITE_CONFIG.baseStatMultipliers,
+            ...(overrides.baseStatMultipliers ?? {})
+        },
+        modifierCount: {
+            ...SHARED_ELITE_CONFIG.modifierCount,
+            ...(overrides.modifierCount ?? {})
+        },
+        modifierPool: overrides.modifierPool ?? [...SHARED_ELITE_CONFIG.modifierPool]
+    };
+}
+
+function createWaveConfig(prefix, overrides = []) {
+    return SHARED_WAVE_CONFIG.map((wave, index) => ({
+        ...wave,
+        id: `${prefix}_${overrides[index]?.id ?? wave.id}`,
+        ...(overrides[index] ?? {})
+    }));
+}
+
 export const STAGE_SCENARIOS = {
     church_sanctuary: {
         normalSpawnPerSecond: 0.5,
-        normalSpawnPerSecondPerMinute: 0.1,
-        enemyHealthPercentPerMinute: 10,
+        normalSpawnPerSecondPerMinute: 0.7,
+        enemyHealthPercentPerMinute: 7,
         enemyUnlockTimeline: [
              { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 5 },
             { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 10 },
@@ -117,43 +181,30 @@ export const STAGE_SCENARIOS = {
             { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 40 },
            
         ],
-        elite: {
-            baseChance: 0.001,
-            chancePerMinute: 0.005,
-            maxChance: 0.5,
-            lootTable: [
-                { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 }
-            ],
-            baseStatMultipliers: {
-                maxHealth: 10,
-                damage: 1.5,
-                speed: 1.5,
-                scale: 1.2
-            },
-            modifierCount: {
-                min: 1,
-                max: 1
-            },
-            auraRadius: 120,
-            tint: 0xffd166,
-            modifiedTint: 0x5da9ff,
-            trailTint: 0xffef99,
-            modifiedTrailTint: 0xb9d7ff,
-            trailSpawnInterval: 18,
-            trailLifetime: 90,
-            trailScale: 0.4,
-            trailMinAlpha: 0.2,
-            modifierPool: Object.keys(ELITE_MODIFIERS)
-        },
-        waves: [
-            {
-                id: 'church_opening_swarm',
-                startAtMs: 50000,
-                intervalMs: 40000,
-                count: 50,
-                clusterRadius: 60
-            }
-        ]
+        elite: createEliteConfig({
+            maxActive: 10
+        }),
+        waves: createWaveConfig('church')
+    },
+    inside_church: {
+        normalSpawnPerSecond: 0.5,
+        normalSpawnPerSecondPerMinute: 0.7,
+        enemyHealthPercentPerMinute: 7,
+        enemyUnlockTimeline: [
+            { enemyType: 'bat', unlockAtMinute: 0, spawnWeight: 8 },
+            { enemyType: 'slime', unlockAtMinute: 2, spawnWeight: 10 },
+            { enemyType: 'medusa', unlockAtMinute: 4, spawnWeight: 6 },
+            { enemyType: 'rat', unlockAtMinute: 6, spawnWeight: 12 },
+            { enemyType: 'skeleton', unlockAtMinute: 8, spawnWeight: 10 },
+            { enemyType: 'succubus', unlockAtMinute: 10, spawnWeight: 8 },
+            { enemyType: 'widow', unlockAtMinute: 12, spawnWeight: 9 },
+            { enemyType: 'worm', unlockAtMinute: 14, spawnWeight: 12 },
+            { enemyType: 'minotau', unlockAtMinute: 16, spawnWeight: 5 }
+        ],
+        elite: createEliteConfig({
+            maxActive: 10
+        }),
+        waves: createWaveConfig('inside_church')
     }
 };
 
@@ -210,6 +261,11 @@ export function getEliteSpawnChance(scene, scenario) {
     const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
     const scaledChance = eliteConfig.baseChance + (eliteConfig.chancePerMinute * elapsedMinutes);
     return Math.min(eliteConfig.maxChance ?? scaledChance, scaledChance);
+}
+
+export function getActiveEliteCount(scene) {
+    const enemies = scene?.enemies?.getChildren?.() ?? [];
+    return enemies.filter((enemy) => enemy?.active && enemy?.isElite && !enemy?.isDead).length;
 }
 
 export function getUnlockedEnemyTypes(scene, scenario) {
@@ -352,6 +408,10 @@ export function applyEliteModifiers(enemy, modifierKeys, scenario) {
 
 export function spawnEnemyWithEliteChance(scene, enemy, scenario, rng = Math.random) {
     if (!enemy || !scenario?.elite) return enemy;
+    const maxActive = scenario.elite.maxActive;
+    if (typeof maxActive === 'number' && maxActive > 0 && getActiveEliteCount(scene) >= maxActive) {
+        return enemy;
+    }
     ensureEnemyStats(enemy);
     if (!rollEliteSpawn(scene, scenario, rng)) {
         return enemy;

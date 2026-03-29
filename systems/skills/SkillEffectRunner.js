@@ -22,7 +22,7 @@ export default class SkillEffectRunner {
         return new DamageText(this.scene, x, y, value, options);
     }
 
-    spawnExplosion(x, y, depth = 40) {
-        this.explosionEffect?.spawn(x, y, depth);
+    spawnExplosion(x, y, depth = 40, options = {}) {
+        this.explosionEffect?.spawn(x, y, depth, options);
     }
 }

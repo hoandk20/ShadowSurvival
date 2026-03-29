@@ -1,5 +1,6 @@
 import Item from '../entities/Item.js';
 import { ITEM_CONFIG, getLootTableForEnemy } from '../config/items.js';
+import { LOOT_CONFIG } from '../config/loot.js';
 
 export default class LootSystem {
     constructor(scene) {
@@ -80,6 +81,11 @@ export default class LootSystem {
     spawnItem(itemKey, x, y, amount = 1) {
         const config = ITEM_CONFIG[itemKey];
         if (!config) return null;
+        const maxGroundItems = LOOT_CONFIG.maxGroundItems ?? 500;
+        const activeGroundItems = this.itemGroup?.countActive?.(true) ?? 0;
+        if (activeGroundItems >= maxGroundItems) {
+            return null;
+        }
         const item = new Item(this.scene, x, y, itemKey, amount);
         this.itemGroup.add(item);
         return item;

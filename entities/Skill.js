@@ -14,7 +14,7 @@ const TARGET_VIEW_MARGIN = 100;
 
 export default class Skill extends Phaser.GameObjects.Sprite {
     constructor(scene, owner, skillType) {
-        const config = SKILL_CONFIG[skillType] ?? {};
+        const config = owner.getSkillConfig?.(skillType) ?? SKILL_CONFIG[skillType] ?? {};
         const animNames = config.animations ? Object.keys(config.animations) : [];
         const primaryAnimName = animNames.length ? animNames[0] : 'cast';
         const primaryAnim = config.animations ? config.animations[primaryAnimName] : null;

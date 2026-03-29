@@ -18,6 +18,7 @@ const selectAnimationName = (config) => {
 const buildFrameKey = (assetKey, animName, frameIndex = 0) => `${assetKey}_${animName}_${frameIndex}`;
 const DEFAULT_CHARACTER_HP = 10000;
 const DEFAULT_CHARACTER_ARMOR = 1;
+const MAX_ACTIVE_SKILLS = 6;
 const TARGET_VIEW_MARGIN = 100;
 
 export default class Player extends BaseEntity {
@@ -78,6 +79,8 @@ export default class Player extends BaseEntity {
         this.skillStunDurationMultipliers = {};
         this.skillEffectDurationBonuses = {};
         this.skillKnockbackCountBonuses = {};
+        this.skillRuntimeConfigOverrides = {};
+        this.hiddenPassiveEvolutionKeys = new Set();
 
         this.readyAnimated = false;
 
@@ -148,7 +151,7 @@ export default class Player extends BaseEntity {
         if (movementDirection.lengthSq() === 0) {
             movementDirection.set(this.flipX ? -1 : 1, 0);
         }
-        const skillDefinition = SKILL_CONFIG[skillType] ?? {};
+        const skillDefinition = this.getSkillConfig(skillType) ?? {};
         const alignWithMovement = skillDefinition.alignWithMovement ?? false;
         const baseAlignAngle = alignWithMovement
             ? Math.atan2(this.lastMoveDirection.y, this.lastMoveDirection.x)
@@ -168,6 +171,7 @@ export default class Player extends BaseEntity {
         const autoAim = skillDefinition.autoAim ?? false;
         const autoAimDistinctTargets = skillDefinition.autoAimDistinctTargets ?? false;
         const autoAimDelay = skillDefinition.autoAimBurstInterval ?? 70;
+        const objectSpawnInterval = Math.max(0, skillDefinition.objectSpawnInterval ?? 0);
         const autoAimFanAngle = skillDefinition.autoAimFanAngle ?? 0;
         const autoAimSpawnRadius = skillDefinition.autoAimSpawnRadius ?? 0;
         const autoAimTargets = autoAim
@@ -255,7 +259,12 @@ export default class Player extends BaseEntity {
 
         const spawnAll = () => {
             for (let i = 0; i < count; i += 1) {
-                if (autoAim && autoAimTarget && this.scene?.time) {
+                const spawnDelay = autoAim && autoAimTarget
+                    ? i * autoAimDelay
+                    : i * objectSpawnInterval;
+                if (spawnDelay > 0 && this.scene?.time) {
+                    this.scene.time.delayedCall(spawnDelay, () => spawnSkillObject(i));
+                } else if (autoAim && autoAimTarget && this.scene?.time) {
                     this.scene.time.delayedCall(i * autoAimDelay, () => spawnSkillObject(i));
                 } else {
                     spawnSkillObject(i);
@@ -710,6 +719,9 @@ export default class Player extends BaseEntity {
             case 'skillKnockbackCount':
                 this.addSkillKnockbackCount(effect.skillKey, effect.value ?? 0);
                 break;
+            case 'skillConfigOverride':
+                this.addSkillRuntimeConfigOverride(effect.skillKey, effect.overrides ?? {});
+                break;
             case 'critChance':
                 this.globalCritChanceBonus += effect.value ?? 0;
                 break;
@@ -721,6 +733,25 @@ export default class Player extends BaseEntity {
         return this.scene?.activeSkillKey || 'thunder';
     }
 
+    getSkillConfig(skillKey) {
+        const baseConfig = SKILL_CONFIG[skillKey] ?? {};
+        const runtimeOverride = this.skillRuntimeConfigOverrides[skillKey] ?? {};
+        const resolvedConfig = {
+            ...baseConfig,
+            ...runtimeOverride
+        };
+        if (skillKey === 'sky_fall' && this.characterKey !== 'lumina') {
+            resolvedConfig.explosionOnHit = false;
+            resolvedConfig.explosionRadius = 0;
+            resolvedConfig.explosionDamageMultiplier = 0;
+            resolvedConfig.explosionKnockbackMultiplier = 0;
+            resolvedConfig.behaviors = Array.isArray(resolvedConfig.behaviors)
+                ? resolvedConfig.behaviors.filter((entry) => entry?.type !== 'explosionOnHit')
+                : resolvedConfig.behaviors;
+        }
+        return resolvedConfig;
+    }
+
     getActiveSkillKeys() {
         const activeSkillKeys = this.scene?.activeSkillKeys;
         if (Array.isArray(activeSkillKeys) && activeSkillKeys.length) {
@@ -730,12 +761,12 @@ export default class Player extends BaseEntity {
     }
 
     getSkillObjectCount(skillKey) {
-        const defaultCount = SKILL_CONFIG[skillKey]?.defaultObjects ?? 1;
+        const defaultCount = this.getSkillConfig(skillKey)?.defaultObjects ?? 1;
         return this.skillObjectCounts[skillKey] ?? defaultCount;
     }
 
     getSkillObjectMaxCount(skillKey) {
-        const skillConfig = SKILL_CONFIG[skillKey] ?? {};
+        const skillConfig = this.getSkillConfig(skillKey) ?? {};
         if (skillConfig.multipleObject === false) return 1;
         return skillConfig.maxObjects ?? 8;
     }
@@ -784,9 +815,10 @@ export default class Player extends BaseEntity {
         if (!skillKey || !SKILL_CONFIG[skillKey]) return false;
         const currentSkills = Array.isArray(this.scene?.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
         if (currentSkills.includes(skillKey)) return false;
+        if (currentSkills.length >= MAX_ACTIVE_SKILLS) return false;
         currentSkills.push(skillKey);
         this.scene.activeSkillKeys = currentSkills;
-        this.skillObjectCounts[skillKey] = SKILL_CONFIG[skillKey]?.defaultObjects ?? 1;
+        this.skillObjectCounts[skillKey] = this.getSkillConfig(skillKey)?.defaultObjects ?? 1;
         if (this.scene?.skillInputs?.[skillKey]) {
             this.scene.skillInputs[skillKey].checked = true;
         }
@@ -794,7 +826,106 @@ export default class Player extends BaseEntity {
     }
 
     getDefaultSkillKey() {
-        return this.characterConfig?.defaultSkill ?? 'thunder';
+        return this.runtimeDefaultSkillKey ?? this.characterConfig?.defaultSkill ?? 'thunder';
+    }
+
+    hasPassiveEvolution(passiveKey) {
+        return this.hiddenPassiveEvolutionKeys.has(passiveKey);
+    }
+
+    activateHiddenPassiveEvolution(passiveKey, passiveConfig = {}) {
+        if (!passiveKey || this.hiddenPassiveEvolutionKeys.has(passiveKey)) return false;
+        this.hiddenPassiveEvolutionKeys.add(passiveKey);
+        const effects = Array.isArray(passiveConfig.effects) ? passiveConfig.effects : [];
+        effects.forEach((effect) => this.applyEffect(effect));
+        return true;
+    }
+
+    replaceSkill(sourceSkillKey, evolvedSkillKey) {
+        if (!sourceSkillKey || !evolvedSkillKey || !SKILL_CONFIG[evolvedSkillKey] || !this.scene) return false;
+        const currentSkills = Array.isArray(this.scene.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
+        const sourceIndex = currentSkills.indexOf(sourceSkillKey);
+        if (sourceIndex === -1) return false;
+
+        if (currentSkills.includes(evolvedSkillKey)) {
+            currentSkills.splice(sourceIndex, 1);
+        } else {
+            currentSkills[sourceIndex] = evolvedSkillKey;
+        }
+
+        this.migrateSkillRuntimeState(sourceSkillKey, evolvedSkillKey);
+        this.scene.activeSkillKeys = Array.from(new Set(currentSkills));
+        if (this.scene.activeSkillKey === sourceSkillKey || !this.scene.activeSkillKeys.includes(this.scene.activeSkillKey)) {
+            this.scene.activeSkillKey = evolvedSkillKey;
+        }
+        if (this.getDefaultSkillKey() === sourceSkillKey) {
+            this.runtimeDefaultSkillKey = evolvedSkillKey;
+        }
+        Object.entries(this.scene.skillInputs ?? {}).forEach(([key, input]) => {
+            input.checked = this.scene.activeSkillKeys.includes(key);
+        });
+        return true;
+    }
+
+    migrateSkillRuntimeState(sourceSkillKey, evolvedSkillKey) {
+        const multiplicativeStores = [
+            'skillDamageBonusPercent',
+            'skillAreaMultipliers',
+            'skillProjectileSpeedMultipliers',
+            'skillExplosionRadiusMultipliers',
+            'skillStunDurationMultipliers'
+        ];
+        const additiveStores = [
+            'skillDamageFlatBonus',
+            'skillCooldownOffsets',
+            'skillEffectDurationBonuses',
+            'skillKnockbackCountBonuses',
+            'lastSkillCastTimes'
+        ];
+
+        multiplicativeStores.forEach((storeKey) => {
+            const store = this[storeKey];
+            if (!store || store[sourceSkillKey] === undefined) return;
+            store[evolvedSkillKey] = store[evolvedSkillKey] ?? store[sourceSkillKey];
+            delete store[sourceSkillKey];
+        });
+
+        additiveStores.forEach((storeKey) => {
+            const store = this[storeKey];
+            if (!store || store[sourceSkillKey] === undefined) return;
+            store[evolvedSkillKey] = (store[evolvedSkillKey] ?? 0) + store[sourceSkillKey];
+            delete store[sourceSkillKey];
+        });
+
+        if (this.skillObjectCounts[sourceSkillKey] !== undefined) {
+            const nextCount = Math.min(
+                this.skillObjectCounts[sourceSkillKey],
+                this.getSkillObjectMaxCount(evolvedSkillKey)
+            );
+            this.skillObjectCounts[evolvedSkillKey] = Math.max(1, nextCount);
+            delete this.skillObjectCounts[sourceSkillKey];
+        }
+
+        if (this.skillRuntimeConfigOverrides[sourceSkillKey] !== undefined) {
+            this.skillRuntimeConfigOverrides[evolvedSkillKey] = {
+                ...(this.skillRuntimeConfigOverrides[evolvedSkillKey] ?? {}),
+                ...this.skillRuntimeConfigOverrides[sourceSkillKey]
+            };
+            delete this.skillRuntimeConfigOverrides[sourceSkillKey];
+        }
+    }
+
+    setSkillRuntimeOverrides(skillKey, overrides = {}) {
+        if (!skillKey) return;
+        this.skillRuntimeConfigOverrides[skillKey] = {
+            ...(this.skillRuntimeConfigOverrides[skillKey] ?? {}),
+            ...overrides
+        };
+    }
+
+    addSkillRuntimeConfigOverride(skillKey, overrides = {}) {
+        if (!skillKey || !overrides || typeof overrides !== 'object') return;
+        this.setSkillRuntimeOverrides(skillKey, overrides);
     }
 
     resolveAttackAnimationDuration() {
@@ -805,13 +936,13 @@ export default class Player extends BaseEntity {
     }
 
     getSkillCooldown(skillKey) {
-        const baseCooldown = SKILL_CONFIG[skillKey]?.cooldown ?? 1000;
+        const baseCooldown = this.getSkillConfig(skillKey)?.cooldown ?? 1000;
         const adjusted = baseCooldown + this.skillCooldownOffset + (this.skillCooldownOffsets[skillKey] ?? 0);
         return Math.max(200, adjusted);
     }
 
     getSkillDuration(skillKey) {
-        const baseDuration = SKILL_CONFIG[skillKey]?.duration ?? 500;
+        const baseDuration = this.getSkillConfig(skillKey)?.duration ?? 500;
         return Math.max(1, baseDuration + (this.globalSkillDurationOffsetMs ?? 0));
     }
 
@@ -888,7 +1019,7 @@ export default class Player extends BaseEntity {
     }
 
     getSkillAreaMultiplier(skillKey) {
-        const skillConfig = SKILL_CONFIG[skillKey] ?? {};
+        const skillConfig = this.getSkillConfig(skillKey) ?? {};
         const category = skillConfig.category ?? 'area';
         const supportsGlobalArea = category === 'projectile' || category === 'orbit' || category === 'area' || category === 'aura';
         const skillMultiplier = this.skillAreaMultipliers[skillKey] ?? 1;
@@ -926,10 +1057,11 @@ export default class Player extends BaseEntity {
         const defaultSkill = config.defaultSkill ?? 'thunder';
         if (this.characterKey === resolvedKey) {
             this.characterConfig = config;
+            this.runtimeDefaultSkillKey = this.runtimeDefaultSkillKey ?? defaultSkill;
             this.updateHealthFromCharacterConfig();
             this.updateArmorFromConfig();
             this.updateSpeedFromConfig();
-            return defaultSkill;
+            return this.runtimeDefaultSkillKey;
         }
         this.characterKey = resolvedKey;
         this.characterConfig = config;
@@ -958,9 +1090,10 @@ export default class Player extends BaseEntity {
         this.state = null;
         this.previousState = null;
         this.setState('idle');
-        const defaultSkillObjectCount = SKILL_CONFIG[defaultSkill]?.defaultObjects ?? 1;
+        const defaultSkillObjectCount = this.getSkillConfig(defaultSkill)?.defaultObjects ?? 1;
         this.skillObjectCounts = { [defaultSkill]: defaultSkillObjectCount };
         this.skillObjectCount = defaultSkillObjectCount;
+        this.runtimeDefaultSkillKey = defaultSkill;
         this.isCastingSkill = false;
         this.attackAnimationDuration = this.resolveAttackAnimationDuration();
         this.idleFrameIndex = config?.idleFrameIndex ?? this.idleFrameIndex;
@@ -1011,7 +1144,7 @@ export default class Player extends BaseEntity {
     getDisplayedDamage() {
         if (!this.scene) return 0;
         const skillKey = this.scene.activeSkillKey ?? 'thunder';
-        const baseDamage = SKILL_CONFIG[skillKey]?.damage ?? 0;
+        const baseDamage = this.getSkillConfig(skillKey)?.damage ?? 0;
         const multiplier = this.damageMultiplier ?? 1;
         return Math.round(baseDamage * multiplier);
     }

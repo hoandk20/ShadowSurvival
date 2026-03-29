@@ -16,7 +16,12 @@ export default function explosionOnHitBehavior(context, entry = {}) {
         behaviorConfig.tint ?? skill.config?.explosionTint ?? skill.critColor ?? '#ff8c42'
     );
 
-    effects.spawnExplosion(impact.x, impact.y, (skill.depth ?? 30) + 4);
+    effects.spawnExplosion(impact.x, impact.y, (skill.depth ?? 30) + 4, {
+        ...(behaviorConfig.effect ?? {}),
+        outerColor: Phaser.Display.Color.HexStringToColor(
+            behaviorConfig.tint ?? skill.config?.explosionTint ?? '#ff8c42'
+        ).color
+    });
 
     const damageMultiplier = behaviorConfig.damageMultiplier ?? skill.explosionDamageMultiplier ?? 1;
     const knockbackMultiplier = behaviorConfig.knockbackMultiplier ?? skill.explosionKnockbackMultiplier ?? 1;

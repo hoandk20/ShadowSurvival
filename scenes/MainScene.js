@@ -4,6 +4,7 @@ import Enemy from '../entities/Enemy.js';
 import { CARD_CONFIG } from '../config/card.js';
 import { ENEMIES } from '../config/enemies.js';
 import { SKILL_CONFIG } from '../config/skill.js';
+import { SKILL_EVOLUTION_CONFIG } from '../config/skillEvolution.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
 import MapManager from '../systems/mapsystem.js';
 import LootSystem from '../systems/LootSystem.js';
@@ -19,15 +20,18 @@ import {
     getScenarioSpawnInterval,
     getTriggeredWaves,
     handleAuraSystem,
+    getActiveEliteCount,
     getUnlockedEnemyTypes,
     spawnEnemyWithEliteChance
 } from '../config/stageScenarios.js';
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
 import SkillBehaviorPipeline from '../systems/skills/SkillBehaviorPipeline.js';
+import SkillEvolutionSystem from '../systems/SkillEvolutionSystem.js';
 import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 
 const SPAWN_PADDING = 50;
 const DESPAWN_MARGIN = 150;
+const MAX_ACTIVE_SKILLS = 6;
 
 export default class MainScene extends Phaser.Scene {
     constructor() {
@@ -38,6 +42,7 @@ export default class MainScene extends Phaser.Scene {
         this.touchMoveState = null;
         this.touchControlsEnabled = false;
         this.debugSpawnIntervalOverrideMs = null;
+        this.skillEvolutionInputs = {};
     }
 
     preload() {
@@ -75,6 +80,7 @@ export default class MainScene extends Phaser.Scene {
         this.activeSkillKey = initialCharacter?.defaultSkill ?? 'thunder';
         this.activeSkillKeys = [this.activeSkillKey];
         this.skillInputs = {};
+        this.skillEvolutionInputs = {};
         this.characterInputs = {};
 
         // Create player
@@ -96,6 +102,7 @@ export default class MainScene extends Phaser.Scene {
             sparkDuration: { min: 120, max: 260 }
         });
         this.skillBehaviorPipeline = new SkillBehaviorPipeline(this);
+        this.skillEvolutionSystem = new SkillEvolutionSystem(this);
         this.lootSystem = new LootSystem(this);
         this.physics.add.overlap(this.player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
         this.player.once('player-dead', () => this.handlePlayerDeath());
@@ -353,6 +360,7 @@ export default class MainScene extends Phaser.Scene {
         skillContainer.innerHTML = '';
         enemyContainer.innerHTML = '';
         this.skillInputs = {};
+        this.skillEvolutionInputs = {};
         this.characterInputs = {};
         const enemySection = enemyContainer.closest('.panel-section');
         skillContainer.classList.add('panel-list');
@@ -383,6 +391,54 @@ export default class MainScene extends Phaser.Scene {
             label.appendChild(document.createTextNode(config.label || key));
             this.skillInputs[key] = input;
             skillContainer.appendChild(label);
+        });
+        let skillEvolutionSection = panel.querySelector('#skill-evolution-section');
+        if (!skillEvolutionSection) {
+            skillEvolutionSection = document.createElement('div');
+            skillEvolutionSection.id = 'skill-evolution-section';
+            skillEvolutionSection.classList.add('panel-section');
+            panel.insertBefore(skillEvolutionSection, enemySection ?? null);
+        }
+        skillEvolutionSection.innerHTML = '';
+        const skillEvolutionTitle = document.createElement('div');
+        skillEvolutionTitle.classList.add('panel-title');
+        skillEvolutionTitle.textContent = 'Skill Evolution';
+        skillEvolutionSection.appendChild(skillEvolutionTitle);
+        const skillEvolutionList = document.createElement('div');
+        skillEvolutionList.classList.add('panel-list');
+        skillEvolutionSection.appendChild(skillEvolutionList);
+        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
+            const evolvedSkillKey = entry.evolvedSkillKey;
+            const sourceSkillKey = entry.sourceSkillKey;
+            if (!evolvedSkillKey || !SKILL_CONFIG[evolvedSkillKey]) return;
+
+            const label = document.createElement('label');
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.value = evolvedSkillKey;
+            input.checked = (this.activeSkillKeys ?? []).includes(evolvedSkillKey);
+            input.addEventListener('change', () => {
+                if (this.skillInputs?.[evolvedSkillKey]) {
+                    this.skillInputs[evolvedSkillKey].checked = input.checked;
+                }
+                if (input.checked && this.skillInputs?.[sourceSkillKey]) {
+                    this.skillInputs[sourceSkillKey].checked = false;
+                }
+                const selectedKeys = Object.entries(this.skillInputs ?? {})
+                    .filter(([, skillInput]) => skillInput.checked)
+                    .map(([skillKey]) => skillKey);
+                if (input.checked && !selectedKeys.includes(evolvedSkillKey)) {
+                    selectedKeys.push(evolvedSkillKey);
+                }
+                const preferredSkillKey = input.checked
+                    ? evolvedSkillKey
+                    : (selectedKeys[0] ?? sourceSkillKey ?? null);
+                this.setSelectedSkills(selectedKeys, preferredSkillKey);
+            });
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(`${SKILL_CONFIG[sourceSkillKey]?.label ?? sourceSkillKey} -> ${SKILL_CONFIG[evolvedSkillKey]?.label ?? evolvedSkillKey}`));
+            this.skillEvolutionInputs[evolvedSkillKey] = input;
+            skillEvolutionList.appendChild(label);
         });
         let characterSection = panel.querySelector('#character-section');
         if (!characterSection) {
@@ -573,14 +629,45 @@ export default class MainScene extends Phaser.Scene {
 
     setSelectedSkills(skillKeys, preferredSkillKey = null) {
         const uniqueSkillKeys = Array.from(new Set((skillKeys ?? []).filter(key => SKILL_CONFIG[key])));
+        const normalizedSkillKeys = this.normalizeEvolutionSkillSelection(uniqueSkillKeys, preferredSkillKey);
         const fallbackSkill = preferredSkillKey && SKILL_CONFIG[preferredSkillKey]
             ? preferredSkillKey
             : this.player?.getDefaultSkillKey?.() ?? this.activeSkillKey ?? 'thunder';
-        const nextSelected = uniqueSkillKeys.length ? uniqueSkillKeys : [fallbackSkill];
+        const nextSelected = normalizedSkillKeys.length ? normalizedSkillKeys : [fallbackSkill];
         this.activeSkillKeys = nextSelected;
         this.activeSkillKey = nextSelected.includes(preferredSkillKey) ? preferredSkillKey : nextSelected[0];
         Object.entries(this.skillInputs ?? {}).forEach(([key, input]) => {
             input.checked = nextSelected.includes(key);
+        });
+        Object.entries(this.skillEvolutionInputs ?? {}).forEach(([key, input]) => {
+            input.checked = nextSelected.includes(key);
+        });
+        this.activateEvolutionPassivesForSelectedSkills(nextSelected);
+    }
+
+    normalizeEvolutionSkillSelection(skillKeys, preferredSkillKey = null) {
+        const nextSelected = [...skillKeys];
+        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
+            const sourceSkillKey = entry.sourceSkillKey;
+            const evolvedSkillKey = entry.evolvedSkillKey;
+            if (!sourceSkillKey || !evolvedSkillKey) return;
+            if (!nextSelected.includes(evolvedSkillKey)) return;
+            const sourceIndex = nextSelected.indexOf(sourceSkillKey);
+            if (sourceIndex === -1) return;
+            if (preferredSkillKey === sourceSkillKey && !nextSelected.includes(preferredSkillKey)) return;
+            nextSelected.splice(sourceIndex, 1);
+        });
+        return nextSelected;
+    }
+
+    activateEvolutionPassivesForSelectedSkills(skillKeys = []) {
+        if (!this.player) return;
+        const currentCharacterKey = this.activeCharacterKey ?? this.player.characterKey;
+        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
+            if (!entry?.passiveEvolutionKey || !entry?.evolvedSkillKey) return;
+            if (entry.characterKey && entry.characterKey !== currentCharacterKey) return;
+            if (!skillKeys.includes(entry.evolvedSkillKey)) return;
+            this.skillEvolutionSystem?.activatePassiveEvolution?.(entry.passiveEvolutionKey);
         });
     }
 
@@ -838,6 +925,10 @@ export default class MainScene extends Phaser.Scene {
     spawnEliteFromId(eliteId) {
         const eliteConfig = ELITE_CONFIGS.find(cfg => cfg.id === eliteId);
         if (!eliteConfig) return;
+        const maxActive = this.stageScenario?.elite?.maxActive;
+        if (typeof maxActive === 'number' && maxActive > 0 && getActiveEliteCount(this) >= maxActive) {
+            return;
+        }
         const position = this.getSpawnEdgePosition();
         if (!position) return;
         const enemy = new Enemy(this, position.x, position.y, eliteConfig.baseMonsterId);
@@ -987,6 +1078,7 @@ export default class MainScene extends Phaser.Scene {
             this.cardSelectionCounts[cardConfig.key] = (this.cardSelectionCounts[cardConfig.key] ?? 0) + 1;
         }
         this.addCardToInventory(cardConfig);
+        this.skillEvolutionSystem?.processAvailableEvolutions?.();
         hudScene?.refreshInventory?.(this.inventoryItems);
         if (this.levelUpQueue > 0) {
             this.time.delayedCall(250, () => {
@@ -1152,6 +1244,9 @@ export default class MainScene extends Phaser.Scene {
 
                 const skillLocked = requirements.skillLocked;
                 if (skillLocked && this.player?.hasSkill(skillLocked)) {
+                    return false;
+                }
+                if (skillLocked && (this.activeSkillKeys?.length ?? 0) >= MAX_ACTIVE_SKILLS) {
                     return false;
                 }
 
