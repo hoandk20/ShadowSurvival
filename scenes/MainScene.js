@@ -65,7 +65,8 @@ export default class MainScene extends Phaser.Scene {
         const mapDef = this.mapManager.loadMap(selectedMapKey);
         if (mapDef) {
             this.mapManager.applyWorldBounds();
-            this.cameras.main.setZoom(2);
+            const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
+            this.cameras.main.setZoom(isMobileDevice ? 1.5 : 2);
             this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
