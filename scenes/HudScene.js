@@ -118,7 +118,7 @@ export default class HudScene extends Phaser.Scene {
         const shield = Math.max(0, player.temporaryShield ?? 0);
         const level = player.level ?? 1;
         const kills = this.mainScene?.killCount ?? 0;
-        const elapsedMs = Math.max(0, (this.mainScene?.time?.now ?? 0) - (this.mainScene?.runStartTime ?? 0));
+        const elapsedMs = this.mainScene?.getElapsedRunMs?.() ?? 0;
         const totalSeconds = Math.floor(elapsedMs / 1000);
         const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const seconds = String(totalSeconds % 60).padStart(2, '0');

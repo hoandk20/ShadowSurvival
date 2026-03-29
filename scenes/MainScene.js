@@ -7,7 +7,6 @@ import { SKILL_CONFIG } from '../config/skill.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
 import MapManager from '../systems/mapsystem.js';
 import LootSystem from '../systems/LootSystem.js';
-import DamageText from '../entities/DamageText.js';
 import { DEFAULT_MAP_KEY } from '../config/map.js';
 import { preloadAllAssets, createAllAnimations } from '../utils/animationSystem.js';
 import { ELITE_CONFIGS, ELITE_KILL_MILESTONES } from '../config/elites.js';
@@ -24,6 +23,7 @@ import {
     spawnEnemyWithEliteChance
 } from '../config/stageScenarios.js';
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
+import SkillBehaviorPipeline from '../systems/skills/SkillBehaviorPipeline.js';
 import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 
 const SPAWN_PADDING = 50;
@@ -95,6 +95,7 @@ export default class MainScene extends Phaser.Scene {
             sparkScale: { min: 0.15, max: 0.3 },
             sparkDuration: { min: 120, max: 260 }
         });
+        this.skillBehaviorPipeline = new SkillBehaviorPipeline(this);
         this.lootSystem = new LootSystem(this);
         this.physics.add.overlap(this.player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
         this.player.once('player-dead', () => this.handlePlayerDeath());
@@ -149,6 +150,8 @@ export default class MainScene extends Phaser.Scene {
         this.keyboardNavigationActive = false;
         this.input.keyboard.on('keydown', this.handleCardNavigation, this);
         this.runStartTime = this.time.now;
+        this.levelUpPausedDurationMs = 0;
+        this.levelUpPauseStartedAt = null;
         this.registry.set('hasStartedGame', true);
         this.scene.get('HudScene')?.refreshInventory?.(this.inventoryItems);
     }
@@ -246,39 +249,7 @@ export default class MainScene extends Phaser.Scene {
         if (skill.config?.dropFromSky && skill.dropTarget && enemy !== skill.dropTarget) {
             return;
         }
-        if (enemy && enemy.takeDamage) {
-            const force = skill.config?.knockback ?? 0;
-            const distance = skill.config?.knockbackDistance ?? 0;
-            const limit = skill.numberKnockback ?? skill.config?.numberKnockback ?? Infinity;
-            const currentHits = skill.knockbackCount ?? 0;
-            if (currentHits >= limit) {
-                return;
-            }
-            skill.knockbackCount = currentHits + 1;
-            const dir = new Phaser.Math.Vector2(enemy.x - skill.x, enemy.y - skill.y);
-            if (dir.lengthSq() === 0) dir.set(1, 0);
-            dir.normalize();
-            const roll = skill.rollCriticalDamage();
-            skill.damage = roll.value;
-            enemy.takeDamage(skill.damage, force, dir, skill, { damageSource: skill }, skill.config);
-            const stunDuration = skill.stunDuration ?? skill.config?.stunDuration ?? 0;
-            if (stunDuration > 0) {
-                const rawColor = skill.config?.stunColor ?? 0x000000;
-                const tintColor = typeof rawColor === 'string'
-                    ? Phaser.Display.Color.HexStringToColor(rawColor).color
-                    : rawColor;
-                enemy.applyStun?.(stunDuration, tintColor);
-            }
-            new DamageText(this, enemy.x, enemy.y - (enemy.body?.height ?? 20), roll.value, {
-                color: roll.isCritical ? (skill.critColor ?? '#ffde59') : '#ffde59',
-                fontSize: '7px'
-            });
-        }
-        const bounced = skill.bounceFromEnemy?.(enemy) ?? false;
-        const retargeted = bounced ? false : (skill.retargetToNextEnemy?.() ?? false);
-        if (skill.config?.destroyOnHit && !bounced && !retargeted) {
-            skill.destroy();
-        }
+        this.skillBehaviorPipeline?.processHit(skill, enemy);
     }
 
 
@@ -984,6 +955,7 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
         this.isChoosingCard = true;
+        this.beginLevelUpTimerPause();
         this.physics.world.pause();
         const hudScene = this.scene.get('HudScene');
         hudScene?.showLevelUpSelection?.(baseCards, (selected) => this.onCardSelected(selected));
@@ -999,6 +971,7 @@ export default class MainScene extends Phaser.Scene {
         if (!this.isChoosingCard) return;
         this.clearCardFocus();
         this.isChoosingCard = false;
+        this.endLevelUpTimerPause();
         const hudScene = this.scene.get('HudScene');
         hudScene?.hideLevelUpSelection?.();
         this.upgradeOverlay = null;
@@ -1073,7 +1046,7 @@ export default class MainScene extends Phaser.Scene {
         this.resetTouchMoveState();
         this.physics.world.pause();
         this.scene.pause('HudScene');
-        const elapsedMs = Math.max(0, this.time.now - (this.runStartTime ?? this.time.now));
+        const elapsedMs = this.getElapsedRunMs();
         const totalSeconds = Math.floor(elapsedMs / 1000);
         const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const seconds = String(totalSeconds % 60).padStart(2, '0');
@@ -1083,6 +1056,26 @@ export default class MainScene extends Phaser.Scene {
             levelReached: this.player?.level ?? 1
         });
         this.scene.pause();
+    }
+
+    beginLevelUpTimerPause() {
+        if (this.levelUpPauseStartedAt !== null) return;
+        this.levelUpPauseStartedAt = this.time.now;
+    }
+
+    endLevelUpTimerPause() {
+        if (this.levelUpPauseStartedAt === null) return;
+        this.levelUpPausedDurationMs += Math.max(0, this.time.now - this.levelUpPauseStartedAt);
+        this.levelUpPauseStartedAt = null;
+    }
+
+    getElapsedRunMs() {
+        const now = this.time.now;
+        const baseElapsed = Math.max(0, now - (this.runStartTime ?? now));
+        const activePauseElapsed = this.levelUpPauseStartedAt === null
+            ? 0
+            : Math.max(0, now - this.levelUpPauseStartedAt);
+        return Math.max(0, baseElapsed - (this.levelUpPausedDurationMs ?? 0) - activePauseElapsed);
     }
 
     getWeightedCards(count) {
@@ -1197,6 +1190,17 @@ export default class MainScene extends Phaser.Scene {
                         return false;
                     }
                     if ((skillConfig.stunDuration ?? 0) <= 0) {
+                        return false;
+                    }
+                }
+
+                const explosionRadiusSkill = requirements.supportsExplosionRadius;
+                if (explosionRadiusSkill) {
+                    const skillConfig = SKILL_CONFIG[explosionRadiusSkill] ?? {};
+                    if (!this.player?.hasSkill(explosionRadiusSkill)) {
+                        return false;
+                    }
+                    if ((skillConfig.explosionRadius ?? 0) <= 0) {
                         return false;
                     }
                 }

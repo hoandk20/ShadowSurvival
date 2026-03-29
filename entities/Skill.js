@@ -3,6 +3,7 @@ import HolyAuraEffect from './effects/HolyAuraEffect.js';
 import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
 import IceParticleEffect from './effects/IceParticleEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
+import { resolveSkillBehaviorEntries } from '../systems/skills/skillBehaviorConfig.js';
 
 const EFFECT_CLASS_MAP = {
     auraGlow: HolyAuraEffect,
@@ -60,6 +61,12 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.baseRotation = 0;
         this.effectKey = config.effectKey ?? null;
         this.effectInstance = null;
+        this.explosionOnHit = config.explosionOnHit ?? false;
+        const explosionRadiusMultiplier = owner.getSkillExplosionRadiusMultiplier?.(skillType) ?? 1;
+        this.explosionRadius = Math.max(0, Math.round((config.explosionRadius ?? 0) * explosionRadiusMultiplier));
+        this.explosionDamageMultiplier = Math.max(0, config.explosionDamageMultiplier ?? 1);
+        this.explosionKnockbackMultiplier = Math.max(0, config.explosionKnockbackMultiplier ?? 1);
+        this.hasExploded = false;
         this.knockbackCount = 0;
         this.direction = new Phaser.Math.Vector2(0, 0);
         this.startX = 0;
@@ -76,6 +83,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
         this.critMultiplier = config.critMultiplier ?? 1.5;
         this.critColor = config.critColor ?? '#ffde59';
+        this.behaviorEntries = resolveSkillBehaviorEntries(config);
         const baseStunDuration = (config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1);
         const bonusEffectDuration = owner.getSkillEffectDurationBonus?.(skillType) ?? 0;
         this.stunDuration = Math.max(0, Math.round(baseStunDuration + bonusEffectDuration));
@@ -101,6 +109,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
     }
 
     cast() {
+        this.hasExploded = false;
         this.knockbackCount = 0;
         let x = this.owner.x;
         let y = this.owner.y;

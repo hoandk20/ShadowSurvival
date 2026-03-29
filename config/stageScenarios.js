@@ -2,7 +2,7 @@ const ELITE_MODIFIERS = {
     tank: {
         kind: 'self',
         apply(stats) {
-            stats.maxHealth *= 10;
+            stats.maxHealth *= 5;
             stats.knockbackResist *= 0.1;
         }
     },
@@ -11,7 +11,7 @@ const ELITE_MODIFIERS = {
         apply(stats) {
             stats.speed *= 5;
             stats.scale *= 0.6;
-            stats.damage -= 9;
+            stats.damage -= 7;
             stats.maxHealth *= 0.5;
             stats.knockbackResist *= 2;
         }
@@ -27,7 +27,7 @@ const ELITE_MODIFIERS = {
         kind: 'self',
         apply(stats) {
             stats.scale *= 2;
-            stats.maxHealth *= 15;
+            stats.maxHealth *= 10;
             stats.speed *= 0.5;
             stats.knockbackResist *= 0.1;
         }
@@ -35,53 +35,67 @@ const ELITE_MODIFIERS = {
     aura_speed: {
         kind: 'aura',
         applyAura(stats) {
-            stats.speed *= 0.7;
+            stats.speed *= 2;
         }
     },
     aura_damage: {
         kind: 'aura',
         applyAura(stats) {
-            stats.damage *= 0.7;
+            stats.damage *= 3;
         }
-        
+    },
+    aura_hp: {
+        kind: 'aura',
+        applyAura(stats) {
+            stats.maxHealth *= 2;
+        }
     }
 };
 
 const ELITE_MODIFIER_VISUALS = {
     tank: {
-        tint: 0x9aa0a6
+        tint: 0x7d7263
     },
     fast: {
-        tint: 0xf2f5f7,
+        tint: 0xf7fbff,
         trail: {
             tint: 0xffffff,
-            spawnInterval: 10,
-            lifetime: 80,
-            scale: 0.45,
-            minAlpha: 0.25
+            spawnInterval: 8,
+            lifetime: 60,
+            scale: 0.4,
+            minAlpha: 0.18
         }
     },
     berserk: {
-        tint: 0xff5252
+        tint: 0xff4a4a
     },
     giant: {
-        tint: 0x8b5a2b
+        tint: 0x9a6a3a
     },
     aura_speed: {
-        tint: 0xffe066,
+        tint: 0xdff7ff,
         aura: {
-            color: 0xffe066,
-            alpha: 0.11,
-            pulseScale: 1.04,
+            color: 0xc2f1ff,
+            alpha: 0.12,
+            pulseScale: 1.06,
             radius: 34
         }
     },
     aura_damage: {
-        tint: 0xff5252,
+        tint: 0xff6767,
         aura: {
-            color: 0xff5252,
-            alpha: 0.11,
-            pulseScale: 1.04,
+            color: 0xff5a5a,
+            alpha: 0.12,
+            pulseScale: 1.05,
+            radius: 34
+        }
+    },
+    aura_hp: {
+        tint: 0x7cff8e,
+        aura: {
+            color: 0x7cff8e,
+            alpha: 0.12,
+            pulseScale: 1.05,
             radius: 34
         }
     }
@@ -91,22 +105,25 @@ export const STAGE_SCENARIOS = {
     church_sanctuary: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.1,
-        enemyHealthPercentPerMinute: 2,
+        enemyHealthPercentPerMinute: 10,
         enemyUnlockTimeline: [
-             { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 6 },
-            { enemyType: 'rat', unlockAtMinute: 3, spawnWeight: 8 },
-            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 10 },
-            { enemyType: 'succubus', unlockAtMinute: 9, spawnWeight: 12 },
-            { enemyType: 'moth_woman', unlockAtMinute: 12, spawnWeight: 14 },
-            { enemyType: 'widow', unlockAtMinute: 15, spawnWeight: 16 },
-            { enemyType: 'kitsume', unlockAtMinute: 20, spawnWeight: 18 },
-            { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 20 },
+             { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 5 },
+            { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 10 },
+            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 15 },
+            { enemyType: 'succubus', unlockAtMinute: 9, spawnWeight: 20 },
+            { enemyType: 'moth_woman', unlockAtMinute: 12, spawnWeight: 25 },
+            { enemyType: 'widow', unlockAtMinute: 15, spawnWeight: 30 },
+            { enemyType: 'kitsume', unlockAtMinute: 20, spawnWeight: 35 },
+            { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 40 },
            
         ],
         elite: {
             baseChance: 0.001,
             chancePerMinute: 0.005,
             maxChance: 0.5,
+            lootTable: [
+                { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 }
+            ],
             baseStatMultipliers: {
                 maxHealth: 10,
                 damage: 1.5,

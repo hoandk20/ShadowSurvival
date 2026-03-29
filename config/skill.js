@@ -114,6 +114,11 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
+        behaviors: [
+            { type: 'directHit' },
+            { type: 'stunOnHit' },
+            { type: 'projectileResolution' }
+        ],
         damage: 8,
         duration: 800,
         cooldown: 2000,
@@ -260,12 +265,30 @@ export const SKILL_CONFIG = {
                 loop: false
             }
         },
+        behaviors: [
+            { type: 'directHit' },
+            {
+                type: 'explosionOnHit',
+                config: {
+                    radius: 84,
+                    damageMultiplier: 0.7,
+                    knockbackMultiplier: 0.55,
+                    tint: '#ffb066'
+                }
+            },
+            { type: 'projectileResolution' }
+        ],
         damage: 20,
         duration: 1800,
         cooldown: 2500,
         hitboxWidth: 50,
         hitboxHeight: 30,
         destroyOnHit: true,
+        explosionOnHit: true,
+        explosionRadius: 84,
+        explosionDamageMultiplier: 0.7,
+        explosionKnockbackMultiplier: 0.55,
+        explosionTint: '#ffb066',
         knockback: 140,
         knockbackDragFactor: 0.35,
         knockbackDragDuration: 300,

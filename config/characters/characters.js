@@ -30,7 +30,7 @@ export const CHARACTER_CONFIG = {
         defaultSkill: 'charm',
         hp: 100,
         armor: 1,
-        speed: 65,
+        speed: 75,
         size: { width: 20, height: 20 }
     },
     frost: {
@@ -75,7 +75,7 @@ export const CHARACTER_CONFIG = {
         hp: 75,
         armor: 1,
         speed: 82,
-        size: { width: 20, height: 20 }
+        size: { width: 30, height: 25 }
     },
     bodoi: {
         label: 'Bodoi',

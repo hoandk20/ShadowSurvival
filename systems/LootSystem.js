@@ -37,8 +37,31 @@ export default class LootSystem {
         return `#${integer.toString(16).padStart(6, '0')}`;
     }
 
-    spawnLoot(enemyType, x, y) {
-        const table = getLootTableForEnemy(enemyType);
+    buildLootTable(enemyType, enemy = null) {
+        const baseTable = getLootTableForEnemy(enemyType) ?? [];
+        if (!enemy?.isElite) {
+            return baseTable;
+        }
+        const eliteTable = this.scene?.stageScenario?.elite?.lootTable;
+        if (!Array.isArray(eliteTable) || !eliteTable.length) {
+            return baseTable;
+        }
+        const merged = new Map();
+        baseTable.forEach((entry) => {
+            if (entry?.itemKey) {
+                merged.set(entry.itemKey, { ...entry });
+            }
+        });
+        eliteTable.forEach((entry) => {
+            if (entry?.itemKey) {
+                merged.set(entry.itemKey, { ...entry });
+            }
+        });
+        return Array.from(merged.values());
+    }
+
+    spawnLoot(enemyType, x, y, enemy = null) {
+        const table = this.buildLootTable(enemyType, enemy);
         if (!table?.length) return;
         table.forEach(entry => {
             if (Math.random() > entry.chance) return;

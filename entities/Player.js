@@ -61,6 +61,7 @@ export default class Player extends BaseEntity {
         this.healthRegenPerSecond = 0;
         this.regenAccumulator = 0;
         this.temporaryShield = 0;
+        this.maxTemporaryShield = 0;
         this.shieldGainOnLevelUp = 0;
         this.shieldRegenAmount = 0;
         this.shieldRegenIntervalMs = 30000;
@@ -73,6 +74,7 @@ export default class Player extends BaseEntity {
         this.skillCooldownOffsets = {};
         this.skillAreaMultipliers = {};
         this.skillProjectileSpeedMultipliers = {};
+        this.skillExplosionRadiusMultipliers = {};
         this.skillStunDurationMultipliers = {};
         this.skillEffectDurationBonuses = {};
         this.skillKnockbackCountBonuses = {};
@@ -379,7 +381,7 @@ export default class Player extends BaseEntity {
         this.shieldRegenTimer += delta;
         while (this.shieldRegenTimer >= shieldRegenIntervalMs) {
             this.shieldRegenTimer -= shieldRegenIntervalMs;
-            this.grantShield(shieldRegenAmount);
+            this.recoverShield(shieldRegenAmount);
         }
     }
 
@@ -669,6 +671,9 @@ export default class Player extends BaseEntity {
             case 'skillProjectileSpeedPercent':
                 this.addSkillProjectileSpeedPercent(effect.skillKey, effect.value ?? 0);
                 break;
+            case 'skillExplosionRadiusPercent':
+                this.addSkillExplosionRadiusPercent(effect.skillKey, effect.value ?? 0);
+                break;
             case 'xpGainPercent':
                 this.xpGainMultiplier *= (1 + (effect.value ?? 0));
                 break;
@@ -835,6 +840,11 @@ export default class Player extends BaseEntity {
         this.skillProjectileSpeedMultipliers[skillKey] = (this.skillProjectileSpeedMultipliers[skillKey] ?? 1) * (1 + value);
     }
 
+    addSkillExplosionRadiusPercent(skillKey, value) {
+        if (!skillKey) return;
+        this.skillExplosionRadiusMultipliers[skillKey] = (this.skillExplosionRadiusMultipliers[skillKey] ?? 1) * (1 + value);
+    }
+
     addSkillStunDurationPercent(skillKey, value) {
         if (!skillKey) return;
         this.skillStunDurationMultipliers[skillKey] = (this.skillStunDurationMultipliers[skillKey] ?? 1) * (1 + value);
@@ -852,7 +862,13 @@ export default class Player extends BaseEntity {
 
     grantShield(value) {
         if (!value || value <= 0) return;
-        this.temporaryShield += value;
+        this.maxTemporaryShield += value;
+        this.temporaryShield = Math.min(this.maxTemporaryShield, this.temporaryShield + value);
+    }
+
+    recoverShield(value) {
+        if (!value || value <= 0 || (this.maxTemporaryShield ?? 0) <= 0) return;
+        this.temporaryShield = Math.min(this.maxTemporaryShield, this.temporaryShield + value);
     }
 
     getSkillDamageMultiplier(skillKey) {
@@ -865,6 +881,10 @@ export default class Player extends BaseEntity {
 
     getSkillProjectileSpeedMultiplier(skillKey) {
         return (this.skillProjectileSpeedMultipliers[skillKey] ?? 1) * (this.globalProjectileSpeedMultiplier ?? 1);
+    }
+
+    getSkillExplosionRadiusMultiplier(skillKey) {
+        return this.skillExplosionRadiusMultipliers[skillKey] ?? 1;
     }
 
     getSkillAreaMultiplier(skillKey) {

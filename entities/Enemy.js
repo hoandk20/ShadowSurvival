@@ -280,7 +280,7 @@ export default class Enemy extends BaseEntity {
         }
         this.scene?.events?.emit('enemy-dead', { enemy: this, source });
         if (this.scene?.lootSystem) {
-            this.scene.lootSystem.spawnLoot(this.type, this.x, this.y);
+            this.scene.lootSystem.spawnLoot(this.type, this.x, this.y, this);
         }
         this.destroy();
     }
@@ -465,7 +465,7 @@ export default class Enemy extends BaseEntity {
     }
 
     applyStun(duration, tint = 0x000000) {
-        if (!duration || this.isStunned || !this.active || !this.scene) return;
+        if (!duration || !this.active || !this.scene) return;
         this.isStunned = true;
         this.stunTint = tint;
         this.setTint(tint);
@@ -501,6 +501,10 @@ export default class Enemy extends BaseEntity {
     }
 
     restorePersistentTint() {
+        if (this.isStunned) {
+            this.setTint(this.stunTint ?? 0x000000);
+            return;
+        }
         if (this.isHacked) {
             this.setTint(this.hackTint ?? DEFAULT_HACK_TINT);
             return;

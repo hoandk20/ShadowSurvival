@@ -3,6 +3,7 @@ const itemCard = ({
     name,
     description,
     assetPath,
+    cardType = 'item',
     rarity = 'rare',
     weight = 4,
     stackLimit = 8,
@@ -17,6 +18,7 @@ const itemCard = ({
     name,
     description,
     assetPath,
+    cardType,
     rarity,
     group: group ?? key,
     effects,
@@ -26,6 +28,11 @@ const itemCard = ({
     inventoryKey: inventoryKey ?? key,
     inventoryName: inventoryName ?? name,
     inventoryMaxLevel
+});
+
+const passiveItemCard = (config) => itemCard({
+    ...config,
+    cardType: 'passive'
 });
 
 const createSkillUpgradeCards = ({
@@ -49,6 +56,7 @@ const createSkillUpgradeCards = ({
             name: `${name} Unlock`,
             description: `Unlock ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: unlockWeight,
             stackLimit: 1,
@@ -65,6 +73,7 @@ const createSkillUpgradeCards = ({
             name: `${name} Damage`,
             description: `+10% damage for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: damageWeight,
             stackLimit: 10,
@@ -81,6 +90,7 @@ const createSkillUpgradeCards = ({
             name: `${name} Cooldown`,
             description: `-0.15s cooldown for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: cooldownWeight,
             stackLimit: 10,
@@ -97,6 +107,7 @@ const createSkillUpgradeCards = ({
             name: `${name} Area`,
             description: `Increase ${name} area by 10%`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: areaWeight,
             stackLimit: 10,
@@ -114,6 +125,7 @@ const createSkillUpgradeCards = ({
             name: `${name} Object`,
             description: `+1 object for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: objectWeight,
             stackLimit: 10,
@@ -150,6 +162,7 @@ const createEffectSkillUpgradeCards = ({
             name: `${name} Unlock`,
             description: `Unlock ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: unlockWeight,
             stackLimit: 1,
@@ -166,6 +179,7 @@ const createEffectSkillUpgradeCards = ({
             name: `${name} Cooldown`,
             description: `-0.15s cooldown for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: cooldownWeight,
             stackLimit: 10,
@@ -182,6 +196,7 @@ const createEffectSkillUpgradeCards = ({
             name: `${name} Effect`,
             description: `+0.5s effect duration for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: effectDurationWeight,
             stackLimit: 10,
@@ -199,6 +214,7 @@ const createEffectSkillUpgradeCards = ({
             name: `${name} Object`,
             description: `+1 object for ${name}`,
             assetPath,
+            cardType: 'skill',
             rarity,
             weight: objectWeight,
             stackLimit: 10,
@@ -216,8 +232,98 @@ const createEffectSkillUpgradeCards = ({
     return cards;
 };
 
+const createExplosionSkillUpgradeCards = ({
+    baseKey,
+    name,
+    inventoryName = name,
+    assetPath,
+    skillKey,
+    rarity = 'rare',
+    unlockWeight = 5,
+    damageWeight = 4,
+    objectWeight = 4,
+    explosionRadiusWeight = 4,
+    damageValue = 0.1,
+    explosionRadiusValue = 0.15
+}) => {
+    const cards = [
+        itemCard({
+            key: `${baseKey}_unlock`,
+            name: `${name} Unlock`,
+            description: `Unlock ${name}`,
+            assetPath,
+            cardType: 'skill',
+            rarity,
+            weight: unlockWeight,
+            stackLimit: 1,
+            group: `${baseKey}_unlock`,
+            effects: [{ type: 'skillUnlock', skillKey }],
+            inventoryKey: baseKey,
+            inventoryName,
+            requirements: {
+                skillLocked: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_damage`,
+            name: `${name} Damage`,
+            description: `+10% damage for ${name}`,
+            assetPath,
+            cardType: 'skill',
+            rarity,
+            weight: damageWeight,
+            stackLimit: 10,
+            group: `${baseKey}_damage`,
+            effects: [{ type: 'skillDamagePercent', skillKey, value: damageValue }],
+            inventoryKey: baseKey,
+            inventoryName,
+            requirements: {
+                skillUnlocked: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_explosion`,
+            name: `${name} Blast`,
+            description: `+15% explosion radius for ${name}`,
+            assetPath,
+            cardType: 'skill',
+            rarity,
+            weight: explosionRadiusWeight,
+            stackLimit: 10,
+            group: `${baseKey}_explosion`,
+            effects: [{ type: 'skillExplosionRadiusPercent', skillKey, value: explosionRadiusValue }],
+            inventoryKey: baseKey,
+            inventoryName,
+            requirements: {
+                skillUnlocked: skillKey,
+                supportsExplosionRadius: skillKey
+            }
+        }),
+        itemCard({
+            key: `${baseKey}_object`,
+            name: `${name} Object`,
+            description: `+1 object for ${name}`,
+            assetPath,
+            cardType: 'skill',
+            rarity,
+            weight: objectWeight,
+            stackLimit: 10,
+            group: `${baseKey}_object`,
+            effects: [{ type: 'skillObject', skillKey, value: 1 }],
+            inventoryKey: baseKey,
+            inventoryName,
+            requirements: {
+                skillUnlocked: skillKey,
+                supportsMultipleObject: skillKey
+            }
+        })
+    ];
+
+    return cards;
+};
+
 export const CARD_CONFIG = [
-    itemCard({
+    passiveItemCard({
         key: 'armo',
         name: 'Armo',
         description: '+1 Armor',
@@ -247,7 +353,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'allSkillDurationMs', value: 1000 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'clownmask',
         name: 'Clown Mask',
         description: '+10% XP gained',
@@ -297,7 +403,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'projectileSpeedPercent', value: 0.1 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'heart',
         name: 'Heart',
         description: '+30% Max HP',
@@ -307,7 +413,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'maxHealthPercent', value: 0.3 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'plant',
         name: 'Plant',
         description: '+10% skill area, orbit radius, and projectile hitbox',
@@ -317,7 +423,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'allSkillAreaPercent', value: 0.1 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'leaf',
         name: 'Leaf',
         description: '+0.5 HP regen per second',
@@ -327,7 +433,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'healthRegenPerSecond', value: 0.5 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'shield_item',
         name: 'Shield',
         description: 'Gain 30 shield now, +10 shield every level up, and recover shield every 30s',
@@ -341,7 +447,7 @@ export const CARD_CONFIG = [
             { type: 'shieldRegen', value: 30, intervalMs: 30000 }
         ]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'shoe',
         name: 'Shoe',
         description: '+10% move speed',
@@ -351,7 +457,7 @@ export const CARD_CONFIG = [
         stackLimit: 8,
         effects: [{ type: 'speedPercent', value: 0.1 }]
     }),
-    itemCard({
+    passiveItemCard({
         key: 'sunflower',
         name: 'Sunflower',
         description: '+10% pickup radius',
@@ -376,6 +482,20 @@ export const CARD_CONFIG = [
         assetPath: 'assets/items/cross.png',
         skillKey: 'aura',
         rarity: 'rare'
+    }),
+    ...createExplosionSkillUpgradeCards({
+        baseKey: 'dragon_scale',
+        name: 'Flame',
+        inventoryName: 'Dragon Scale',
+        assetPath: 'assets/items/dragon_scale.png',
+        skillKey: 'flame',
+        rarity: 'legendary',
+        unlockWeight: 5,
+        damageWeight: 4,
+        objectWeight: 4,
+        explosionRadiusWeight: 4,
+        damageValue: 0.15,
+        explosionRadiusValue: 0.2
     }),
     ...createEffectSkillUpgradeCards({
         baseKey: 'icewarn',
@@ -443,7 +563,34 @@ export const CARD_CONFIG = [
 ];
 
 export const CARD_RARITY_STYLES = {
-    common: { border: 0x5d78a6, glow: 0x2a3f66, badge: 0x6f8bc2, text: '#d7e4ff' },
-    rare: { border: 0x9b6bcc, glow: 0x4c2f6a, badge: 0xb089eb, text: '#f0ddff' },
-    legendary: { border: 0xc99c4b, glow: 0x6a4b1b, badge: 0xe0b86a, text: '#fff0c6' }
+    common: {
+        border: 0x9b9074,
+        glow: 0x4b3a2a,
+        badge: 0xb6ab90,
+        text: '#efe6c8',
+        panel: 0x241b14,
+        accent: 0x4f4438,
+        shadow: 0x120d09,
+        outer: 0xd8c8a0
+    },
+    rare: {
+        border: 0x6fc8d8,
+        glow: 0x183742,
+        badge: 0x9fe8f2,
+        text: '#dcfaff',
+        panel: 0x16242b,
+        accent: 0x274450,
+        shadow: 0x091217,
+        outer: 0xc4fbff
+    },
+    legendary: {
+        border: 0xe3bb59,
+        glow: 0x523313,
+        badge: 0xf6d680,
+        text: '#fff2bf',
+        panel: 0x2b1c0d,
+        accent: 0x5b3d18,
+        shadow: 0x140d05,
+        outer: 0xffefad
+    }
 };

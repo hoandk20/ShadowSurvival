@@ -24,66 +24,98 @@ export default class Card extends Phaser.GameObjects.Container {
         const bgHeight = height + CARD_LAYOUT.padding;
         const rarity = cardConfig.rarity || 'common';
         const style = CARD_RARITY_STYLES[rarity] || CARD_RARITY_STYLES.common;
-        const glow = scene.add.rectangle(0, 0, bgWidth + 18, bgHeight + 18, style.glow)
+        const drawFrame = (graphics, xPos, yPos, frameWidth, frameHeight, palette, inset = 0) => {
+            const left = xPos - frameWidth / 2;
+            const top = yPos - frameHeight / 2;
+            graphics.fillStyle(palette.shadow, 1);
+            graphics.fillRect(left + inset, top + inset, frameWidth - inset * 2, frameHeight - inset * 2);
+            graphics.fillStyle(palette.panel, 1);
+            graphics.fillRect(left + 4 + inset, top + 4 + inset, frameWidth - 8 - inset * 2, frameHeight - 8 - inset * 2);
+            graphics.lineStyle(4, 0x000000, 1);
+            graphics.strokeRect(left + inset, top + inset, frameWidth - inset * 2, frameHeight - inset * 2);
+            graphics.lineStyle(2, palette.border, 1);
+            graphics.strokeRect(left + 2 + inset, top + 2 + inset, frameWidth - 4 - inset * 2, frameHeight - 4 - inset * 2);
+            graphics.lineStyle(2, palette.accent, 1);
+            graphics.strokeRect(left + 6 + inset, top + 6 + inset, frameWidth - 12 - inset * 2, frameHeight - 12 - inset * 2);
+            graphics.fillStyle(0xffffff, 0.08);
+            graphics.fillRect(left + 6 + inset, top + 6 + inset, frameWidth - 12 - inset * 2, 8);
+        };
+        const glow = scene.add.rectangle(0, 0, bgWidth + 24, bgHeight + 24, style.glow)
             .setOrigin(0.5)
-            .setAlpha(0.12);
-        const background = scene.add.rectangle(0, 0, bgWidth, bgHeight, 0x0b1220)
-            .setOrigin(0.5)
-            .setStrokeStyle(4, style.border);
-        const gradient = scene.add.graphics();
-        gradient.fillStyle(0x0b1220, 0.98);
-        gradient.fillRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight);
-        gradient.fillRoundedRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, 6);
-        const vignette = scene.add.graphics();
-        vignette.fillStyle(0x000000, 0.08);
-        vignette.fillEllipse(0, 0, bgWidth * 0.92, bgHeight * 0.88);
-        vignette.setBlendMode(Phaser.BlendModes.MULTIPLY);
-        const fog = scene.add.rectangle(0, 0, bgWidth + 20, bgHeight + 20, 0xffffff, 0.02)
+            .setAlpha(0.22);
+        const outerFrame = scene.add.graphics();
+        outerFrame.lineStyle(2, style.outer ?? style.border, 0.95);
+        outerFrame.strokeRect(-bgWidth / 2 - 6, -bgHeight / 2 - 6, bgWidth + 12, bgHeight + 12);
+        outerFrame.lineStyle(2, 0x000000, 0.9);
+        outerFrame.strokeRect(-bgWidth / 2 - 8, -bgHeight / 2 - 8, bgWidth + 16, bgHeight + 16);
+        const outerShadow = scene.add.rectangle(4, 5, bgWidth + 16, bgHeight + 16, 0x000000, 0.14)
             .setOrigin(0.5);
-        const accentBar = scene.add.rectangle(0, -bgHeight / 2 + 22, bgWidth - 36, 22, 0x324766)
+        const frame = scene.add.graphics();
+        drawFrame(frame, 0, 0, bgWidth, bgHeight, style);
+        const headerBar = scene.add.rectangle(0, -bgHeight / 2 + 20, bgWidth - 20, 22, style.accent)
             .setOrigin(0.5);
+        const headerShadow = scene.add.rectangle(0, -bgHeight / 2 + 24, bgWidth - 28, 10, 0x000000, 0.18)
+            .setOrigin(0.5);
+        const pixelStripes = scene.add.graphics();
+        pixelStripes.fillStyle(style.badge, 0.3);
+        for (let i = 0; i < 10; i += 1) {
+            pixelStripes.fillRect(-bgWidth / 2 + 16 + i * 22, -bgHeight / 2 + 14, 10, 4);
+        }
         const iconContainer = scene.add.container(-bgWidth / 2 + 78, 4);
-        const iconGlow = scene.add.circle(0, 0, 40, style.glow).setAlpha(0.12);
-        const iconRing = scene.add.circle(0, 0, 32, 0x0f1724).setStrokeStyle(2, style.border);
+        const iconFrame = scene.add.graphics();
+        drawFrame(iconFrame, 0, 0, 82, 82, {
+            border: style.border,
+            accent: style.badge,
+            panel: style.shadow,
+            shadow: 0x050403
+        });
+        const iconGlow = scene.add.rectangle(0, 0, 70, 70, style.glow, 0.22).setOrigin(0.5);
         const iconKey = `card_icon_${cardConfig.key}`;
         const iconTexture = scene.textures.exists(iconKey) ? iconKey : '__missing_texture__';
         const iconImage = scene.add.image(0, 0, iconTexture)
-            .setDisplaySize(58, 58)
+            .setDisplaySize(56, 56)
             .setAngle(cardConfig.iconRotation || 0)
             .setOrigin(0.5)
-            .setTint(0xf4f7ff);
-        iconContainer.add([iconGlow, iconRing, iconImage]);
-        const shadowLayer = scene.add.rectangle(0, 0, 76, 76, 0x020103)
+            .setTint(0xf8f1d7);
+        const shadowLayer = scene.add.rectangle(2, 3, 58, 58, 0x020103)
             .setOrigin(0.5)
-            .setAlpha(0.1);
-        iconContainer.add(shadowLayer);
+            .setAlpha(0.35);
+        iconContainer.add([iconFrame, iconGlow, shadowLayer, iconImage]);
         const textStartX = -bgWidth / 2 + 160;
         const availableTextWidth = bgWidth - (textStartX + bgWidth / 2 - 36);
         const textWidth = Math.max(170, Math.min(280, availableTextWidth));
         const title = scene.add.text(textStartX, -64, cardConfig.name, {
-            fontSize: '26px',
+            fontSize: '24px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#eff5ff',
+            color: style.text,
             stroke: '#000000',
-            strokeThickness: 4
+            strokeThickness: 5
         }).setOrigin(0, 0);
-        title.setShadow(2, 2, '#000000', 4, true, true);
+        title.setShadow(3, 3, '#000000', 0, false, true);
         const description = scene.add.text(textStartX, -8, cardConfig.description, {
-            fontSize: '18px',
+            fontSize: '17px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#f3f8ff',
+            color: '#f4e8c5',
             align: 'left',
             wordWrap: { width: textWidth },
             stroke: '#000000',
-            strokeThickness: 3
+            strokeThickness: 4
         }).setOrigin(0, 0);
-        description.setLineSpacing(6);
-        description.setShadow(2, 2, '#000000', 3, true, true);
+        description.setLineSpacing(4);
+        description.setShadow(2, 2, '#000000', 0, false, true);
+        const infoPanel = scene.add.graphics();
+        drawFrame(infoPanel, textStartX + textWidth / 2 - 2, 26, textWidth + 22, 86, {
+            border: style.accent,
+            accent: style.shadow,
+            panel: 0x1a1410,
+            shadow: 0x080604
+        });
+        infoPanel.setAlpha(0.9);
         const hitArea = scene.add.zone(0, 0, bgWidth, bgHeight).setOrigin(0.5);
         hitArea.setInteractive();
-        this.add([glow, gradient, background, vignette, fog, accentBar, iconContainer, title, description, hitArea]);
+        this.add([glow, outerShadow, outerFrame, frame, headerBar, headerShadow, pixelStripes, iconContainer, infoPanel, title, description, hitArea]);
         scene.add.existing(this);
         this.setSize(width, height);
         this.baseScale = cardScale;
@@ -95,18 +127,18 @@ export default class Card extends Phaser.GameObjects.Container {
 
         scene.tweens.add({
             targets: glow,
-            alpha: { from: 0.2, to: 0.55 },
+            alpha: { from: 0.2, to: 0.4 },
             yoyo: true,
             repeat: -1,
-            duration: 2400,
+            duration: 1600,
             ease: 'Sine.easeInOut'
         });
         scene.tweens.add({
             targets: iconGlow,
-            alpha: { from: 0.1, to: 0.4 },
+            alpha: { from: 0.12, to: 0.28 },
             yoyo: true,
             repeat: -1,
-            duration: 2000,
+            duration: 1200,
             ease: 'Sine.easeInOut'
         });
 
