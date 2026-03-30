@@ -63,6 +63,15 @@ export default class Player extends BaseEntity {
         this.regenAccumulator = 0;
         this.temporaryShield = 0;
         this.maxTemporaryShield = 0;
+        this.itemShieldValue = 0;
+        this.itemShieldResetAmount = 0;
+        this.itemShieldResetIntervalMs = 30000;
+        this.itemShieldTimer = 0;
+        this.aquaShieldValue = 0;
+        this.aquaShieldResetAmount = 100;
+        this.aquaShieldResetIntervalMs = 30000;
+        this.aquaShieldTimer = 0;
+        this.aquaShieldActive = false;
         this.shieldGainOnLevelUp = 0;
         this.shieldGainOnLevelUpBySource = {};
         this.shieldRegenAmount = 0;
@@ -95,6 +104,7 @@ export default class Player extends BaseEntity {
         this.wasMovingLastFrame = false;
         this.lastMoveDirection = new Phaser.Math.Vector2(1, 0);
         this.activeSingleOrbitSkill = null;
+        this.lastTrackedPosition = new Phaser.Math.Vector2(x, y);
 
         this.setCharacter(resolvedKey);
         this.motionTrailEffect = new MotionTrailEffect(scene, this);
@@ -156,8 +166,15 @@ export default class Player extends BaseEntity {
         }
         const skillDefinition = this.getSkillConfig(skillType) ?? {};
         const alignWithMovement = skillDefinition.alignWithMovement ?? false;
+        const timeNow = this.scene?.time?.now ?? now;
+        const hasRotatingCast = typeof skillDefinition.castRotationSpeed === 'number';
+        const rotatingCastBaseAngle = hasRotatingCast
+            ? (skillDefinition.castRotationStartAngle ?? 0) + (skillDefinition.castRotationSpeed * timeNow) / 1000
+            : null;
         const baseAlignAngle = alignWithMovement
-            ? Math.atan2(this.lastMoveDirection.y, this.lastMoveDirection.x)
+            ? (hasRotatingCast
+                ? rotatingCastBaseAngle
+                : Math.atan2(movementDirection.y, movementDirection.x))
             : 0;
         const dropFromSky = skillDefinition.dropFromSky ?? false;
         const skyHeight = skillDefinition.skyHeight ?? 400;
@@ -291,7 +308,10 @@ export default class Player extends BaseEntity {
             spawnAll();
         }
 
-        this.lastSkillCastTimes[skillType] = now;
+        const skillDuration = this.getSkillDuration(skillType);
+        this.lastSkillCastTimes[skillType] = skillDefinition.category === 'orbit'
+            ? now + skillDuration
+            : now;
         return attackDuration;
     }
 
@@ -299,6 +319,7 @@ export default class Player extends BaseEntity {
     update(time, delta) {
         if (this.isDead) return;
 
+        this.trackMovedDistance();
         this.ensureVisibleState();
         // Handle input
         let inputX = 0;
@@ -369,9 +390,25 @@ export default class Player extends BaseEntity {
         this.smoothExpBar(delta);
         this.updateRegeneration(delta);
         this.updateShieldRegeneration(delta);
+        this.updateItemShield(delta);
+        this.updateAquaShield(delta);
         this.attractLoot(delta);
         super.update(time, delta);
         this.wasMovingLastFrame = isMoving;
+        this.lastTrackedPosition.set(this.x, this.y);
+    }
+
+    trackMovedDistance() {
+        const scene = this.scene;
+        if (!scene) return;
+        const previous = this.lastTrackedPosition;
+        if (!previous) {
+            this.lastTrackedPosition = new Phaser.Math.Vector2(this.x, this.y);
+            return;
+        }
+        const movedDistance = Phaser.Math.Distance.Between(previous.x, previous.y, this.x, this.y);
+        if (!Number.isFinite(movedDistance) || movedDistance <= 0) return;
+        scene.totalMovedDistance = (scene.totalMovedDistance ?? 0) + movedDistance;
     }
 
     updateRegeneration(delta) {
@@ -397,6 +434,41 @@ export default class Player extends BaseEntity {
         }
     }
 
+    updateItemShield(delta) {
+        const shieldResetAmount = this.itemShieldResetAmount ?? 0;
+        const shieldResetIntervalMs = this.itemShieldResetIntervalMs ?? 0;
+        if (!shieldResetAmount || shieldResetAmount <= 0 || !shieldResetIntervalMs || shieldResetIntervalMs <= 0 || this.isDead) {
+            this.itemShieldValue = 0;
+            this.itemShieldTimer = 0;
+            return;
+        }
+        this.itemShieldTimer += delta;
+        while (this.itemShieldTimer >= shieldResetIntervalMs) {
+            this.itemShieldTimer -= shieldResetIntervalMs;
+            this.itemShieldValue = shieldResetAmount;
+        }
+    }
+
+    updateAquaShield(delta) {
+        if (!this.hasSkill?.('aqua_shield') || this.isDead) {
+            this.aquaShieldActive = false;
+            this.aquaShieldValue = 0;
+            this.aquaShieldTimer = 0;
+            return;
+        }
+        if (!this.aquaShieldActive) {
+            this.aquaShieldActive = true;
+            this.aquaShieldValue = this.aquaShieldResetAmount;
+            this.aquaShieldTimer = 0;
+            return;
+        }
+        this.aquaShieldTimer += delta;
+        while (this.aquaShieldTimer >= this.aquaShieldResetIntervalMs) {
+            this.aquaShieldTimer -= this.aquaShieldResetIntervalMs;
+            this.aquaShieldValue = this.aquaShieldResetAmount;
+        }
+    }
+
     attractLoot(delta) {
         const scene = this.scene;
         if (!scene) return;
@@ -408,13 +480,17 @@ export default class Player extends BaseEntity {
         const speed = LOOT_CONFIG.magnetSpeed ?? 0;
         const threshold = LOOT_CONFIG.magnetThreshold ?? 0;
         if (radius <= 0 || speed <= 0) return;
-        const items = group.getChildren();
+        const items = this.getNearbyLootItems(radius);
+        const radiusSq = radius * radius;
+        const thresholdSq = threshold * threshold;
         for (const item of items) {
             if (!item || !item.active || item.collected) continue;
             item.isMagnetized = false;
-            const dist = Phaser.Math.Distance.Between(this.x, this.y, item.x, item.y);
-            if (dist > radius) continue;
-            if (dist <= threshold) {
+            const dx = this.x - item.x;
+            const dy = this.y - item.y;
+            const distSq = (dx * dx) + (dy * dy);
+            if (distSq > radiusSq) continue;
+            if (distSq <= thresholdSq) {
                 if (item.body) {
                     item.body.setVelocity(0, 0);
                 }
@@ -432,6 +508,32 @@ export default class Player extends BaseEntity {
                 item.isMagnetized = true;
             }
         }
+    }
+
+    getNearbyLootItems(radius) {
+        const scene = this.scene;
+        const lootSystem = scene?.lootSystem;
+        const group = lootSystem?.itemGroup;
+        if (!scene || !group?.getChildren) return [];
+
+        const overlapBodies = scene.physics?.overlapCirc?.(this.x, this.y, radius, true, true);
+        if (Array.isArray(overlapBodies) && overlapBodies.length) {
+            return overlapBodies
+                .map((body) => body?.gameObject)
+                .filter((item) => item && group.contains?.(item));
+        }
+
+        const items = group.getChildren();
+        const nearbyItems = [];
+        for (const item of items) {
+            if (!item || !item.active || item.collected) continue;
+            const dx = Math.abs(this.x - item.x);
+            if (dx > radius) continue;
+            const dy = Math.abs(this.y - item.y);
+            if (dy > radius) continue;
+            nearbyItems.push(item);
+        }
+        return nearbyItems;
     }
 
     getAutoAimTarget() {
@@ -484,6 +586,16 @@ export default class Player extends BaseEntity {
         if (this.isDead) return;
         const mitigatedDamage = Math.max(1, Math.round((amount ?? 0) - (this.armor ?? DEFAULT_CHARACTER_ARMOR)));
         let remainingDamage = mitigatedDamage;
+        if (this.itemShieldValue > 0) {
+            const absorbedDamage = Math.min(this.itemShieldValue, remainingDamage);
+            this.itemShieldValue -= absorbedDamage;
+            remainingDamage -= absorbedDamage;
+        }
+        if (this.aquaShieldValue > 0) {
+            const absorbedDamage = Math.min(this.aquaShieldValue, remainingDamage);
+            this.aquaShieldValue -= absorbedDamage;
+            remainingDamage -= absorbedDamage;
+        }
         if (this.temporaryShield > 0) {
             const absorbedDamage = Math.min(this.temporaryShield, remainingDamage);
             this.temporaryShield -= absorbedDamage;
@@ -701,6 +813,9 @@ export default class Player extends BaseEntity {
             case 'shieldGrant':
                 this.grantShield(effect.value ?? 0);
                 break;
+            case 'shieldResetPool':
+                this.syncItemShieldReset(effect, context.cardConfig);
+                break;
             case 'shieldOnLevelUp':
                 this.syncShieldGainOnLevelUp(effect, context.cardConfig);
                 break;
@@ -745,6 +860,31 @@ export default class Player extends BaseEntity {
         this.shieldGainOnLevelUpBySource[inventoryKey] = Math.max(0, (effect.value ?? 0) * currentLevel);
         this.shieldGainOnLevelUp = Object.values(this.shieldGainOnLevelUpBySource)
             .reduce((sum, value) => sum + (value ?? 0), 0);
+    }
+
+    syncItemShieldReset(effect = {}, cardConfig = null) {
+        const inventoryKey = cardConfig?.inventoryKey ?? cardConfig?.key ?? effect.inventoryKey ?? null;
+        const currentLevel = this.scene?.inventoryItemLevels?.[inventoryKey] ?? 0;
+        if (!inventoryKey || currentLevel <= 0) {
+            this.itemShieldResetAmount = 0;
+            this.itemShieldValue = 0;
+            this.itemShieldTimer = 0;
+            return;
+        }
+
+        const baseValue = Math.max(0, effect.baseValue ?? 0);
+        const perLevelValue = Math.max(0, effect.perLevelValue ?? 0);
+        const maxValue = Math.max(baseValue, effect.maxValue ?? baseValue);
+        const shieldAmount = currentLevel >= 8
+            ? maxValue
+            : Math.min(maxValue, baseValue + Math.max(0, currentLevel - 1) * perLevelValue);
+
+        this.itemShieldResetAmount = shieldAmount;
+        if (typeof effect.intervalMs === 'number' && effect.intervalMs > 0) {
+            this.itemShieldResetIntervalMs = effect.intervalMs;
+        }
+        this.itemShieldValue = shieldAmount;
+        this.itemShieldTimer = 0;
     }
 
     getActiveSkillKey() {
@@ -939,12 +1079,15 @@ export default class Player extends BaseEntity {
             delete store[sourceSkillKey];
         });
 
-        if (this.skillObjectCounts[sourceSkillKey] !== undefined) {
+        const sourceSkillObjectCount = this.getSkillObjectCount(sourceSkillKey);
+        if (sourceSkillObjectCount !== undefined) {
             const nextCount = Math.min(
-                this.skillObjectCounts[sourceSkillKey],
+                sourceSkillObjectCount,
                 this.getSkillObjectMaxCount(evolvedSkillKey)
             );
             this.skillObjectCounts[evolvedSkillKey] = Math.max(1, nextCount);
+        }
+        if (this.skillObjectCounts[sourceSkillKey] !== undefined) {
             delete this.skillObjectCounts[sourceSkillKey];
         }
 
@@ -1042,6 +1185,10 @@ export default class Player extends BaseEntity {
     recoverShield(value) {
         if (!value || value <= 0 || (this.maxTemporaryShield ?? 0) <= 0) return;
         this.temporaryShield = Math.min(this.maxTemporaryShield, this.temporaryShield + value);
+    }
+
+    getTotalShield() {
+        return Math.max(0, (this.temporaryShield ?? 0) + (this.itemShieldValue ?? 0) + (this.aquaShieldValue ?? 0));
     }
 
     getSkillDamageMultiplier(skillKey) {

@@ -62,11 +62,14 @@ function buildProgressEntries(hudScene, item) {
     const skillKey = resolveCurrentSkillKeyForInventoryItem(item, activeSkillKeys);
     const inventoryLevels = scene.inventoryItemLevels ?? {};
     const skillObjectSpawnCounts = scene.skillObjectSpawnCounts ?? {};
+    const skillHitCounts = scene.skillHitCounts ?? {};
+    const totalMovedDistance = scene.totalMovedDistance ?? 0;
     const evolutionSystem = scene.skillEvolutionSystem;
     const hiddenSystem = scene.hiddenSkillUnlockSystem;
     const completedHidden = hiddenSystem?.completedUnlockKeys ?? new Set();
     const pendingElite = evolutionSystem?.pendingEliteKillRequirements ?? new Map();
     const killAnchors = hiddenSystem?.killAnchors ?? new Map();
+    const skillHitAnchors = hiddenSystem?.skillHitAnchors ?? new Map();
     const killCount = scene.killCount ?? 0;
     const eliteKillCount = scene.eliteKillCount ?? 0;
 
@@ -93,9 +96,9 @@ function buildProgressEntries(hudScene, item) {
         if (entry.sourceSkillKey && !activeSkillKeys.includes(entry.sourceSkillKey)) return;
 
         const lines = [];
-        if (entry.inventoryKey || entry.requiredLevel !== undefined) {
+        if (entry.requiredLevel !== undefined) {
             const requiredInventoryKey = entry.inventoryKey ?? entry.sourceSkillKey;
-            const requiredLevel = Math.max(1, entry.requiredLevel ?? 8);
+            const requiredLevel = Math.max(1, entry.requiredLevel);
             const currentLevel = inventoryLevels[requiredInventoryKey] ?? 0;
             lines.push(`${getInventoryItemLabel(requiredInventoryKey)} Lv ${Math.min(currentLevel, requiredLevel)}/${requiredLevel}`);
         }
@@ -105,6 +108,10 @@ function buildProgressEntries(hudScene, item) {
         if (typeof entry.requiredSkillObjectSpawns === 'number') {
             const progress = skillObjectSpawnCounts[entry.sourceSkillKey] ?? 0;
             lines.push(`Card ${Math.min(progress, entry.requiredSkillObjectSpawns)}/${entry.requiredSkillObjectSpawns}`);
+        }
+        if (typeof entry.requiredSkillHits === 'number') {
+            const progress = skillHitCounts[entry.sourceSkillKey] ?? 0;
+            lines.push(`Hit ${Math.min(progress, entry.requiredSkillHits)}/${entry.requiredSkillHits}`);
         }
         if (typeof entry.requiredEliteKillsAfterReady === 'number') {
             const armedAt = pendingElite.get(requirementKey);
@@ -121,6 +128,7 @@ function buildProgressEntries(hudScene, item) {
             entry.sourceSkillKey === skillKey
             || targetSkillKey === skillKey
             || entry.requiredKillsFromSkillKey === skillKey
+            || entry.requiredHitsFromSkillKey === skillKey
             || entry.requiredSkillKey === skillKey
             || entry.requiredAnySkillKeys?.includes(skillKey)
         );
@@ -147,6 +155,24 @@ function buildProgressEntries(hudScene, item) {
         if (typeof entry.requiredLevel === 'number') {
             const level = player.level ?? 1;
             lines.push(`Player Lv ${Math.min(level, entry.requiredLevel)}/${entry.requiredLevel}`);
+        }
+        if (entry.inventoryKey || entry.requiredItemLevel !== undefined) {
+            const requiredInventoryKey = entry.inventoryKey ?? targetSkillKey;
+            const requiredItemLevel = Math.max(1, entry.requiredItemLevel ?? 1);
+            const currentLevel = inventoryLevels[requiredInventoryKey] ?? 0;
+            lines.push(`${getInventoryItemLabel(requiredInventoryKey)} Lv ${Math.min(currentLevel, requiredItemLevel)}/${requiredItemLevel}`);
+        }
+        if (typeof entry.requiredSkillHits === 'number') {
+            const sourceSkillKey = entry.requiredHitsFromSkillKey ?? entry.requiredSkillKey ?? skillKey;
+            let progress = skillHitCounts[sourceSkillKey] ?? 0;
+            if (entry.requiredHitsFromSkillKey) {
+                const anchor = skillHitAnchors.get(entry.key) ?? progress;
+                progress = Math.max(0, progress - anchor);
+            }
+            lines.push(`Hit ${Math.min(progress, entry.requiredSkillHits)}/${entry.requiredSkillHits}`);
+        }
+        if (typeof entry.requiredMovedDistance === 'number') {
+            lines.push(`Move ${Math.floor(Math.min(totalMovedDistance, entry.requiredMovedDistance))}/${entry.requiredMovedDistance}`);
         }
         pushEntry('Evolution Progress', lines, completed);
     });

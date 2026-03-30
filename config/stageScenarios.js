@@ -13,7 +13,7 @@ const ELITE_MODIFIERS = {
             stats.scale *= 0.6;
             stats.damage -= 7;
             stats.maxHealth *= 0.5;
-            stats.knockbackResist *= 2;
+            stats.knockbackResist *= 1.2;
         }
     },
     berserk: {
@@ -30,24 +30,6 @@ const ELITE_MODIFIERS = {
             stats.maxHealth *= 4;
             stats.speed *= 0.5;
             stats.knockbackResist *= 0.1;
-        }
-    },
-    aura_speed: {
-        kind: 'aura',
-        applyAura(stats) {
-            stats.speed *= 2;
-        }
-    },
-    aura_damage: {
-        kind: 'aura',
-        applyAura(stats) {
-            stats.damage *= 2;
-        }
-    },
-    aura_hp: {
-        kind: 'aura',
-        applyAura(stats) {
-            stats.maxHealth *= 2;
         }
     }
 };
@@ -71,33 +53,6 @@ const ELITE_MODIFIER_VISUALS = {
     },
     giant: {
         tint: 0x9a6a3a
-    },
-    aura_speed: {
-        tint: 0xdff7ff,
-        aura: {
-            color: 0xc2f1ff,
-            alpha: 0.12,
-            pulseScale: 1.06,
-            radius: 34
-        }
-    },
-    aura_damage: {
-        tint: 0xff6767,
-        aura: {
-            color: 0xff5a5a,
-            alpha: 0.12,
-            pulseScale: 1.05,
-            radius: 34
-        }
-    },
-    aura_hp: {
-        tint: 0x7cff8e,
-        aura: {
-            color: 0x7cff8e,
-            alpha: 0.12,
-            pulseScale: 1.05,
-            radius: 34
-        }
     }
 };
 
@@ -106,19 +61,20 @@ const SHARED_ELITE_CONFIG = {
     chancePerMinute: 0.003,
     maxChance: 0.5,
     lootTable: [
-        { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 }
+        { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 },
+        { itemKey: 'health_flask', chance: 0.1, minAmount: 2, maxAmount: 3 }
     ],
     baseStatMultipliers: {
         maxHealth: 7,
         damage: 1.5,
         speed: 1.5,
-        scale: 1.2
+        scale: 1.2,
+        stunResist: 0.3
     },
     modifierCount: {
         min: 1,
         max: 1
     },
-    auraRadius: 120,
     tint: 0xffd166,
     modifiedTint: 0x5da9ff,
     trailTint: 0xffef99,
@@ -133,11 +89,21 @@ const SHARED_ELITE_CONFIG = {
 const SHARED_WAVE_CONFIG = [
     {
         id: 'opening_swarm',
-        startAtMs: 50000,
-        intervalMs: 40000,
+        startAtMs: 60000,
+        intervalMs: 30000,
         count: 50,
         clusterRadius: 60
     }
+];
+
+const SHARED_ENEMY_HEALTH_MILESTONES = [
+    { minute: 3, setMultiplier: 1.5 },
+    { minute: 5, setMultiplier: 2 },
+    { minute: 7, setMultiplier: 2.5 },
+    { minute: 10, setMultiplier: 3 },
+    { minute: 15, setMultiplier: 5 },
+    { minute: 20, setMultiplier: 10 },
+    { minute: 25, setMultiplier: 15 }
 ];
 
 function createEliteConfig(overrides = {}) {
@@ -166,20 +132,38 @@ function createWaveConfig(prefix, overrides = []) {
 }
 
 export const STAGE_SCENARIOS = {
+    maprock_field: {
+        normalSpawnPerSecond: 0.5,
+        normalSpawnPerSecondPerMinute: 0.7,
+        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
+        enemyUnlockTimeline: [
+            { enemyType: 'skeleton', unlockAtMinute: 0, spawnWeight: 1 },
+            { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 2 },
+            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 3 },
+            { enemyType: 'worm', unlockAtMinute: 9, spawnWeight: 5 },
+            { enemyType: 'rat', unlockAtMinute: 12, spawnWeight: 8 },
+            { enemyType: 'succubus', unlockAtMinute: 15, spawnWeight: 13 },
+            { enemyType: 'widow', unlockAtMinute: 18, spawnWeight: 21 },
+            { enemyType: 'mummy', unlockAtMinute: 21, spawnWeight: 34 }
+        ],
+        elite: createEliteConfig({
+            maxActive: 10
+        }),
+        waves: createWaveConfig('maprock')
+    },
     church_sanctuary: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthPercentPerMinute: 8,
+        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
         enemyUnlockTimeline: [
-             { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 5 },
-            { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 10 },
-            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 15 },
-            { enemyType: 'succubus', unlockAtMinute: 9, spawnWeight: 20 },
-            { enemyType: 'moth_woman', unlockAtMinute: 12, spawnWeight: 25 },
-            { enemyType: 'widow', unlockAtMinute: 15, spawnWeight: 30 },
-            { enemyType: 'kitsume', unlockAtMinute: 20, spawnWeight: 35 },
-            { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 40 },
-           
+            { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 1 },
+            { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 2 },
+            { enemyType: 'bat', unlockAtMinute: 6, spawnWeight: 3 },
+            { enemyType: 'succubus', unlockAtMinute: 9, spawnWeight: 5 },
+            { enemyType: 'moth_woman', unlockAtMinute: 12, spawnWeight: 8 },
+            { enemyType: 'widow', unlockAtMinute: 15, spawnWeight: 13 },
+            { enemyType: 'kitsume', unlockAtMinute: 20, spawnWeight: 21 },
+            { enemyType: 'zombie_woman', unlockAtMinute: 22, spawnWeight: 34 }
         ],
         elite: createEliteConfig({
             maxActive: 10
@@ -189,17 +173,17 @@ export const STAGE_SCENARIOS = {
     inside_church: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthPercentPerMinute: 8,
+        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
         enemyUnlockTimeline: [
-            { enemyType: 'bat', unlockAtMinute: 0, spawnWeight: 8 },
-            { enemyType: 'slime', unlockAtMinute: 2, spawnWeight: 10 },
-            { enemyType: 'medusa', unlockAtMinute: 4, spawnWeight: 6 },
-            { enemyType: 'rat', unlockAtMinute: 6, spawnWeight: 12 },
-            { enemyType: 'skeleton', unlockAtMinute: 8, spawnWeight: 10 },
-            { enemyType: 'succubus', unlockAtMinute: 10, spawnWeight: 8 },
-            { enemyType: 'widow', unlockAtMinute: 12, spawnWeight: 9 },
-            { enemyType: 'worm', unlockAtMinute: 14, spawnWeight: 12 },
-            { enemyType: 'minotau', unlockAtMinute: 16, spawnWeight: 5 }
+            { enemyType: 'bat', unlockAtMinute: 0, spawnWeight: 1 },
+            { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 2 },
+            { enemyType: 'medusa', unlockAtMinute: 6, spawnWeight: 3 },
+            { enemyType: 'rat', unlockAtMinute: 9, spawnWeight: 5 },
+            { enemyType: 'skeleton', unlockAtMinute: 12, spawnWeight: 8 },
+            { enemyType: 'succubus', unlockAtMinute: 15, spawnWeight: 13 },
+            { enemyType: 'widow', unlockAtMinute: 20, spawnWeight: 21 },
+            { enemyType: 'worm', unlockAtMinute: 22, spawnWeight: 34 },
+            { enemyType: 'minotau', unlockAtMinute: 24, spawnWeight: 55 }
         ],
         elite: createEliteConfig({
             maxActive: 10
@@ -238,12 +222,20 @@ export function getScenarioSpawnRate(scene, scenario, fallbackPerSecond = 2) {
 }
 
 export function getScenarioEnemyHealthMultiplier(scene, scenario) {
-    const percentPerMinute = scenario?.enemyHealthPercentPerMinute;
-    if (typeof percentPerMinute !== 'number' || percentPerMinute <= 0) {
-        return 1;
-    }
     const elapsedMinutes = getScenarioElapsedMs(scene) / 60000;
-    return 1 + ((percentPerMinute * elapsedMinutes) / 100);
+    let multiplier = 1;
+    const milestones = Array.isArray(scenario?.enemyHealthMilestones) ? scenario.enemyHealthMilestones : [];
+    milestones.forEach((entry) => {
+        if (!entry || elapsedMinutes < (entry.minute ?? 0)) return;
+        if (typeof entry.setMultiplier === 'number' && entry.setMultiplier > 0) {
+            multiplier = entry.setMultiplier;
+            return;
+        }
+        if (typeof entry.multiplier === 'number' && entry.multiplier > 0) {
+            multiplier *= entry.multiplier;
+        }
+    });
+    return multiplier;
 }
 
 export function createStageScenarioState(scenario) {
@@ -328,7 +320,8 @@ function buildBaseRuntimeStats(enemy) {
         damage: baseStats.damage ?? enemy.damage ?? 0,
         speed: baseStats.speed ?? enemy.speed ?? 0,
         scale: baseStats.scale ?? enemy.scaleSize ?? 1,
-        knockbackResist: baseStats.knockbackResist ?? enemy.knockbackResist ?? 1
+        knockbackResist: baseStats.knockbackResist ?? enemy.knockbackResist ?? 1,
+        stunResist: baseStats.stunResist ?? enemy.stunResist ?? 1
     };
 }
 
@@ -349,6 +342,7 @@ function applyEliteBaseStats(stats, scenario) {
     stats.speed *= multipliers.speed ?? 1;
     stats.scale *= multipliers.scale ?? 1;
     stats.knockbackResist *= multipliers.knockbackResist ?? 1;
+    stats.stunResist *= multipliers.stunResist ?? 1;
 }
 
 function applyEliteVisuals(enemy, modifierKeys, scenario) {
@@ -361,8 +355,6 @@ function applyEliteVisuals(enemy, modifierKeys, scenario) {
     enemy.setTint(enemy.eliteTint);
 
     enemy.disableMotionTrail?.();
-    enemy.disableAuraEffect?.();
-
     if (visual?.trail) {
         enemy.enableMotionTrail?.({
             depthOffset: -2,
@@ -372,11 +364,7 @@ function applyEliteVisuals(enemy, modifierKeys, scenario) {
         });
     }
 
-    if (visual?.aura) {
-        enemy.enableAuraEffect?.(visual.aura);
-    }
-
-    if (!visual?.trail && !visual?.aura && !primaryModifierKey) {
+    if (!visual?.trail && !primaryModifierKey) {
         enemy.enableMotionTrail?.({
             tint: defaultTrailTint,
             spawnInterval: scenario?.elite?.trailSpawnInterval ?? 18,
@@ -395,8 +383,7 @@ export function applyEliteModifiers(enemy, modifierKeys, scenario) {
     ensureEnemyStats(enemy);
     enemy.isElite = true;
     enemy.stageEliteState = {
-        modifierKeys: [...modifierKeys],
-        auraRadius: scenario?.elite?.auraRadius ?? 120
+        modifierKeys: [...modifierKeys]
     };
     applyEliteVisuals(enemy, modifierKeys, scenario);
     const nextStats = buildBaseRuntimeStats(enemy);
@@ -425,44 +412,12 @@ export function handleAuraSystem(enemies, scenario) {
     if (!scenario?.elite || !Array.isArray(enemies) || !enemies.length) return;
     const activeEnemies = enemies.filter((enemy) => enemy?.active);
     if (!activeEnemies.length) return;
-
-    const nextStatsByEnemy = new Map();
     activeEnemies.forEach((enemy) => {
         const nextStats = buildBaseRuntimeStats(enemy);
         if (enemy.stageEliteState?.modifierKeys?.length) {
             applyEliteBaseStats(nextStats, scenario);
             applySelfModifiers(nextStats, enemy.stageEliteState.modifierKeys);
         }
-        nextStatsByEnemy.set(enemy, nextStats);
-    });
-
-    const auraSources = activeEnemies.filter((enemy) =>
-        enemy.stageEliteState?.modifierKeys?.some((modifierKey) => ELITE_MODIFIERS[modifierKey]?.kind === 'aura')
-    );
-
-    for (const source of auraSources) {
-        const radius = source.stageEliteState?.auraRadius ?? scenario.elite.auraRadius ?? 120;
-        const radiusSq = radius * radius;
-        for (const target of activeEnemies) {
-            if (target === source) continue;
-            const dx = target.x - source.x;
-            const dy = target.y - source.y;
-            if ((dx * dx) + (dy * dy) > radiusSq) continue;
-            const targetStats = nextStatsByEnemy.get(target);
-            const appliedAuraModifiers = targetStats.appliedAuraModifiers ?? (targetStats.appliedAuraModifiers = new Set());
-            source.stageEliteState.modifierKeys.forEach((modifierKey) => {
-                const modifier = ELITE_MODIFIERS[modifierKey];
-                if (modifier?.kind === 'aura' && !appliedAuraModifiers.has(modifierKey)) {
-                    modifier.applyAura(targetStats);
-                    appliedAuraModifiers.add(modifierKey);
-                }
-            });
-        }
-    }
-
-    activeEnemies.forEach((enemy) => {
-        const nextStats = nextStatsByEnemy.get(enemy);
-        delete nextStats.appliedAuraModifiers;
         enemy.applyRuntimeStats?.(nextStats);
     });
 }
@@ -494,16 +449,17 @@ export const EXAMPLE_ENEMY_RUNTIME_SHAPE = {
         maxHealth: 15,
         damage: 10,
         speed: 35,
-        scale: 1
+        scale: 1,
+        stunResist: 1
     },
     currentStats: {
         maxHealth: 45,
         damage: 11.5,
         speed: 42,
-        scale: 1.5
+        scale: 1.5,
+        stunResist: 0.5
     },
     stageEliteState: {
-        modifierKeys: ['tank', 'aura_damage'],
-        auraRadius: 120
+        modifierKeys: ['tank']
     }
 };

@@ -3,8 +3,9 @@ export const SKILL_EVOLUTION_CONFIG = [
         key: 'aqua_nova_to_aqua_stream',
         sourceSkillKey: 'nova',
         evolvedSkillKey: 'aqua_stream',
-        inventoryKey: 'waterwarn',
-        requiredLevel: 8
+        inventoryKey: 'nova',
+        requiredSkillHits: 3000,
+        lockObjectCountOnEvolution: true
     },
     {
         key: 'lumina_heavenfall_to_sky_fall',

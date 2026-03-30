@@ -124,7 +124,7 @@ export default class HudScene extends Phaser.Scene {
         const rawHealth = typeof player.displayedHealth === 'number' ? player.displayedHealth : player.health;
         const maxHealth = Math.max(1, player.maxHealth ?? 1);
         const hpProgress = Phaser.Math.Clamp(rawHealth / maxHealth, 0, 1);
-        const shield = Math.max(0, player.temporaryShield ?? 0);
+        const shield = Math.max(0, player.getTotalShield?.() ?? player.temporaryShield ?? 0);
         const level = player.level ?? 1;
         const kills = this.mainScene?.killCount ?? 0;
         const showKillCount = player.hasSkill?.('flame') || player.hasSkill?.('blueflame');

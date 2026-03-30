@@ -436,15 +436,20 @@ export const CARD_CONFIG = [
     passiveItemCard({
         key: 'shield_item',
         name: 'Shield',
-        description: 'Gain 30 shield now, +10 shield every level up, and recover shield every 30s',
+        description: 'Reset shield every 30s. Starts at 20 shield, scales with item level, and does not stack.',
         assetPath: 'assets/items/shield.png',
         rarity: 'legendary',
         weight: 3,
         stackLimit: 8,
         effects: [
-            { type: 'shieldGrant', value: 30 },
-            { type: 'shieldOnLevelUp', value: 10 },
-            { type: 'shieldRegen', value: 30, intervalMs: 30000 }
+            {
+                type: 'shieldResetPool',
+                inventoryKey: 'shield_item',
+                baseValue: 20,
+                perLevelValue: 5,
+                maxValue: 60,
+                intervalMs: 30000
+            }
         ]
     }),
     passiveItemCard({
@@ -537,11 +542,12 @@ export const CARD_CONFIG = [
         name: 'Heaven Fall',
         assetPath: 'assets/items/shotingstar.png',
         skillKey: 'heavenfall',
-        rarity: 'legendary'
+        rarity: 'legendary',
+        inventoryMaxLevel: 12
     }),
     ...createSkillUpgradeCards({
-        baseKey: 'waterwarn',
-        name: 'Waterwarn',
+        baseKey: 'nova',
+        name: 'Nova',
         assetPath: 'assets/items/waterwarn.png',
         skillKey: 'nova',
         rarity: 'rare'

@@ -21,6 +21,7 @@ export default class SkillEvolutionSystem {
         const activeSkillKeys = Array.isArray(scene.activeSkillKeys) ? scene.activeSkillKeys : [];
         const inventoryItemLevels = scene.inventoryItemLevels ?? {};
         const skillObjectSpawnCounts = scene.skillObjectSpawnCounts ?? {};
+        const skillHitCounts = scene.skillHitCounts ?? {};
         const killCount = scene.killCount ?? 0;
         const eliteKillCount = scene.eliteKillCount ?? 0;
         const characterKey = scene.activeCharacterKey ?? player.characterKey;
@@ -43,8 +44,12 @@ export default class SkillEvolutionSystem {
                     && (skillObjectSpawnCounts[entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredSkillObjectSpawns)
                 )
                 || (
-                    (entry.inventoryKey || entry.requiredLevel !== undefined)
-                    && (inventoryItemLevels[entry.inventoryKey ?? entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredLevel ?? 8)
+                    typeof entry.requiredSkillHits === 'number'
+                    && (skillHitCounts[entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredSkillHits)
+                )
+                || (
+                    entry.requiredLevel !== undefined
+                    && (inventoryItemLevels[entry.inventoryKey ?? entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredLevel)
                 )
             );
 
@@ -74,13 +79,23 @@ export default class SkillEvolutionSystem {
 
         const targetSkillKey = entry.evolvedSkillKey ?? entry.unlockSkillKey;
         if (!targetSkillKey) return false;
+        const lockedObjectCount = entry.lockObjectCountOnEvolution
+            ? player.getSkillObjectCount?.(entry.sourceSkillKey) ?? 1
+            : null;
         const didApply = entry.evolvedSkillKey
             ? player.replaceSkill(entry.sourceSkillKey, entry.evolvedSkillKey)
             : player.unlockSkill(entry.unlockSkillKey, { ignoreCap: true });
         if (!didApply) return false;
 
-        if (entry.evolvedSkillOverrides) {
-            player.setSkillRuntimeOverrides?.(targetSkillKey, entry.evolvedSkillOverrides);
+        const evolvedOverrides = {
+            ...(entry.evolvedSkillOverrides ?? {})
+        };
+        if (lockedObjectCount !== null) {
+            evolvedOverrides.defaultObjects = lockedObjectCount;
+            evolvedOverrides.maxObjects = lockedObjectCount;
+        }
+        if (Object.keys(evolvedOverrides).length) {
+            player.setSkillRuntimeOverrides?.(targetSkillKey, evolvedOverrides);
         }
         if (entry.evolvedSkillKey) {
             this.renameInventoryEntry(entry);

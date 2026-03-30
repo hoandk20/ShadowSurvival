@@ -13,7 +13,7 @@ const scaleHitbox = ({ width, height }) => ({
 export const ENEMIES = {
     skeleton: {
         name: 'Skeleton',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 550,
@@ -30,7 +30,7 @@ export const ENEMIES = {
     },
     succubus: {
         name: 'Succubus',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 550,
@@ -47,7 +47,7 @@ export const ENEMIES = {
     },
     lamia: {
         name: 'Lamia',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 550,
@@ -64,7 +64,7 @@ export const ENEMIES = {
     },
     moth_woman: {
         name: 'Moth Woman',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -84,7 +84,7 @@ export const ENEMIES = {
     },
     widow: {
         name: 'Widow',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -100,7 +100,7 @@ export const ENEMIES = {
     },
     medusa: {
         name: 'Medusa',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -118,7 +118,7 @@ export const ENEMIES = {
     ,
     minotau: {
         name: 'Minotau',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -136,7 +136,7 @@ export const ENEMIES = {
     ,
     baphomet: {
         name: 'Baphomet',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -154,7 +154,7 @@ export const ENEMIES = {
     ,
     dino: {
         name: 'Dino',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -172,7 +172,7 @@ export const ENEMIES = {
     ,
     bugmonster: {
         name: 'Bug Monster',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -190,7 +190,7 @@ export const ENEMIES = {
     ,
     cursed_maiden: {
         name: 'Cursed Maiden',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -208,7 +208,7 @@ export const ENEMIES = {
     ,
     kitsume: {
         name: 'Kitsume',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -225,7 +225,7 @@ export const ENEMIES = {
     ,
     mummy: {
         name: 'Mummy',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -242,7 +242,7 @@ export const ENEMIES = {
     ,
     zombie_woman: {
         name: 'Zombie Woman',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -260,7 +260,7 @@ export const ENEMIES = {
     ,
     slime: {
         name: 'Slime',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -276,7 +276,7 @@ export const ENEMIES = {
     },
     worm: {
         name: 'Worm',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -292,7 +292,7 @@ export const ENEMIES = {
     },
     rat: {
         name: 'Rat',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -308,7 +308,7 @@ export const ENEMIES = {
     },
     bat: {
         name: 'Bat',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,
@@ -324,7 +324,7 @@ export const ENEMIES = {
     },
     demonbat: {
         name: 'Demon Bat',
-        health: 15,
+        health: 10,
         speed: 35,
         damage: 10,
         attackCooldown: 450,

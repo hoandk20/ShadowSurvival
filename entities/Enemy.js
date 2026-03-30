@@ -1,7 +1,6 @@
 import BaseEntity from './BaseEntity.js';
 import { ENEMIES } from '../config/enemies.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
-import EnemyAuraEffect from './effects/EnemyAuraEffect.js';
 
 const HITBOX_DISTANCE = 30;
 const REPELL_FORCE = 220;
@@ -34,6 +33,7 @@ export default class Enemy extends BaseEntity {
         this.health = this.maxHealth;
         this.damage = enemyConfig.damage ?? 10;
         this.knockbackResist = enemyConfig.knockbackResist ?? 1;
+        this.stunResist = enemyConfig.stunResist ?? 1;
         this.isStunned = false;
         this.damageTintTimer = null;
         this.stunTimer = null;
@@ -51,7 +51,6 @@ export default class Enemy extends BaseEntity {
         this.lastSafePosition = new Phaser.Math.Vector2(x, y);
         this.lastPosition = new Phaser.Math.Vector2(x, y);
         this.motionTrailEffect = null;
-        this.auraEffect = null;
         this.scaleSize = 1;
         this.baseStats = null;
         this.currentStats = null;
@@ -64,6 +63,8 @@ export default class Enemy extends BaseEntity {
         this.hackSource = null;
         this.lastHackAttackTime = -Infinity;
         this.hackedTarget = null;
+        this.healthText = null;
+        this.showHealthText = false;
 
         this.setVisible(false);
         this.setScale(1);
@@ -90,7 +91,6 @@ export default class Enemy extends BaseEntity {
     update(time, delta, player, allEnemies) {
         if (!this.scene) return;
         this.motionTrailEffect?.update(time, delta);
-        this.auraEffect?.update(time, delta);
         if (this.hackTimer > 0) {
             this.hackTimer -= delta;
             if (this.hackTimer <= 0) {
@@ -144,6 +144,7 @@ export default class Enemy extends BaseEntity {
         this.applySeparation(allEnemies);
         this.handleStuckInWall(player, delta);
         this.enforceHitboxSize();
+        this.updateHealthTextPosition();
         this.updateStuckMemory();
     }
 
@@ -151,6 +152,7 @@ export default class Enemy extends BaseEntity {
         if (this.isDead || typeof amount !== 'number' || amount <= 0) return;
         const actualDamage = Math.min(amount, this.health);
         this.health = Phaser.Math.Clamp(this.health - actualDamage, 0, this.maxHealth);
+        this.refreshHealthText();
         this.pendingDeathSource = null;
         const canBeHacked = Boolean(skillConfig?.appliesHack && !this.isElite);
         if (!this.isStunned) {
@@ -271,8 +273,6 @@ export default class Enemy extends BaseEntity {
         this.setState('dead');
         this.motionTrailEffect?.destroy?.();
         this.motionTrailEffect = null;
-        this.auraEffect?.destroy?.();
-        this.auraEffect = null;
         this.scene?.mapManager?.removeObjectCollisions?.(this);
         if (this.body) {
             this.body.stop();
@@ -380,7 +380,8 @@ export default class Enemy extends BaseEntity {
             damage: this.damage,
             speed: this.speed,
             scale: this.scaleSize ?? 1,
-            knockbackResist: this.knockbackResist ?? 1
+            knockbackResist: this.knockbackResist ?? 1,
+            stunResist: this.stunResist ?? 1
         };
         this.currentStats = { ...this.baseStats };
     }
@@ -396,7 +397,8 @@ export default class Enemy extends BaseEntity {
             damage: nextStats.damage ?? this.damage ?? 0,
             speed: nextStats.speed ?? this.speed ?? 0,
             scale: nextStats.scale ?? this.scaleSize ?? 1,
-            knockbackResist: nextStats.knockbackResist ?? this.knockbackResist ?? 1
+            knockbackResist: nextStats.knockbackResist ?? this.knockbackResist ?? 1,
+            stunResist: nextStats.stunResist ?? this.stunResist ?? 1
         };
 
         this.currentStats = { ...resolvedStats };
@@ -408,6 +410,7 @@ export default class Enemy extends BaseEntity {
         this.speed = resolvedStats.speed;
         this.scaleSize = resolvedStats.scale;
         this.knockbackResist = resolvedStats.knockbackResist;
+        this.stunResist = resolvedStats.stunResist;
         this.displaySize = {
             width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize)),
             height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize))
@@ -420,6 +423,8 @@ export default class Enemy extends BaseEntity {
         this.baseHeight = this.displaySize.height;
         this.setDisplaySize(this.displaySize.width, this.displaySize.height);
         this.enforceHitboxSize();
+        this.refreshHealthText();
+        this.updateHealthTextPosition();
     }
 
     enableMotionTrail(config = {}) {
@@ -435,21 +440,6 @@ export default class Enemy extends BaseEntity {
         this.motionTrailEffect = null;
     }
 
-    enableAuraEffect(config = {}) {
-        this.auraEffect?.destroy?.();
-        const radius = config.radius ?? Math.max(this.displaySize.width, this.displaySize.height) * 0.9;
-        this.auraEffect = new EnemyAuraEffect(this.scene, this, {
-            radius,
-            ...config
-        });
-        return this.auraEffect;
-    }
-
-    disableAuraEffect() {
-        this.auraEffect?.destroy?.();
-        this.auraEffect = null;
-    }
-
     handleAnimationUpdate() {
         // Phaser replaces display size with frame dimensions on every animation tick.
         // Enforce the renderer size without touching the physics body.
@@ -462,10 +452,45 @@ export default class Enemy extends BaseEntity {
         this.damageTintTimer = null;
         this.stunTimer?.remove?.(false);
         this.stunTimer = null;
+        this.healthText?.destroy?.();
+        this.healthText = null;
+    }
+
+    setHealthVisible(visible) {
+        this.showHealthText = Boolean(visible);
+        if (!this.scene) return;
+        if (!this.showHealthText) {
+            this.healthText?.destroy?.();
+            this.healthText = null;
+            return;
+        }
+        if (!this.healthText) {
+            this.healthText = this.scene.add.text(this.x, this.y, '', {
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5, 1).setDepth(1200);
+        }
+        this.refreshHealthText();
+        this.updateHealthTextPosition();
+    }
+
+    refreshHealthText() {
+        if (!this.healthText) return;
+        this.healthText.setText(`${Math.max(0, Math.round(this.health ?? 0))}/${Math.max(1, Math.round(this.maxHealth ?? 1))}`);
+    }
+
+    updateHealthTextPosition() {
+        if (!this.healthText) return;
+        const offsetY = Math.max(this.displaySize?.height ?? this.height ?? 0, this.hitboxSize?.height ?? 0) * 0.5 + 8;
+        this.healthText.setPosition(this.x, this.y - offsetY);
     }
 
     applyStun(duration, tint = 0x000000) {
         if (!duration || !this.active || !this.scene) return;
+        const effectiveDuration = Math.max(1, Math.round(duration * Math.max(0, this.stunResist ?? 1)));
         this.isStunned = true;
         this.stunTint = tint;
         this.setTint(tint);
@@ -476,7 +501,7 @@ export default class Enemy extends BaseEntity {
             this.anims.pause();
         }
         this.stunTimer?.remove?.(false);
-        this.stunTimer = this.scene.time.delayedCall(duration, () => {
+        this.stunTimer = this.scene.time.delayedCall(effectiveDuration, () => {
             if (!this.active || !this.scene) return;
             this.isStunned = false;
             this.restorePersistentTint();

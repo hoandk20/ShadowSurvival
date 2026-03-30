@@ -36,6 +36,8 @@ function normalizeSkillConfig(config = {}) {
     if (typeof projectile.maxChainTargets === 'number') normalized.maxChainTargets = projectile.maxChainTargets;
     if (typeof projectile.spinOnFlight === 'boolean') normalized.spinOnFlight = projectile.spinOnFlight;
     if (typeof projectile.spinSpeed === 'number') normalized.spinSpeed = projectile.spinSpeed;
+    if (typeof projectile.castRotationStartAngle === 'number') normalized.castRotationStartAngle = projectile.castRotationStartAngle;
+    if (typeof projectile.castRotationSpeed === 'number') normalized.castRotationSpeed = projectile.castRotationSpeed;
     if (typeof projectile.rotationOffset === 'number') normalized.rotationOffset = projectile.rotationOffset;
     if (typeof projectile.rotateSpriteToDirection === 'boolean') normalized.rotateSpriteToDirection = projectile.rotateSpriteToDirection;
 
@@ -156,19 +158,21 @@ const RAW_SKILL_CONFIG = {
         category: 'projectile',
         objects: {
             multiple: true,
-            defaultCount: 4,
-            maxCount: 8
+            defaultCount: 6,
+            maxCount: 6
         },
         projectile: {
-            speed: 300,
+            speed: 200,
             range: 500,
-            alignWithMovement: true
+            alignWithMovement: true,
+            castRotationStartAngle: -Math.PI / 2,
+            castRotationSpeed: -Math.PI * 2
         },
         knockback: {
             takeDamage: false,
             maxSpeed: 9999,
-            distance: 5,
-            force: 40,
+            distance: 1,
+            force: 10,
             dragFactor: 0.4,
             dragDuration: 220,
             count: 99
@@ -181,56 +185,15 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 34,
+        damage: 15,
         duration: 900,
-        cooldown: 1100,
-        hitboxWidth: 65,
-        hitboxHeight: 35,
-        effectKey: 'aquaStreamTrail',
+        cooldown: 700,
+        hitboxWidth: 40,
+        hitboxHeight: 25,
         critical: {
             chance: 0.32,
             multiplier: 1.55,
             color: '#6fd6ff'
-        }
-    },
-    waterwarn: {
-        label: 'Waterwarn',
-        category: 'projectile',
-        objects: {
-            multiple: true,
-            maxCount: 6
-        },
-        projectile: {
-            speed: 400,
-            range: 500,
-            alignWithMovement: true
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 5,
-            force: 20,
-            dragFactor: 0.4,
-            dragDuration: 220,
-            count: 99
-        },
-        basePath: 'assets/skills/nova/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        damage: 18,
-        duration: 800,
-        cooldown: 1400,
-        hitboxWidth: 20,
-        hitboxHeight: 8,
-        critical: {
-            chance: 0.3,
-            multiplier: 1.45,
-            color: '#7cc6ff'
         }
     },
     ice: {
@@ -1068,12 +1031,50 @@ const RAW_SKILL_CONFIG = {
             }
         },
         damage: 18,
-        duration: 3000,
+        duration: 2000,
         cooldown: 5000,
         hitboxWidth: 15,
         hitboxHeight: 20,
         critical: {
             chance: 0.25,
+            multiplier: 1.7,
+            color: '#ffd700'
+        }
+    },
+    ghost: {
+        label: 'Ghost',
+        description: 'Orbiting ghosts that swipe nearby foes.',
+        category: 'orbit',
+        objects: {
+            multiple: true,
+            defaultCount: 5,
+            maxCount: 5
+        },
+        orbit: {
+            radius: 90,
+            speed: 7,
+            direction: 1
+        },
+        knockback: {
+            force: 2,
+            distance: 5,
+            maxSpeed: 99999
+        },
+        basePath: 'assets/skill_evolution/ghost/',
+        animations: {
+            cast: {
+                frames: ['frame0.png'],
+                frameRate: 1,
+                loop: true
+            }
+        },
+        damage: 18,
+        duration: 300000,
+        cooldown: 0,
+        hitboxWidth: 20,
+        hitboxHeight: 20,
+        critical: {
+            chance: 0.2,
             multiplier: 1.7,
             color: '#ffd700'
         }
@@ -1109,6 +1110,30 @@ const RAW_SKILL_CONFIG = {
             chance: 0.22,
             multiplier: 1.65,
             color: '#B2BEB5'
+        }
+    },
+    aqua_shield: {
+        label: 'Aqua Shield',
+        category: 'aura',
+        objects: {
+            multiple: false
+        },
+        projectile: {
+            alignWithMovement: false
+        },
+        behaviors: [{ type: 'visualOnly' }],
+        playAnimation: false,
+        visibleDuringEffect: false,
+        effectKey: 'aquaShieldBubble',
+        damage: 0,
+        duration: 10000,
+        cooldown: 10000,
+        hitboxWidth: 1,
+        hitboxHeight: 1,
+        critical: {
+            chance: 0,
+            multiplier: 1,
+            color: '#9feeff'
         }
     }
 };

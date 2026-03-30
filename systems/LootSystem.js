@@ -2,6 +2,8 @@ import Item from '../entities/Item.js';
 import { ITEM_CONFIG, getLootTableForEnemy } from '../config/items.js';
 import { LOOT_CONFIG } from '../config/loot.js';
 
+const XP_MERGE_RADIUS = 26;
+
 export default class LootSystem {
     constructor(scene) {
         this.scene = scene;
@@ -81,6 +83,14 @@ export default class LootSystem {
     spawnItem(itemKey, x, y, amount = 1) {
         const config = ITEM_CONFIG[itemKey];
         if (!config) return null;
+        if (config.type === 'xp') {
+            const mergedOrb = this.findNearbyMergeTarget(itemKey, x, y, XP_MERGE_RADIUS);
+            if (mergedOrb) {
+                mergedOrb.amount += Math.max(1, amount);
+                mergedOrb.refreshVisualState?.();
+                return mergedOrb;
+            }
+        }
         const maxGroundItems = LOOT_CONFIG.maxGroundItems ?? 500;
         const activeGroundItems = this.itemGroup?.countActive?.(true) ?? 0;
         if (activeGroundItems >= maxGroundItems) {
@@ -89,5 +99,26 @@ export default class LootSystem {
         const item = new Item(this.scene, x, y, itemKey, amount);
         this.itemGroup.add(item);
         return item;
+    }
+
+    findNearbyMergeTarget(itemKey, x, y, radius) {
+        const items = this.itemGroup?.getChildren?.() ?? [];
+        const radiusSq = radius * radius;
+        let bestMatch = null;
+        let bestDistanceSq = Number.POSITIVE_INFINITY;
+        for (const item of items) {
+            if (!item?.active || item.collected) continue;
+            if (item.config?.type !== 'xp') continue;
+            const targetKey = item.config?.textureKey ?? item.texture?.key;
+            const sourceKey = ITEM_CONFIG[itemKey]?.textureKey ?? itemKey;
+            if (targetKey !== sourceKey) continue;
+            const dx = item.x - x;
+            const dy = item.y - y;
+            const distanceSq = (dx * dx) + (dy * dy);
+            if (distanceSq > radiusSq || distanceSq >= bestDistanceSq) continue;
+            bestMatch = item;
+            bestDistanceSq = distanceSq;
+        }
+        return bestMatch;
     }
 }

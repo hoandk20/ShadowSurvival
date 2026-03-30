@@ -58,20 +58,41 @@ export const EFFECT_CONFIG = {
         effectClass: 'WaterParticleEffect',
         settings: {
             tint: 0xd7fbff,
-            secondaryTint: 0x5fd6ff,
+            secondaryTint: 0x86e6ff,
             tertiaryTint: 0x2fa9ff,
+            foamTint: 0xf3ffff,
             depthOffset: -1,
-            speed: { min: 10, max: 26 },
-            scale: { start: 1.05, end: 0.15 },
-            alpha: { start: 0.52, end: 0 },
-            lifespan: 320,
-            frequency: 18,
-            quantity: 4,
-            followOffset: 14,
-            spread: 8,
-            radialDrift: 6
+            speed: { min: 18, max: 42 },
+            scale: { start: 1.9, end: 0.36 },
+            alpha: { start: 0.75, end: 0 },
+            lifespan: 440,
+            frequency: 10,
+            quantity: 8,
+            followOffset: 24,
+            spread: 18,
+            radialDrift: 16,
+            streamArc: 28
         },
         tags: ['pixel', 'water', 'particle']
+    },
+    aquaShieldBubble: {
+        label: 'Aqua Shield Bubble',
+        description: 'Protective water bubble that wraps around the player.',
+        usage: ['skill-aura'],
+        effectClass: 'WaterShieldEffect',
+        settings: {
+            depthOffset: 7,
+            ringColor: 0x95ecff,
+            ringSecondaryColor: 0x49b8ff,
+            glowColor: 0xcff8ff,
+            bubbleColor: 0xe8fdff,
+            radiusX: 26,
+            radiusY: 34,
+            orbitRadiusX: 18,
+            orbitRadiusY: 24,
+            pulseScale: 1.05
+        },
+        tags: ['pixel', 'water', 'shield', 'bubble']
     },
     cometTail: {
         label: 'Comet Tail',

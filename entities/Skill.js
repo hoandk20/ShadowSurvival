@@ -4,6 +4,7 @@ import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
 import IceParticleEffect from './effects/IceParticleEffect.js';
 import CometTailEffect from './effects/CometTailEffect.js';
 import WaterParticleEffect from './effects/WaterParticleEffect.js';
+import WaterShieldEffect from './effects/WaterShieldEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
 import { resolveSkillBehaviorEntries } from '../systems/skills/skillBehaviorConfig.js';
 
@@ -12,6 +13,7 @@ const EFFECT_CLASS_MAP = {
     codeProjectile: CodeProjectileEffect,
     iceTrail: IceParticleEffect,
     aquaStreamTrail: WaterParticleEffect,
+    aquaShieldBubble: WaterShieldEffect,
     cometTail: CometTailEffect,
     cometTailAstral: CometTailEffect,
 };

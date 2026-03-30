@@ -57,6 +57,7 @@ export default class MainScene extends Phaser.Scene {
         const height = this.scale.height;
         this.isGameOver = false;
         this.debugMode = this.registry.get('debugMode') === true;
+        this.debugEnemyHealthOverride = 0;
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         ensureAudioSettings(this.registry);
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -156,6 +157,8 @@ export default class MainScene extends Phaser.Scene {
         this.inventoryItems = [];
         this.inventoryItemLevels = {};
         this.skillObjectSpawnCounts = {};
+        this.skillHitCounts = {};
+        this.totalMovedDistance = 0;
         this.ensureDefaultSkillInventoryEntry(this.activeCharacterKey);
         this.levelUpCards = [];
         this.cardFocusIndex = 0;
@@ -183,6 +186,9 @@ export default class MainScene extends Phaser.Scene {
         this.hiddenSkillUnlockSystem?.process?.();
         this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
         handleAuraSystem(this.enemies?.getChildren?.() ?? [], this.stageScenario);
+        if ((this.debugEnemyHealthOverride ?? 0) > 0) {
+            this.applyDebugEnemyHealthOverrideToAllEnemies();
+        }
         this.processStageWaves();
 
         this.despawnOffscreenEnemies();
@@ -263,6 +269,10 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
         if (skill.recordHit && !skill.recordHit(enemy)) return;
+        if (skill.skillType) {
+            this.skillHitCounts = this.skillHitCounts ?? {};
+            this.skillHitCounts[skill.skillType] = (this.skillHitCounts[skill.skillType] ?? 0) + 1;
+        }
         this.skillBehaviorPipeline?.processHit(skill, enemy);
     }
 
@@ -569,7 +579,7 @@ export default class MainScene extends Phaser.Scene {
         hpToggle.checked = this.showEnemyHP;
         hpToggle.addEventListener('change', () => this.setShowEnemyHP(hpToggle.checked));
         hpLabel.appendChild(hpToggle);
-        hpLabel.appendChild(document.createTextNode('Show enemy HP'));
+        hpLabel.appendChild(document.createTextNode('Show enemy number'));
         uiSection.appendChild(hpLabel);
 
         const spawnIntervalLabel = document.createElement('label');
@@ -600,6 +610,37 @@ export default class MainScene extends Phaser.Scene {
         });
         spawnIntervalLabel.appendChild(spawnIntervalInput);
         uiSection.appendChild(spawnIntervalLabel);
+
+        const enemyHpOverrideLabel = document.createElement('label');
+        enemyHpOverrideLabel.textContent = 'Enemy HP';
+        enemyHpOverrideLabel.style.display = 'flex';
+        enemyHpOverrideLabel.style.flexDirection = 'column';
+        enemyHpOverrideLabel.style.gap = '4px';
+        enemyHpOverrideLabel.style.fontSize = '12px';
+        const enemyHpOverrideInput = document.createElement('input');
+        enemyHpOverrideInput.type = 'number';
+        enemyHpOverrideInput.min = '0';
+        enemyHpOverrideInput.step = '100';
+        enemyHpOverrideInput.value = String(Math.max(0, Math.round(this.debugEnemyHealthOverride ?? 0)));
+        enemyHpOverrideInput.style.padding = '4px';
+        enemyHpOverrideInput.style.borderRadius = '4px';
+        enemyHpOverrideInput.style.background = '#222';
+        enemyHpOverrideInput.style.color = '#fff';
+        enemyHpOverrideInput.style.border = '1px solid rgba(255,255,255,0.2)';
+        const applyEnemyHpOverrideInput = () => {
+            const nextValue = Number(enemyHpOverrideInput.value);
+            if (!Number.isFinite(nextValue) || nextValue < 0) {
+                enemyHpOverrideInput.value = String(Math.max(0, Math.round(this.debugEnemyHealthOverride ?? 0)));
+                return;
+            }
+            this.debugEnemyHealthOverride = Math.max(0, Math.round(nextValue));
+            enemyHpOverrideInput.value = String(this.debugEnemyHealthOverride);
+            this.applyDebugEnemyHealthOverrideToAllEnemies();
+        };
+        enemyHpOverrideInput.addEventListener('change', applyEnemyHpOverrideInput);
+        enemyHpOverrideInput.addEventListener('input', applyEnemyHpOverrideInput);
+        enemyHpOverrideLabel.appendChild(enemyHpOverrideInput);
+        uiSection.appendChild(enemyHpOverrideLabel);
         this.updateEnemyCountDisplay();
     }
 
@@ -674,6 +715,29 @@ export default class MainScene extends Phaser.Scene {
         this.enemyCountDisplay.textContent = `Enemies on map: ${activeCount}`;
     }
 
+    applyDebugEnemyHealthOverride(enemy, options = {}) {
+        if (!enemy?.active || typeof enemy.applyRuntimeStats !== 'function') return;
+        const baseStats = enemy.baseStats ?? enemy.currentStats ?? null;
+        const baseMaxHealth = Math.max(1, Math.round(baseStats?.maxHealth ?? enemy.maxHealth ?? 1));
+        const overrideHp = Math.max(0, Math.round(this.debugEnemyHealthOverride ?? 0));
+        const nextMaxHealth = overrideHp > 0 ? overrideHp : baseMaxHealth;
+        enemy.applyRuntimeStats({
+            maxHealth: nextMaxHealth,
+            damage: enemy.currentStats?.damage ?? enemy.damage,
+            speed: enemy.currentStats?.speed ?? enemy.speed,
+            scale: enemy.currentStats?.scale ?? enemy.scaleSize ?? 1,
+            knockbackResist: enemy.currentStats?.knockbackResist ?? enemy.knockbackResist ?? 1,
+            stunResist: enemy.currentStats?.stunResist ?? enemy.stunResist ?? 1
+        }, {
+            preserveHealthRatio: options.preserveHealthRatio !== false
+        });
+    }
+
+    applyDebugEnemyHealthOverrideToAllEnemies() {
+        const enemies = this.enemies?.getChildren?.() ?? [];
+        enemies.forEach((enemy) => this.applyDebugEnemyHealthOverride(enemy, { preserveHealthRatio: true }));
+    }
+
     spawnEnemyAtPosition(x, y, enemyType) {
         if (!enemyType || !this.canSpawnMoreEnemies()) return null;
         const enemy = new Enemy(this, x, y, enemyType);
@@ -688,6 +752,7 @@ export default class MainScene extends Phaser.Scene {
             enemy.captureBaseStats?.();
         }
         spawnEnemyWithEliteChance(this, enemy, this.stageScenario);
+        this.applyDebugEnemyHealthOverride(enemy, { preserveHealthRatio: false });
         this.enemies.add(enemy);
         this.add.existing(enemy);
         this.mapManager.enableObjectCollisions(enemy);

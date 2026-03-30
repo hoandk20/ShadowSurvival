@@ -6,6 +6,7 @@ export default class HiddenSkillUnlockSystem {
         this.scene = scene;
         this.completedUnlockKeys = new Set();
         this.killAnchors = new Map();
+        this.skillHitAnchors = new Map();
     }
 
     process() {
@@ -39,6 +40,8 @@ export default class HiddenSkillUnlockSystem {
         const activeSkillKeys = Array.isArray(scene.activeSkillKeys) ? scene.activeSkillKeys : [];
         const inventoryItemLevels = scene.inventoryItemLevels ?? {};
         const killCount = scene.killCount ?? 0;
+        const skillHitCounts = scene.skillHitCounts ?? {};
+        const totalMovedDistance = scene.totalMovedDistance ?? 0;
         const characterKey = scene.activeCharacterKey ?? player.characterKey;
         const defaultSkillKey = player.getDefaultSkillKey?.() ?? null;
         const level = player.level ?? 1;
@@ -62,7 +65,25 @@ export default class HiddenSkillUnlockSystem {
                 }
                 if (effectiveKillCount < Math.max(1, entry.requiredKills)) return false;
             }
+            if (typeof entry.requiredSkillHits === 'number') {
+                let effectiveHitCount = skillHitCounts[entry.requiredHitsFromSkillKey ?? entry.requiredSkillKey ?? targetSkillKey] ?? 0;
+                if (entry.requiredHitsFromSkillKey) {
+                    if (!player.hasSkill?.(entry.requiredHitsFromSkillKey)) {
+                        this.skillHitAnchors.delete(entry.key);
+                        return false;
+                    }
+                    if (!this.skillHitAnchors.has(entry.key)) {
+                        this.skillHitAnchors.set(entry.key, effectiveHitCount);
+                    }
+                    effectiveHitCount = Math.max(0, effectiveHitCount - (this.skillHitAnchors.get(entry.key) ?? effectiveHitCount));
+                }
+                if (effectiveHitCount < Math.max(1, entry.requiredSkillHits)) return false;
+            }
             if (typeof entry.requiredLevel === 'number' && level < Math.max(1, entry.requiredLevel)) return false;
+            if (typeof entry.requiredMovedDistance === 'number'
+                && totalMovedDistance < Math.max(1, entry.requiredMovedDistance)) {
+                return false;
+            }
             if (entry.inventoryKey || entry.requiredItemLevel !== undefined) {
                 const requiredInventoryKey = entry.inventoryKey ?? targetSkillKey;
                 const requiredItemLevel = Math.max(1, entry.requiredItemLevel ?? 1);
@@ -110,6 +131,7 @@ export default class HiddenSkillUnlockSystem {
         if (!didApply) return false;
         this.completedUnlockKeys.add(entry.key);
         this.killAnchors.delete(entry.key);
+        this.skillHitAnchors.delete(entry.key);
         this.showAnnouncement(entry);
         return true;
     }

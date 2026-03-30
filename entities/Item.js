@@ -2,7 +2,15 @@ import { ITEM_CONFIG } from '../config/items.js';
 import { playSfx } from '../utils/audioSettings.js';
 
 const ITEM_DESPAWN_VIEW_MARGIN = 300;
-const ITEM_MAX_LIFETIME_MS = 5 * 60 * 1000;
+const ITEM_MAX_LIFETIME_MS = 3 * 60 * 1000;
+const XP_ORB_VISUAL_TIERS = [
+    { minValue: 0, tint: 0xffffff, scale: 1 },
+    { minValue: 40, tint: 0x8ff7ff, scale: 1.08 },
+    { minValue: 90, tint: 0x6fd6ff, scale: 1.16 },
+    { minValue: 180, tint: 0x7ea7ff, scale: 1.26 },
+    { minValue: 320, tint: 0xc48dff, scale: 1.4 },
+    { minValue: 520, tint: 0xffd76f, scale: 1.58 }
+];
 
 export default class Item extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, itemKey, amount = 1) {
@@ -32,6 +40,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         const maxNatural = Math.max(naturalWidth, naturalHeight, 1);
         const displayScale = config.displayScale ?? 1;
         const finalDisplaySize = Math.max(displaySize * displayScale, 1);
+        this.baseDisplaySize = finalDisplaySize;
         this.setDisplaySize(finalDisplaySize, finalDisplaySize);
         this.setAlpha(config.alpha ?? 0.95);
         const size = finalDisplaySize;
@@ -39,6 +48,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             const radius = size / 2;
             this.body.setCircle(radius, (this.displayWidth - radius) / 2, (this.displayHeight - radius) / 2);
         }
+        this.refreshVisualState();
     }
 
     preUpdate(time, delta) {
@@ -112,6 +122,48 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
 
     getEffectiveValue() {
         return Math.max(1, Math.round(this.amount * (this.valueMultiplier ?? 1)));
+    }
+
+    canMergeWith(other) {
+        return Boolean(
+            other
+            && other !== this
+            && other.active
+            && !other.collected
+            && this.active
+            && !this.collected
+            && this.config?.type === 'xp'
+            && other.config?.type === 'xp'
+            && this.texture?.key === other.texture?.key
+        );
+    }
+
+    absorb(other) {
+        if (!this.canMergeWith(other)) return false;
+        this.amount += other.amount ?? 0;
+        this.spawnTime = Math.max(this.spawnTime ?? 0, other.spawnTime ?? 0);
+        this.refreshVisualState();
+        other.collected = true;
+        other.destroy();
+        return true;
+    }
+
+    refreshVisualState() {
+        if (this.config?.type !== 'xp') return;
+        const effectiveValue = this.getEffectiveValue();
+        let selectedTier = XP_ORB_VISUAL_TIERS[0];
+        XP_ORB_VISUAL_TIERS.forEach((tier) => {
+            if (effectiveValue >= tier.minValue) {
+                selectedTier = tier;
+            }
+        });
+        this.setTint(selectedTier.tint);
+        const nextSize = Math.max(1, this.baseDisplaySize * selectedTier.scale);
+        this.setDisplaySize(nextSize, nextSize);
+        if (this.body?.setCircle) {
+            const radius = nextSize / 2;
+            this.body.setCircle(radius, (this.displayWidth - radius) / 2, (this.displayHeight - radius) / 2);
+        }
     }
 
     playPickupText() {
