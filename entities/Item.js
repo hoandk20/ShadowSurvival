@@ -1,6 +1,9 @@
 import { ITEM_CONFIG } from '../config/items.js';
 import { playSfx } from '../utils/audioSettings.js';
 
+const ITEM_DESPAWN_VIEW_MARGIN = 300;
+const ITEM_MAX_LIFETIME_MS = 5 * 60 * 1000;
+
 export default class Item extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, itemKey, amount = 1) {
         const config = ITEM_CONFIG[itemKey] ?? {};
@@ -11,10 +14,8 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         this.amount = Math.max(1, amount);
         this.valueMultiplier = config.baseValue ?? 1;
         this.collected = false;
-        this.floatBaseY = y;
         this.isMagnetized = false;
-        this.floatAmplitude = config.floatAmplitude ?? 4;
-        this.floatSpeed = config.floatSpeed ?? 0.005;
+        this.spawnTime = scene.time?.now ?? 0;
 
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -42,15 +43,34 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
 
     preUpdate(time, delta) {
         super.preUpdate(time, delta);
-        if (this.isMagnetized) {
-            this.floatBaseY = this.y;
+        if (this.hasExpired(time)) {
+            this.destroy();
             return;
         }
-        if (!this.floatBaseY) {
-            this.floatBaseY = this.y;
+        if (this.shouldDespawnOffscreen()) {
+            this.destroy();
+            return;
         }
-        const offset = Math.sin(time * this.floatSpeed) * this.floatAmplitude;
-        this.setY(this.floatBaseY + offset);
+        if (this.isMagnetized) {
+            return;
+        }
+    }
+
+    shouldDespawnOffscreen() {
+        if (!this.active || this.collected || this.isMagnetized) return false;
+        const worldView = this.scene?.cameras?.main?.worldView;
+        if (!worldView) return false;
+        const margin = ITEM_DESPAWN_VIEW_MARGIN;
+        return this.x < worldView.left - margin
+            || this.x > worldView.right + margin
+            || this.y < worldView.top - margin
+            || this.y > worldView.bottom + margin;
+    }
+
+    hasExpired(time) {
+        if (!this.active || this.collected) return false;
+        const now = typeof time === 'number' ? time : (this.scene?.time?.now ?? 0);
+        return (now - this.spawnTime) >= ITEM_MAX_LIFETIME_MS;
     }
 
     collect(player) {

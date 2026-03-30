@@ -64,6 +64,7 @@ export default class Player extends BaseEntity {
         this.temporaryShield = 0;
         this.maxTemporaryShield = 0;
         this.shieldGainOnLevelUp = 0;
+        this.shieldGainOnLevelUpBySource = {};
         this.shieldRegenAmount = 0;
         this.shieldRegenIntervalMs = 30000;
         this.shieldRegenTimer = 0;
@@ -80,7 +81,7 @@ export default class Player extends BaseEntity {
         this.skillEffectDurationBonuses = {};
         this.skillKnockbackCountBonuses = {};
         this.skillRuntimeConfigOverrides = {};
-        this.hiddenPassiveEvolutionKeys = new Set();
+        this.hiddenSkillFeatureOverrides = {};
 
         this.readyAnimated = false;
 
@@ -147,6 +148,8 @@ export default class Player extends BaseEntity {
         if (now - lastCast < skillCooldown) return 0;
 
         const count = this.getSkillObjectCount(skillType);
+        this.scene.skillObjectSpawnCounts = this.scene.skillObjectSpawnCounts ?? {};
+        this.scene.skillObjectSpawnCounts[skillType] = (this.scene.skillObjectSpawnCounts[skillType] ?? 0) + count;
         const movementDirection = this.lastMoveDirection.clone();
         if (movementDirection.lengthSq() === 0) {
             movementDirection.set(this.flipX ? -1 : 1, 0);
@@ -158,6 +161,7 @@ export default class Player extends BaseEntity {
             : 0;
         const dropFromSky = skillDefinition.dropFromSky ?? false;
         const skyHeight = skillDefinition.skyHeight ?? 400;
+        const skyEntryOffsetX = skillDefinition.skyEntryOffsetX ?? 0;
         let dropTargets = [];
         if (dropFromSky) {
             dropTargets = (this.scene?.enemies?.getChildren?.() ?? [])
@@ -206,7 +210,7 @@ export default class Player extends BaseEntity {
                         projectileTarget.x - spawnX,
                         projectileTarget.y - spawnY
                     ).normalize();
-                    skill.setRotation(projectileAngle);
+                    skill.setRotation(skill.getFacingRotation(projectileAngle));
                     skill.setFlipX(false);
                 } else {
                     let dx = Math.cos(angle);
@@ -221,29 +225,28 @@ export default class Player extends BaseEntity {
                     if (dropFromSky) {
                         const target = dropTargets[index % dropTargets.length] ?? dropTargets[dropTargets.length - 1] ?? null;
                         const horizontalSpread = Math.random() * 32 - 16;
+                        const entryOffsetX = skyEntryOffsetX + horizontalSpread;
                         if (target) {
-                            spawnX = target.x + horizontalSpread;
+                            spawnX = target.x + entryOffsetX;
                             spawnY = target.y - skyHeight;
                             skill.dropTarget = target;
+                            dx = target.x - spawnX;
+                            dy = target.y - spawnY;
                         } else {
-                            spawnX = this.x + horizontalSpread;
+                            spawnX = this.x + entryOffsetX;
                             spawnY = this.y - skyHeight;
                             skill.dropTarget = null;
+                            dx = -entryOffsetX;
+                            dy = skyHeight;
                         }
-                        skill.dropXOffset = horizontalSpread;
-                        dx = 0;
-                        dy = 1;
+                        skill.dropXOffset = 0;
                     }
                     skill.x = spawnX;
                     skill.y = spawnY;
                     skill.startX = skill.x;
                     skill.startY = skill.y;
                     skill.direction.set(dx, dy).normalize();
-                    if (dropFromSky) {
-                        skill.setRotation(Math.PI / 2);
-                    } else {
-                        skill.setRotation(Math.atan2(dy, dx));
-                    }
+                    skill.setRotation(skill.getFacingRotation(Math.atan2(dy, dx)));
                     skill.setFlipX(false);
                 }
             } else if (!skill.isAura) {
@@ -467,7 +470,7 @@ export default class Player extends BaseEntity {
         }
         dir.normalize();
         skill.direction.copy(dir);
-        skill.setRotation(Math.atan2(dir.y, dir.x));
+        skill.setRotation(skill.getFacingRotation(Math.atan2(dir.y, dir.x)));
     }
 
     takeDamage(amount) {
@@ -514,7 +517,7 @@ export default class Player extends BaseEntity {
         while (this.currentXP >= this.xpToNextLevel) {
             this.currentXP -= this.xpToNextLevel;
             this.level += 1;
-            this.xpToNextLevel = Math.ceil(this.xpToNextLevel * 1.3);
+            this.xpToNextLevel = Math.ceil(this.xpToNextLevel * 1.25);
             this.onLevelUp();
         }
     }
@@ -595,10 +598,10 @@ export default class Player extends BaseEntity {
         const effects = Array.isArray(cardConfig.effects)
             ? cardConfig.effects
             : (cardConfig.effect ? [cardConfig.effect] : []);
-        effects.forEach((effect) => this.applyEffect(effect));
+        effects.forEach((effect) => this.applyEffect(effect, { cardConfig }));
     }
 
-    applyEffect(effect) {
+    applyEffect(effect, context = {}) {
         if (!effect || typeof effect !== 'object') return;
         switch (effect.type) {
             case 'maxHealth': {
@@ -667,6 +670,9 @@ export default class Player extends BaseEntity {
             case 'skillUnlock':
                 this.unlockSkill(effect.skillKey);
                 break;
+            case 'skillUnlockIgnoreCap':
+                this.unlockSkill(effect.skillKey, { ignoreCap: true });
+                break;
             case 'unlockSkillOrElse':
                 if (!this.hasSkill(effect.skillKey)) {
                     this.unlockSkill(effect.skillKey);
@@ -696,7 +702,7 @@ export default class Player extends BaseEntity {
                 this.grantShield(effect.value ?? 0);
                 break;
             case 'shieldOnLevelUp':
-                this.shieldGainOnLevelUp += effect.value ?? 0;
+                this.syncShieldGainOnLevelUp(effect, context.cardConfig);
                 break;
             case 'shieldRegen':
                 this.shieldRegenAmount += effect.value ?? 0;
@@ -729,6 +735,18 @@ export default class Player extends BaseEntity {
         }
     }
 
+    syncShieldGainOnLevelUp(effect = {}, cardConfig = null) {
+        const inventoryKey = cardConfig?.inventoryKey ?? cardConfig?.key ?? effect.inventoryKey ?? null;
+        if (!inventoryKey) {
+            this.shieldGainOnLevelUp += effect.value ?? 0;
+            return;
+        }
+        const currentLevel = this.scene?.inventoryItemLevels?.[inventoryKey] ?? 0;
+        this.shieldGainOnLevelUpBySource[inventoryKey] = Math.max(0, (effect.value ?? 0) * currentLevel);
+        this.shieldGainOnLevelUp = Object.values(this.shieldGainOnLevelUpBySource)
+            .reduce((sum, value) => sum + (value ?? 0), 0);
+    }
+
     getActiveSkillKey() {
         return this.scene?.activeSkillKey || 'thunder';
     }
@@ -736,20 +754,55 @@ export default class Player extends BaseEntity {
     getSkillConfig(skillKey) {
         const baseConfig = SKILL_CONFIG[skillKey] ?? {};
         const runtimeOverride = this.skillRuntimeConfigOverrides[skillKey] ?? {};
+        const hiddenFeatureOverride = this.getHiddenSkillFeatureOverride(skillKey);
         const resolvedConfig = {
             ...baseConfig,
-            ...runtimeOverride
+            ...runtimeOverride,
+            ...hiddenFeatureOverride
         };
-        if (skillKey === 'sky_fall' && this.characterKey !== 'lumina') {
-            resolvedConfig.explosionOnHit = false;
-            resolvedConfig.explosionRadius = 0;
-            resolvedConfig.explosionDamageMultiplier = 0;
-            resolvedConfig.explosionKnockbackMultiplier = 0;
+        const disabledBehaviorTypes = [
+            ...(Array.isArray(runtimeOverride.disabledBehaviorTypes) ? runtimeOverride.disabledBehaviorTypes : []),
+            ...(Array.isArray(hiddenFeatureOverride.disabledBehaviorTypes) ? hiddenFeatureOverride.disabledBehaviorTypes : [])
+        ];
+        if (disabledBehaviorTypes.length) {
             resolvedConfig.behaviors = Array.isArray(resolvedConfig.behaviors)
-                ? resolvedConfig.behaviors.filter((entry) => entry?.type !== 'explosionOnHit')
+                ? resolvedConfig.behaviors.filter((entry) => !disabledBehaviorTypes.includes(entry?.type))
                 : resolvedConfig.behaviors;
         }
         return resolvedConfig;
+    }
+
+    getHiddenSkillFeatureOverride(skillKey) {
+        const sourceOverrides = this.hiddenSkillFeatureOverrides[skillKey];
+        if (!sourceOverrides) return {};
+        return Object.values(sourceOverrides).reduce((merged, overrides) => {
+            if (!overrides || typeof overrides !== 'object') return merged;
+            const nextMerged = { ...merged, ...overrides };
+            const mergedDisabled = [
+                ...(Array.isArray(merged.disabledBehaviorTypes) ? merged.disabledBehaviorTypes : []),
+                ...(Array.isArray(overrides.disabledBehaviorTypes) ? overrides.disabledBehaviorTypes : [])
+            ];
+            if (mergedDisabled.length) {
+                nextMerged.disabledBehaviorTypes = Array.from(new Set(mergedDisabled));
+            }
+            return nextMerged;
+        }, {});
+    }
+
+    setHiddenSkillFeatureOverride(skillKey, sourceKey, overrides = {}) {
+        if (!skillKey || !sourceKey) return;
+        this.hiddenSkillFeatureOverrides[skillKey] = {
+            ...(this.hiddenSkillFeatureOverrides[skillKey] ?? {}),
+            [sourceKey]: overrides
+        };
+    }
+
+    clearHiddenSkillFeatureOverride(skillKey, sourceKey) {
+        if (!skillKey || !sourceKey || !this.hiddenSkillFeatureOverrides[skillKey]) return;
+        delete this.hiddenSkillFeatureOverrides[skillKey][sourceKey];
+        if (!Object.keys(this.hiddenSkillFeatureOverrides[skillKey]).length) {
+            delete this.hiddenSkillFeatureOverrides[skillKey];
+        }
     }
 
     getActiveSkillKeys() {
@@ -811,11 +864,12 @@ export default class Player extends BaseEntity {
         return Array.isArray(this.scene?.activeSkillKeys) && this.scene.activeSkillKeys.includes(skillKey);
     }
 
-    unlockSkill(skillKey) {
+    unlockSkill(skillKey, options = {}) {
         if (!skillKey || !SKILL_CONFIG[skillKey]) return false;
+        const ignoreCap = options?.ignoreCap === true;
         const currentSkills = Array.isArray(this.scene?.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
         if (currentSkills.includes(skillKey)) return false;
-        if (currentSkills.length >= MAX_ACTIVE_SKILLS) return false;
+        if (!ignoreCap && currentSkills.length >= MAX_ACTIVE_SKILLS) return false;
         currentSkills.push(skillKey);
         this.scene.activeSkillKeys = currentSkills;
         this.skillObjectCounts[skillKey] = this.getSkillConfig(skillKey)?.defaultObjects ?? 1;
@@ -827,18 +881,6 @@ export default class Player extends BaseEntity {
 
     getDefaultSkillKey() {
         return this.runtimeDefaultSkillKey ?? this.characterConfig?.defaultSkill ?? 'thunder';
-    }
-
-    hasPassiveEvolution(passiveKey) {
-        return this.hiddenPassiveEvolutionKeys.has(passiveKey);
-    }
-
-    activateHiddenPassiveEvolution(passiveKey, passiveConfig = {}) {
-        if (!passiveKey || this.hiddenPassiveEvolutionKeys.has(passiveKey)) return false;
-        this.hiddenPassiveEvolutionKeys.add(passiveKey);
-        const effects = Array.isArray(passiveConfig.effects) ? passiveConfig.effects : [];
-        effects.forEach((effect) => this.applyEffect(effect));
-        return true;
     }
 
     replaceSkill(sourceSkillKey, evolvedSkillKey) {

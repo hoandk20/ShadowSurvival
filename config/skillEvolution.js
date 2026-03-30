@@ -1,41 +1,33 @@
-export const PASSIVE_EVOLUTION_CONFIG = {
-    gambler_god_card_burst: {
-        label: 'God Card Tempo',
-        hidden: true,
-        effects: [
-            {
-                type: 'skillConfigOverride',
-                skillKey: 'god_card',
-                overrides: {
-                    cooldown: 500
-                }
-            }
-        ]
-    }
-};
-
 export const SKILL_EVOLUTION_CONFIG = [
     {
+        key: 'aqua_nova_to_aqua_stream',
+        sourceSkillKey: 'nova',
+        evolvedSkillKey: 'aqua_stream',
+        inventoryKey: 'waterwarn',
+        requiredLevel: 8
+    },
+    {
         key: 'lumina_heavenfall_to_sky_fall',
-        characterKey: 'lumina',
         sourceSkillKey: 'heavenfall',
         evolvedSkillKey: 'sky_fall',
         inventoryKey: 'shotingstar',
-        requiredLevel: 8,
-        onlyDefaultSkill: true
+        requiredLevel: 8
     },
     {
-        key: 'gambler_card_toss_to_god_card',
-        characterKey: 'gambler',
+        key: 'gambler_card_toss_to_card_shot',
         sourceSkillKey: 'card_toss',
-        evolvedSkillKey: 'god_card',
+        evolvedSkillKey: 'card_shot',
         inventoryKey: 'card',
-        requiredLevel: 8,
-        onlyDefaultSkill: true,
-        passiveEvolutionKey: 'gambler_god_card_burst'
+        requiredLevel: 3,
+        requiredSkillObjectSpawns: 3500
+    },
+    {
+        key: 'card_shot_to_god_card',
+        sourceSkillKey: 'card_shot',
+        evolvedSkillKey: 'god_card',
+        inventoryKey: 'clownmask',
+        requiredLevel: 1,
+        renameInventoryKey: 'card',
+        requiredEliteKillsAfterReady: 50
     }
 ];
-
-export function getPassiveEvolutionConfig(passiveKey) {
-    return PASSIVE_EVOLUTION_CONFIG[passiveKey] ?? null;
-}

@@ -27,6 +27,7 @@ import {
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
 import SkillBehaviorPipeline from '../systems/skills/SkillBehaviorPipeline.js';
 import SkillEvolutionSystem from '../systems/SkillEvolutionSystem.js';
+import HiddenSkillUnlockSystem from '../systems/HiddenSkillUnlockSystem.js';
 import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 
 const SPAWN_PADDING = 50;
@@ -103,6 +104,7 @@ export default class MainScene extends Phaser.Scene {
         });
         this.skillBehaviorPipeline = new SkillBehaviorPipeline(this);
         this.skillEvolutionSystem = new SkillEvolutionSystem(this);
+        this.hiddenSkillUnlockSystem = new HiddenSkillUnlockSystem(this);
         this.lootSystem = new LootSystem(this);
         this.physics.add.overlap(this.player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
         this.player.once('player-dead', () => this.handlePlayerDeath());
@@ -122,6 +124,7 @@ export default class MainScene extends Phaser.Scene {
         this.respawnPool = 0;
         this.initializeEnemySpawnStatus();
         this.killCount = 0;
+        this.eliteKillCount = 0;
         this.eliteMilestonesTriggered = new Set();
         this.maxEnemiesOnMap = 150;
         this.events.on('enemy-dead', this.handleEnemyDeath, this);
@@ -152,6 +155,8 @@ export default class MainScene extends Phaser.Scene {
         this.cardSelectionCounts = {};
         this.inventoryItems = [];
         this.inventoryItemLevels = {};
+        this.skillObjectSpawnCounts = {};
+        this.ensureDefaultSkillInventoryEntry(this.activeCharacterKey);
         this.levelUpCards = [];
         this.cardFocusIndex = 0;
         this.keyboardNavigationActive = false;
@@ -161,6 +166,7 @@ export default class MainScene extends Phaser.Scene {
         this.levelUpPauseStartedAt = null;
         this.registry.set('hasStartedGame', true);
         this.scene.get('HudScene')?.refreshInventory?.(this.inventoryItems);
+        this.hiddenSkillUnlockSystem?.process?.();
     }
 
     update(time, delta) {
@@ -174,6 +180,7 @@ export default class MainScene extends Phaser.Scene {
         }
         // Update player
         this.player.update(time, delta);
+        this.hiddenSkillUnlockSystem?.process?.();
         this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
         handleAuraSystem(this.enemies?.getChildren?.() ?? [], this.stageScenario);
         this.processStageWaves();
@@ -252,10 +259,10 @@ export default class MainScene extends Phaser.Scene {
 
     onSkillHitEnemy(skill, enemy) {
         if (!skill.active) return;
-        if (skill.recordHit && !skill.recordHit(enemy)) return;
         if (skill.config?.dropFromSky && skill.dropTarget && enemy !== skill.dropTarget) {
             return;
         }
+        if (skill.recordHit && !skill.recordHit(enemy)) return;
         this.skillBehaviorPipeline?.processHit(skill, enemy);
     }
 
@@ -619,6 +626,7 @@ export default class MainScene extends Phaser.Scene {
         this.registry.set('selectedCharacterKey', characterKey);
         const defaultSkill = config.defaultSkill ?? 'thunder';
         const chosenSkill = this.player?.setCharacter?.(characterKey) ?? defaultSkill;
+        this.ensureDefaultSkillInventoryEntry(characterKey);
         const currentSelected = Array.isArray(this.activeSkillKeys) ? [...this.activeSkillKeys] : [];
         const nextSelected = currentSelected.length ? currentSelected : [chosenSkill];
         this.setSelectedSkills(nextSelected, chosenSkill);
@@ -642,7 +650,6 @@ export default class MainScene extends Phaser.Scene {
         Object.entries(this.skillEvolutionInputs ?? {}).forEach(([key, input]) => {
             input.checked = nextSelected.includes(key);
         });
-        this.activateEvolutionPassivesForSelectedSkills(nextSelected);
     }
 
     normalizeEvolutionSkillSelection(skillKeys, preferredSkillKey = null) {
@@ -658,17 +665,6 @@ export default class MainScene extends Phaser.Scene {
             nextSelected.splice(sourceIndex, 1);
         });
         return nextSelected;
-    }
-
-    activateEvolutionPassivesForSelectedSkills(skillKeys = []) {
-        if (!this.player) return;
-        const currentCharacterKey = this.activeCharacterKey ?? this.player.characterKey;
-        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
-            if (!entry?.passiveEvolutionKey || !entry?.evolvedSkillKey) return;
-            if (entry.characterKey && entry.characterKey !== currentCharacterKey) return;
-            if (!skillKeys.includes(entry.evolvedSkillKey)) return;
-            this.skillEvolutionSystem?.activatePassiveEvolution?.(entry.passiveEvolutionKey);
-        });
     }
 
     updateEnemyCountDisplay() {
@@ -770,6 +766,11 @@ export default class MainScene extends Phaser.Scene {
         if (!enemy) return;
         playSfx(this, 'sfx_enemy_kill', { volume: 0.25 });
         this.killCount += 1;
+        if (enemy.isElite) {
+            this.eliteKillCount += 1;
+        }
+        this.skillEvolutionSystem?.processAvailableEvolutions?.();
+        this.hiddenSkillUnlockSystem?.process?.();
         this.tryTriggerEliteKillMilestone();
     }
 
@@ -1071,14 +1072,15 @@ export default class MainScene extends Phaser.Scene {
         if (this.physics.world.isPaused) {
             this.physics.world.resume();
         }
+        this.addCardToInventory(cardConfig);
         if (this.player?.applyCardEffect) {
             this.player.applyCardEffect(cardConfig);
         }
         if (cardConfig?.key) {
             this.cardSelectionCounts[cardConfig.key] = (this.cardSelectionCounts[cardConfig.key] ?? 0) + 1;
         }
-        this.addCardToInventory(cardConfig);
         this.skillEvolutionSystem?.processAvailableEvolutions?.();
+        this.hiddenSkillUnlockSystem?.process?.();
         hudScene?.refreshInventory?.(this.inventoryItems);
         if (this.levelUpQueue > 0) {
             this.time.delayedCall(250, () => {
@@ -1302,11 +1304,53 @@ export default class MainScene extends Phaser.Scene {
 
                 return true;
             })
-            .map(card => ({ ...card }));
+            .map(card => this.applySkillInventoryWeightBonus(card));
+    }
+
+    applySkillInventoryWeightBonus(cardConfig) {
+        const nextCard = { ...cardConfig };
+        if (nextCard.cardType !== 'skill') {
+            return nextCard;
+        }
+
+        const inventoryKey = this.getInventoryKeyFromCard(nextCard);
+        if (!inventoryKey) {
+            return nextCard;
+        }
+
+        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
+        if (currentLevel <= 0) {
+            return nextCard;
+        }
+
+        nextCard.weight = Math.max(1, (nextCard.weight ?? 1) + currentLevel * 0.5);
+        return nextCard;
     }
 
     getInventoryKeyFromCard(cardConfig) {
         return cardConfig?.inventoryKey ?? cardConfig?.key ?? null;
+    }
+
+    findStarterInventoryCardForSkill(skillKey) {
+        if (!skillKey) return null;
+        return CARD_CONFIG.find((card) => {
+            if (card?.cardType !== 'skill') return false;
+            const effects = Array.isArray(card.effects) ? card.effects : [];
+            return effects.some((effect) => effect?.type === 'skillUnlock' && effect.skillKey === skillKey);
+        }) ?? null;
+    }
+
+    ensureDefaultSkillInventoryEntry(characterKey = this.activeCharacterKey) {
+        const defaultSkill = CHARACTER_CONFIG[characterKey]?.defaultSkill ?? this.player?.getDefaultSkillKey?.() ?? null;
+        if (!defaultSkill) return;
+
+        const starterCard = this.findStarterInventoryCardForSkill(defaultSkill);
+        if (!starterCard) return;
+
+        const inventoryKey = this.getInventoryKeyFromCard(starterCard);
+        if (!inventoryKey || (this.inventoryItemLevels[inventoryKey] ?? 0) > 0) return;
+
+        this.addCardToInventory(starterCard);
     }
 
     getInventoryMaxLevel(cardConfig) {

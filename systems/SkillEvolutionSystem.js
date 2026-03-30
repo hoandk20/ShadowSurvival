@@ -1,9 +1,10 @@
 import { SKILL_CONFIG } from '../config/skill.js';
-import { SKILL_EVOLUTION_CONFIG, getPassiveEvolutionConfig } from '../config/skillEvolution.js';
+import { SKILL_EVOLUTION_CONFIG } from '../config/skillEvolution.js';
 
 export default class SkillEvolutionSystem {
     constructor(scene) {
         this.scene = scene;
+        this.pendingEliteKillRequirements = new Map();
     }
 
     processAvailableEvolutions() {
@@ -19,20 +20,49 @@ export default class SkillEvolutionSystem {
 
         const activeSkillKeys = Array.isArray(scene.activeSkillKeys) ? scene.activeSkillKeys : [];
         const inventoryItemLevels = scene.inventoryItemLevels ?? {};
+        const skillObjectSpawnCounts = scene.skillObjectSpawnCounts ?? {};
+        const killCount = scene.killCount ?? 0;
+        const eliteKillCount = scene.eliteKillCount ?? 0;
         const characterKey = scene.activeCharacterKey ?? player.characterKey;
         const defaultSkillKey = player.getDefaultSkillKey?.() ?? null;
 
         return SKILL_EVOLUTION_CONFIG.filter((entry) => {
-            if (!entry?.sourceSkillKey || !entry?.evolvedSkillKey) return false;
-            if (!SKILL_CONFIG[entry.evolvedSkillKey]) return false;
-            if (entry.characterKey && entry.characterKey !== characterKey) return false;
-            if (!activeSkillKeys.includes(entry.sourceSkillKey)) return false;
-            if (activeSkillKeys.includes(entry.evolvedSkillKey)) return false;
-            if (entry.onlyDefaultSkill && defaultSkillKey !== entry.sourceSkillKey) return false;
-            const requiredInventoryKey = entry.inventoryKey ?? entry.sourceSkillKey;
-            const requiredLevel = Math.max(1, entry.requiredLevel ?? 8);
-            if ((inventoryItemLevels[requiredInventoryKey] ?? 0) < requiredLevel) return false;
-            if (entry.passiveEvolutionKey && player.hasPassiveEvolution?.(entry.passiveEvolutionKey)) return false;
+            if (!entry?.sourceSkillKey) return false;
+            const targetSkillKey = entry.evolvedSkillKey ?? entry.unlockSkillKey;
+            if (!targetSkillKey || !SKILL_CONFIG[targetSkillKey]) return false;
+            const requirementKey = entry.key ?? `${entry.sourceSkillKey}->${targetSkillKey}`;
+
+            const meetsBaseRequirements = !(
+                (entry.characterKey && entry.characterKey !== characterKey)
+                || !activeSkillKeys.includes(entry.sourceSkillKey)
+                || activeSkillKeys.includes(targetSkillKey)
+                || (entry.onlyDefaultSkill && defaultSkillKey !== entry.sourceSkillKey)
+                || (typeof entry.requiredKills === 'number' && killCount < Math.max(1, entry.requiredKills))
+                || (
+                    typeof entry.requiredSkillObjectSpawns === 'number'
+                    && (skillObjectSpawnCounts[entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredSkillObjectSpawns)
+                )
+                || (
+                    (entry.inventoryKey || entry.requiredLevel !== undefined)
+                    && (inventoryItemLevels[entry.inventoryKey ?? entry.sourceSkillKey] ?? 0) < Math.max(1, entry.requiredLevel ?? 8)
+                )
+            );
+
+            if (!meetsBaseRequirements) {
+                this.pendingEliteKillRequirements.delete(requirementKey);
+                return false;
+            }
+
+            if (typeof entry.requiredEliteKillsAfterReady === 'number') {
+                const requiredEliteKills = Math.max(1, entry.requiredEliteKillsAfterReady);
+                const armedAtEliteKills = this.pendingEliteKillRequirements.get(requirementKey);
+                if (armedAtEliteKills === undefined) {
+                    this.pendingEliteKillRequirements.set(requirementKey, eliteKillCount);
+                    return false;
+                }
+                return (eliteKillCount - armedAtEliteKills) >= requiredEliteKills;
+            }
+
             return true;
         });
     }
@@ -42,35 +72,35 @@ export default class SkillEvolutionSystem {
         const player = scene?.player;
         if (!scene || !player) return false;
 
-        const didReplace = player.replaceSkill(entry.sourceSkillKey, entry.evolvedSkillKey);
-        if (!didReplace) return false;
+        const targetSkillKey = entry.evolvedSkillKey ?? entry.unlockSkillKey;
+        if (!targetSkillKey) return false;
+        const didApply = entry.evolvedSkillKey
+            ? player.replaceSkill(entry.sourceSkillKey, entry.evolvedSkillKey)
+            : player.unlockSkill(entry.unlockSkillKey, { ignoreCap: true });
+        if (!didApply) return false;
 
         if (entry.evolvedSkillOverrides) {
-            player.setSkillRuntimeOverrides?.(entry.evolvedSkillKey, entry.evolvedSkillOverrides);
+            player.setSkillRuntimeOverrides?.(targetSkillKey, entry.evolvedSkillOverrides);
         }
-        this.renameInventoryEntry(entry);
-        this.activatePassiveEvolution(entry.passiveEvolutionKey);
+        if (entry.evolvedSkillKey) {
+            this.renameInventoryEntry(entry);
+        }
+        this.pendingEliteKillRequirements.delete(entry.key ?? `${entry.sourceSkillKey}->${targetSkillKey}`);
         this.showEvolutionAnnouncement(entry);
         return true;
     }
 
     renameInventoryEntry(entry) {
-        const inventoryKey = entry.inventoryKey ?? entry.sourceSkillKey;
+        const inventoryKey = entry.renameInventoryKey ?? entry.inventoryKey ?? entry.sourceSkillKey;
         const inventoryEntry = this.scene.inventoryItems?.find((item) => item.inventoryKey === inventoryKey);
         if (!inventoryEntry) return;
         inventoryEntry.name = SKILL_CONFIG[entry.evolvedSkillKey]?.label ?? inventoryEntry.name;
     }
 
-    activatePassiveEvolution(passiveEvolutionKey) {
-        if (!passiveEvolutionKey) return false;
-        const passiveConfig = getPassiveEvolutionConfig(passiveEvolutionKey);
-        if (!passiveConfig) return false;
-        return this.scene.player?.activateHiddenPassiveEvolution?.(passiveEvolutionKey, passiveConfig) ?? false;
-    }
-
     showEvolutionAnnouncement(entry) {
         const fromLabel = SKILL_CONFIG[entry.sourceSkillKey]?.label ?? entry.sourceSkillKey;
-        const toLabel = SKILL_CONFIG[entry.evolvedSkillKey]?.label ?? entry.evolvedSkillKey;
+        const targetSkillKey = entry.evolvedSkillKey ?? entry.unlockSkillKey;
+        const toLabel = SKILL_CONFIG[targetSkillKey]?.label ?? targetSkillKey;
         const x = this.scene.player?.x ?? this.scene.scale.width / 2;
         const y = (this.scene.player?.y ?? this.scene.scale.height / 2) - 42;
         const text = this.scene.add.text(x, y, `${fromLabel} -> ${toLabel}`, {

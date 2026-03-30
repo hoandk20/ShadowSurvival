@@ -2,6 +2,8 @@ import { SKILL_CONFIG } from '../config/skill.js';
 import HolyAuraEffect from './effects/HolyAuraEffect.js';
 import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
 import IceParticleEffect from './effects/IceParticleEffect.js';
+import CometTailEffect from './effects/CometTailEffect.js';
+import WaterParticleEffect from './effects/WaterParticleEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
 import { resolveSkillBehaviorEntries } from '../systems/skills/skillBehaviorConfig.js';
 
@@ -9,6 +11,9 @@ const EFFECT_CLASS_MAP = {
     auraGlow: HolyAuraEffect,
     codeProjectile: CodeProjectileEffect,
     iceTrail: IceParticleEffect,
+    aquaStreamTrail: WaterParticleEffect,
+    cometTail: CometTailEffect,
+    cometTailAstral: CometTailEffect,
 };
 const TARGET_VIEW_MARGIN = 100;
 
@@ -52,6 +57,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.retargetOnHit = config.retargetOnHit ?? false;
         this.maxChainTargets = config.maxChainTargets ?? 0;
         this.alignWithMovement = config.alignWithMovement ?? false;
+        this.rotationOffset = config.rotationOffset ?? 0;
+        this.rotateSpriteToDirection = config.rotateSpriteToDirection ?? true;
         this.orbitRadius = (config.orbitRadius ?? 0) * areaMultiplier;
         this.orbitSpeed = config.orbitSpeed ?? 0;
         this.orbitDirection = config.orbitDirection ?? 1;
@@ -78,6 +85,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.dropTarget = null;
         this.dropTrackingSpeed = config.dropTrackingSpeed ?? 220;
         this.dropXOffset = 0;
+        this.autoExplodeAtViewportCenter = config.autoExplodeAtViewportCenter ?? false;
         this.playAnimation = config.playAnimation ?? true;
         this.visibleDuringEffect = config.visibleDuringEffect ?? true;
         this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
@@ -98,6 +106,88 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.setVisible(false);
         this.setDepth(30);
         this.setDisplaySize(this.hitboxWidth, this.hitboxHeight);
+    }
+
+    getFacingRotation(angle = 0) {
+        if (!this.rotateSpriteToDirection) {
+            return this.rotation ?? 0;
+        }
+        return angle + (this.rotationOffset ?? 0);
+    }
+
+    shouldAutoExplodeAtViewportCenter() {
+        if (!this.active || !this.autoExplodeAtViewportCenter || !this.dropFromSky || this.hasExploded) return false;
+        const worldView = this.scene?.cameras?.main?.worldView;
+        if (!worldView) return false;
+        return this.y >= worldView.centerY;
+    }
+
+    triggerAutoExplosion() {
+        if (!this.active || this.hasExploded) return false;
+        const effectRunner = this.scene?.skillBehaviorPipeline?.effects;
+        const explosionBehavior = Array.isArray(this.behaviorEntries)
+            ? this.behaviorEntries.find((entry) => entry?.type === 'explosionOnHit')
+            : null;
+        const behaviorConfig = explosionBehavior?.config ?? {};
+        const radius = behaviorConfig.radius ?? this.explosionRadius ?? 0;
+        if (radius <= 0) {
+            this.destroy();
+            return false;
+        }
+
+        this.hasExploded = true;
+        const tint = behaviorConfig.tint ?? this.config?.explosionTint ?? '#ff8c42';
+        const depth = (this.depth ?? 30) + 4;
+        effectRunner?.spawnExplosion(this.x, this.y, depth, {
+            ...(behaviorConfig.effect ?? {}),
+            outerColor: Phaser.Display.Color.HexStringToColor(tint).color
+        });
+
+        const damageMultiplier = behaviorConfig.damageMultiplier ?? this.explosionDamageMultiplier ?? 1;
+        const knockbackMultiplier = behaviorConfig.knockbackMultiplier ?? this.explosionKnockbackMultiplier ?? 1;
+        const explosionDamage = Math.max(1, Math.round(this.baseDamage * damageMultiplier));
+        const explosionForce = Math.max(0, Math.round((this.config?.knockback ?? 0) * knockbackMultiplier));
+        const radiusSq = radius * radius;
+        const splashTargets = this.scene?.enemies?.getChildren?.() ?? [];
+        const tintText = typeof tint === 'string'
+            ? tint
+            : Phaser.Display.Color.IntegerToColor(tint ?? 0xff8c42).rgba;
+
+        for (const enemy of splashTargets) {
+            if (!enemy?.active || enemy.isDead) continue;
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const distanceSq = (dx * dx) + (dy * dy);
+            if (distanceSq > radiusSq) continue;
+
+            const direction = new Phaser.Math.Vector2(dx, dy);
+            if (direction.lengthSq() === 0) {
+                direction.set(1, 0);
+            } else {
+                direction.normalize();
+            }
+
+            enemy.takeDamage(
+                explosionDamage,
+                explosionForce,
+                direction,
+                this,
+                { damageSource: this, fromExplosion: true, fromAutoExplosion: true },
+                {
+                    ...this.config,
+                    knockbackTakeDamage: false,
+                    knockback: explosionForce
+                }
+            );
+
+            effectRunner?.showDamageText(enemy, explosionDamage, {
+                color: tintText,
+                fontSize: '7px'
+            });
+        }
+
+        this.destroy();
+        return true;
     }
 
     rollCriticalDamage() {
@@ -245,6 +335,10 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             }
             this.x = nextX;
             this.y = nextY;
+            if (this.shouldAutoExplodeAtViewportCenter()) {
+                this.triggerAutoExplosion();
+                return;
+            }
             if (this.spinOnFlight && this.spinSpeed !== 0) {
                 this.rotation += (this.spinSpeed * delta) / 1000;
             }
@@ -387,7 +481,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         if (!nextTarget) return false;
         this.remainingChainTargets -= 1;
         this.direction.set(nextTarget.x - this.x, nextTarget.y - this.y).normalize();
-        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+        this.setRotation(this.getFacingRotation(Math.atan2(this.direction.y, this.direction.x)));
         return true;
     }
 
@@ -447,14 +541,14 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.direction.copy(reflected.normalize());
         this.x = anchorX + resolvedNormal.x * separation;
         this.y = anchorY + resolvedNormal.y * separation;
-        this.setRotation(Math.atan2(this.direction.y, this.direction.x));
+        this.setRotation(this.getFacingRotation(Math.atan2(this.direction.y, this.direction.x)));
         return true;
     }
 
     applySkyTracking(delta) {
         if (!this.dropTarget || !this.dropTarget.active) return;
         const targetY = this.dropTarget.y;
-        const targetX = this.dropTarget.x + this.dropXOffset;
+        const targetX = this.dropTarget.x;
         if (this.y < targetY) {
             const desired = targetY - this.y;
             this.y += Math.min(desired, (this.dropTrackingSpeed * delta) / 1000);
@@ -463,7 +557,6 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const dy = targetY - this.y;
         if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
         this.direction.set(dx, dy).normalize();
-        this.dropXOffset += dx * 0.1;
     }
 
     recordHit(enemy) {

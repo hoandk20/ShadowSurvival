@@ -50,6 +50,70 @@ export const EFFECT_CONFIG = {
             spread: 5
         },
         tags: ['pixel', 'ice', 'particle']
+    },
+    aquaStreamTrail: {
+        label: 'Aqua Stream Trail',
+        description: 'Watery particle stream used for Aqua Stream projectiles.',
+        usage: ['skill-projectile'],
+        effectClass: 'WaterParticleEffect',
+        settings: {
+            tint: 0xd7fbff,
+            secondaryTint: 0x5fd6ff,
+            tertiaryTint: 0x2fa9ff,
+            depthOffset: -1,
+            speed: { min: 10, max: 26 },
+            scale: { start: 1.05, end: 0.15 },
+            alpha: { start: 0.52, end: 0 },
+            lifespan: 320,
+            frequency: 18,
+            quantity: 4,
+            followOffset: 14,
+            spread: 8,
+            radialDrift: 6
+        },
+        tags: ['pixel', 'water', 'particle']
+    },
+    cometTail: {
+        label: 'Comet Tail',
+        description: 'Warm comet-like particle trail for falling celestial projectiles.',
+        usage: ['skill-projectile'],
+        effectClass: 'CometTailEffect',
+        settings: {
+            depthOffset: -1,
+            coreTint: 0xfff0b3,
+            glowTint: 0xffc26b,
+            emberTint: 0xff7a45,
+            speed: { min: 22, max: 52 },
+            scale: { start: 1.5, end: 0.1 },
+            alpha: { start: 0.88, end: 0 },
+            lifespan: 420,
+            frequency: 14,
+            quantity: 5,
+            followOffset: 26,
+            spread: 4
+        },
+        tags: ['pixel', 'fire', 'trail', 'celestial']
+    },
+    cometTailAstral: {
+        label: 'Comet Tail Astral',
+        description: 'Oversized comet trail variant for Astral.',
+        usage: ['skill-projectile'],
+        effectClass: 'CometTailEffect',
+        settings: {
+            depthOffset: -1,
+            coreTint: 0xe8f7ff,
+            glowTint: 0x7fc8ff,
+            emberTint: 0x2f6dff,
+            speed: { min: 22, max: 52 },
+            scale: { start: 3, end: 0.2 },
+            alpha: { start: 0.9, end: 0 },
+            lifespan: 480,
+            frequency: 14,
+            quantity: 6,
+            followOffset: 32,
+            spread: 4
+        },
+        tags: ['pixel', 'blue', 'trail', 'celestial']
     }
 };
 

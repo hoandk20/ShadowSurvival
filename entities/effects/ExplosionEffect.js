@@ -108,6 +108,22 @@ export default class ExplosionEffect {
         const burst = this.scene.add.container(x, y);
         burst.setDepth(depth);
 
+        if ((config.ringRadius ?? 0) > 0) {
+            const shockwave = this.scene.add.circle(x, y, config.ringRadius, config.outerColor ?? config.ringColor ?? 0xff8c42, 0);
+            shockwave.setStrokeStyle(Math.max(2, Math.round(pixelSize * 0.75)), config.ringColor ?? 0xff5a36, 0.95);
+            shockwave.setDepth(depth - 1);
+
+            this.scene.tweens.add({
+                targets: shockwave,
+                scaleX: 1.08,
+                scaleY: 1.08,
+                alpha: 0,
+                duration: Math.max(180, config.duration ?? 190),
+                ease: 'Quad.easeOut',
+                onComplete: () => shockwave.destroy()
+            });
+        }
+
         const layers = [
             { radius: config.outerRadius ?? 34, color: config.ringColor ?? 0xff5a36, density: 18, size: pixelSize },
             { radius: (config.coreRadius ?? 14) + 14, color: config.outerColor ?? 0xff8c42, density: 14, size: pixelSize + 1 },

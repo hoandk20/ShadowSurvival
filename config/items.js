@@ -3,7 +3,7 @@ export const ITEM_CONFIG = {
         textureKey: 'xp_orb_icon',
         label: 'XP Orb',
         type: 'xp',
-        baseValue: 20,
+        baseValue: 22,
         outerColor: 0x4fe4ff,
         innerColor: 0xffffff,
         size: 11,

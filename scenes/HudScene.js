@@ -1,4 +1,10 @@
 import Card, { CARD_LAYOUT } from '../entities/Card.js';
+import {
+    hideInventoryEvolutionPreview,
+    layoutInventoryEvolutionPreview,
+    syncInventoryEvolutionPreview,
+    toggleInventoryEvolutionPreview
+} from './ui/InventoryEvolutionPreview.js';
 
 export default class HudScene extends Phaser.Scene {
     constructor() {
@@ -34,6 +40,8 @@ export default class HudScene extends Phaser.Scene {
         this.inventoryPreviewIcon = null;
         this.inventoryPreviewTitle = null;
         this.inventoryPreviewLevel = null;
+        this.inventoryPreviewLines = [];
+        this.inventoryPreviewItemKey = null;
         this.pauseButton = null;
         this.pauseButtonBg = null;
         this.pauseButtonHitArea = null;
@@ -82,6 +90,7 @@ export default class HudScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1003);
+        this.killCountText.setVisible(false);
         this.runTimerText = this.add.text(0, 0, '00:00', {
             fontSize: '16px',
             fontFamily: 'Arial',
@@ -118,12 +127,14 @@ export default class HudScene extends Phaser.Scene {
         const shield = Math.max(0, player.temporaryShield ?? 0);
         const level = player.level ?? 1;
         const kills = this.mainScene?.killCount ?? 0;
+        const showKillCount = player.hasSkill?.('flame') || player.hasSkill?.('blueflame');
         const elapsedMs = this.mainScene?.getElapsedRunMs?.() ?? 0;
         const totalSeconds = Math.floor(elapsedMs / 1000);
         const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const seconds = String(totalSeconds % 60).padStart(2, '0');
 
         if (this.killCountText) {
+            this.killCountText.setVisible(Boolean(showKillCount));
             this.killCountText.setText(`Kills: ${kills}`);
         }
         if (this.runTimerText) {
@@ -210,6 +221,10 @@ export default class HudScene extends Phaser.Scene {
                 const item = slotContainer.getData('inventoryItem');
                 if (item && !this.inventoryExpanded) {
                     this.toggleInventoryExpanded();
+                    return;
+                }
+                if (item && this.inventoryExpanded) {
+                    toggleInventoryEvolutionPreview(this, item);
                 }
             });
             slotContainer.add(slotGraphics);
@@ -245,6 +260,8 @@ export default class HudScene extends Phaser.Scene {
         this.inventoryPreviewIcon = null;
         this.inventoryPreviewTitle = null;
         this.inventoryPreviewLevel = null;
+        this.inventoryPreviewLines = [];
+        this.inventoryPreviewItemKey = null;
     }
 
     createPauseButton() {
@@ -457,6 +474,8 @@ export default class HudScene extends Phaser.Scene {
             this.inventoryPreviewOverlay.setSize(width, height);
             this.inventoryPreviewOverlay.setVisible(this.inventoryExpanded);
         }
+
+        layoutInventoryEvolutionPreview(this);
     }
 
     refreshInventory(items = []) {
@@ -480,6 +499,8 @@ export default class HudScene extends Phaser.Scene {
             slot.levelText.setVisible(true);
             slot.container.setData('inventoryItem', item);
         });
+
+        syncInventoryEvolutionPreview(this, items);
     }
 
     showInventoryPreview() {
@@ -499,6 +520,7 @@ export default class HudScene extends Phaser.Scene {
         if (!this.inventoryExpanded) return;
         this.inventoryExpanded = false;
         this.inventoryPanel.setScale(1);
+        hideInventoryEvolutionPreview(this);
         this.layoutInventoryPanel();
     }
 
@@ -782,12 +804,7 @@ export default class HudScene extends Phaser.Scene {
         this.inventorySlots = [];
         this.inventoryPreviewOverlay?.destroy();
         this.inventoryPreviewOverlay = null;
-        this.inventoryPreviewContainer?.destroy(true);
-        this.inventoryPreviewContainer = null;
-        this.inventoryPreviewPanel = null;
-        this.inventoryPreviewIcon = null;
-        this.inventoryPreviewTitle = null;
-        this.inventoryPreviewLevel = null;
+        hideInventoryEvolutionPreview(this);
         this.mainScene = null;
     }
 }

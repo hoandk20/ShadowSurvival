@@ -2,14 +2,14 @@ const ELITE_MODIFIERS = {
     tank: {
         kind: 'self',
         apply(stats) {
-            stats.maxHealth *= 3;
+            stats.maxHealth *= 2;
             stats.knockbackResist *= 0.1;
         }
     },
     fast: {
         kind: 'self',
         apply(stats) {
-            stats.speed *= 5;
+            stats.speed *= 4;
             stats.scale *= 0.6;
             stats.damage -= 7;
             stats.maxHealth *= 0.5;
@@ -27,7 +27,7 @@ const ELITE_MODIFIERS = {
         kind: 'self',
         apply(stats) {
             stats.scale *= 2;
-            stats.maxHealth *= 5;
+            stats.maxHealth *= 4;
             stats.speed *= 0.5;
             stats.knockbackResist *= 0.1;
         }
@@ -103,13 +103,13 @@ const ELITE_MODIFIER_VISUALS = {
 
 const SHARED_ELITE_CONFIG = {
     baseChance: 0.001,
-    chancePerMinute: 0.005,
+    chancePerMinute: 0.003,
     maxChance: 0.5,
     lootTable: [
         { itemKey: 'xp_orb_icon', chance: 0.3, minAmount: 18, maxAmount: 30 }
     ],
     baseStatMultipliers: {
-        maxHealth: 10,
+        maxHealth: 7,
         damage: 1.5,
         speed: 1.5,
         scale: 1.2
@@ -169,7 +169,7 @@ export const STAGE_SCENARIOS = {
     church_sanctuary: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthPercentPerMinute: 7,
+        enemyHealthPercentPerMinute: 8,
         enemyUnlockTimeline: [
              { enemyType: 'worm', unlockAtMinute: 0, spawnWeight: 5 },
             { enemyType: 'slime', unlockAtMinute: 3, spawnWeight: 10 },
@@ -189,7 +189,7 @@ export const STAGE_SCENARIOS = {
     inside_church: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthPercentPerMinute: 7,
+        enemyHealthPercentPerMinute: 8,
         enemyUnlockTimeline: [
             { enemyType: 'bat', unlockAtMinute: 0, spawnWeight: 8 },
             { enemyType: 'slime', unlockAtMinute: 2, spawnWeight: 10 },
@@ -449,10 +449,12 @@ export function handleAuraSystem(enemies, scenario) {
             const dy = target.y - source.y;
             if ((dx * dx) + (dy * dy) > radiusSq) continue;
             const targetStats = nextStatsByEnemy.get(target);
+            const appliedAuraModifiers = targetStats.appliedAuraModifiers ?? (targetStats.appliedAuraModifiers = new Set());
             source.stageEliteState.modifierKeys.forEach((modifierKey) => {
                 const modifier = ELITE_MODIFIERS[modifierKey];
-                if (modifier?.kind === 'aura') {
+                if (modifier?.kind === 'aura' && !appliedAuraModifiers.has(modifierKey)) {
                     modifier.applyAura(targetStats);
+                    appliedAuraModifiers.add(modifierKey);
                 }
             });
         }
@@ -460,6 +462,7 @@ export function handleAuraSystem(enemies, scenario) {
 
     activeEnemies.forEach((enemy) => {
         const nextStats = nextStatsByEnemy.get(enemy);
+        delete nextStats.appliedAuraModifiers;
         enemy.applyRuntimeStats?.(nextStats);
     });
 }

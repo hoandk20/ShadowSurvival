@@ -543,7 +543,7 @@ export const CARD_CONFIG = [
         baseKey: 'waterwarn',
         name: 'Waterwarn',
         assetPath: 'assets/items/waterwarn.png',
-        skillKey: 'waterwarn',
+        skillKey: 'nova',
         rarity: 'rare'
     }),
     ...createSkillUpgradeCards({
