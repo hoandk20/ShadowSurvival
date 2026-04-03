@@ -1,4 +1,5 @@
 import { ITEM_CONFIG } from '../config/items.js';
+import { LOOT_CONFIG } from '../config/loot.js';
 import { playSfx } from '../utils/audioSettings.js';
 
 const ITEM_DESPAWN_VIEW_MARGIN = 300;
@@ -13,7 +14,7 @@ const XP_ORB_VISUAL_TIERS = [
 ];
 
 export default class Item extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y, itemKey, amount = 1) {
+    constructor(scene, x, y, itemKey, amount = 1, options = {}) {
         const config = ITEM_CONFIG[itemKey] ?? {};
         const textureKey = config.textureKey ?? itemKey;
         super(scene, x, y, textureKey);
@@ -24,6 +25,9 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         this.collected = false;
         this.isMagnetized = false;
         this.spawnTime = scene.time?.now ?? 0;
+        this.ownerPlayerId = options.ownerPlayerId ?? null;
+        this.ownershipReserveMs = Math.max(0, options.ownershipReserveMs ?? LOOT_CONFIG.ownershipReserveMs ?? 0);
+        this.reservedUntil = this.ownerPlayerId ? (this.spawnTime + this.ownershipReserveMs) : 0;
 
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -53,6 +57,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
 
     preUpdate(time, delta) {
         super.preUpdate(time, delta);
+        this.releaseOwnershipIfExpired(time);
         if (this.hasExpired(time)) {
             this.destroy();
             return;
@@ -84,7 +89,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
     }
 
     collect(player) {
-        if (this.collected || !player) return;
+        if (this.collected || !player || !this.canBeCollectedBy(player)) return;
         this.collected = true;
         if (this.body) {
             this.body.enable = false;
@@ -135,6 +140,8 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             && this.config?.type === 'xp'
             && other.config?.type === 'xp'
             && this.texture?.key === other.texture?.key
+            && (this.ownerPlayerId ?? null) === (other.ownerPlayerId ?? null)
+            && (this.reservedUntil ?? 0) === (other.reservedUntil ?? 0)
         );
     }
 
@@ -146,6 +153,30 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         other.collected = true;
         other.destroy();
         return true;
+    }
+
+    releaseOwnershipIfExpired(time = null) {
+        if (!this.ownerPlayerId) return;
+        const now = typeof time === 'number' ? time : (this.scene?.time?.now ?? 0);
+        if (now < (this.reservedUntil ?? 0)) return;
+        this.ownerPlayerId = null;
+        this.reservedUntil = 0;
+    }
+
+    isReservedForOtherPlayer(player, time = null) {
+        if (!player || !this.ownerPlayerId) return false;
+        const playerId = player.playerId ?? null;
+        if (!playerId || playerId === this.ownerPlayerId) return false;
+        const now = typeof time === 'number' ? time : (this.scene?.time?.now ?? 0);
+        return now < (this.reservedUntil ?? 0);
+    }
+
+    canBeCollectedBy(player, time = null) {
+        return !this.isReservedForOtherPlayer(player, time);
+    }
+
+    canBeMagnetizedBy(player, time = null) {
+        return this.canBeCollectedBy(player, time);
     }
 
     refreshVisualState() {

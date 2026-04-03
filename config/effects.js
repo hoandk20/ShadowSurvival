@@ -9,17 +9,6 @@ export const EFFECT_CONFIG = {
             depthOffset: 2
         },
         tags: ['pixel', 'dark', 'sparkle']
-    }
-    ,
-    auraGlow: {
-        label: 'Holy Aura Burst',
-        description: 'Golden pixel aura that wraps around the aura skill.',
-        usage: ['skill-aura'],
-        effectClass: 'HolyAuraEffect',
-        settings: {
-            depthOffset: 3
-        },
-        tags: ['pixel', 'holy', 'loop']
     },
     codeProjectile: {
         label: 'Code Projectile',
@@ -74,25 +63,6 @@ export const EFFECT_CONFIG = {
             streamArc: 28
         },
         tags: ['pixel', 'water', 'particle']
-    },
-    aquaShieldBubble: {
-        label: 'Aqua Shield Bubble',
-        description: 'Protective water bubble that wraps around the player.',
-        usage: ['skill-aura'],
-        effectClass: 'WaterShieldEffect',
-        settings: {
-            depthOffset: 7,
-            ringColor: 0x95ecff,
-            ringSecondaryColor: 0x49b8ff,
-            glowColor: 0xcff8ff,
-            bubbleColor: 0xe8fdff,
-            radiusX: 26,
-            radiusY: 34,
-            orbitRadiusX: 18,
-            orbitRadiusY: 24,
-            pulseScale: 1.05
-        },
-        tags: ['pixel', 'water', 'shield', 'bubble']
     },
     cometTail: {
         label: 'Comet Tail',

@@ -1,5 +1,4 @@
 // entities/Projectile.js
-import Phaser from 'phaser';
 
 export default class Projectile extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, texture, config) {

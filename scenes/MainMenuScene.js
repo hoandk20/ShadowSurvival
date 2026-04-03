@@ -1,6 +1,7 @@
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
 import { CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { DEFAULT_MAP_KEY, getAvailableMaps, getMapDefinition } from '../config/map.js';
+import { getCharacterStats } from '../config/stats.js';
 import { SKILL_CONFIG } from '../config/skill.js';
 import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, updateAudioSetting } from '../utils/audioSettings.js';
 import {
@@ -29,6 +30,8 @@ const MAP_THEME_COLORS = {
     inside_church: 0xb9b0a3,
     maprock_field: 0x8fa7c7
 };
+
+const formatCharacterStatLine = (label, totalValue) => `${label}: ${totalValue ?? 0}`;
 
 export default class MainMenuScene extends Phaser.Scene {
     constructor() {
@@ -64,9 +67,12 @@ export default class MainMenuScene extends Phaser.Scene {
 
     create() {
         this.cameras.main.roundPixels = true;
+        this.mode = 'main';
         this.registry.set('audioSettings', { ...DEFAULT_AUDIO_SETTINGS, ...ensureAudioSettings(this.registry) });
-        this.selectedCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
-        this.selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
+        const initialCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
+        this.selectedCharacterKey = CHARACTER_CONFIG[initialCharacterKey] ? initialCharacterKey : DEFAULT_CHARACTER_KEY;
+        const initialMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
+        this.selectedMapKey = getMapDefinition(initialMapKey) ? initialMapKey : DEFAULT_MAP_KEY;
         this.debugMode = this.registry.get('debugMode') === true;
         this.setDebugPanelVisible(false);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
@@ -102,6 +108,12 @@ export default class MainMenuScene extends Phaser.Scene {
 
     render() {
         this.destroyRenderTree();
+        if (!CHARACTER_CONFIG[this.selectedCharacterKey]) {
+            this.selectedCharacterKey = DEFAULT_CHARACTER_KEY;
+        }
+        if (!getMapDefinition(this.selectedMapKey)) {
+            this.selectedMapKey = DEFAULT_MAP_KEY;
+        }
         this.characterGridKeys = [];
         this.characterGridColumns = 0;
         this.mapOptionKeys = [];
@@ -144,14 +156,14 @@ export default class MainMenuScene extends Phaser.Scene {
         const buttonWidth = Math.min(Math.max(width - safeX * 2, 250), isPortrait ? 320 : 360);
         const buttonHeight = isCompact ? 50 : 56;
         const buttonGap = isCompact ? 16 : 18;
-        const totalHeight = buttonHeight * 5 + buttonGap * 4;
-        const buttonY = Math.max(safeY + 120, height / 2 - totalHeight / 2 + buttonHeight / 2);
         const buttons = [
             { label: 'START GAME', action: () => this.beginNewRun(false) },
             { label: 'START DEBUG MODE', action: () => this.beginNewRun(true) },
             { label: 'SETTINGS', action: () => this.setMode('settings') },
             { label: 'CREDITS', action: () => this.setMode('credits') }
         ];
+        const totalHeight = buttonHeight * buttons.length + buttonGap * Math.max(0, buttons.length - 1);
+        const buttonY = Math.max(safeY + 120, height / 2 - totalHeight / 2 + buttonHeight / 2);
 
         buttons.forEach((entry, index) => {
             const button = createPixelButton(this, width / 2, buttonY + index * (buttonHeight + buttonGap), buttonWidth, buttonHeight, entry.label, () => {
@@ -229,12 +241,13 @@ export default class MainMenuScene extends Phaser.Scene {
         }).setOrigin(0.5, 0));
         const skillKey = selectedCharacter.defaultSkill ?? 'thunder';
         const skillCfg = SKILL_CONFIG[skillKey] ?? {};
+        const characterStats = getCharacterStats(selectedCharacter);
         const stats = [
-            `HP: ${selectedCharacter.hp ?? 0}`,
+            formatCharacterStatLine('HP', characterStats.hp),
             `DAMAGE: ${skillCfg.damage ?? 0}`,
             `SKILL: ${(skillCfg.label ?? skillKey).toUpperCase()}`,
-            `SPEED: ${selectedCharacter.speed ?? 0}`,
-            `ARMOR: ${selectedCharacter.armor ?? 1}`
+            formatCharacterStatLine('SPEED', characterStats.moveSpeed),
+            formatCharacterStatLine('ARMOR', characterStats.armor)
         ];
         const statsStartY = compactPortrait ? 50 : isPortrait ? 64 : 82;
         const statsGap = compactPortrait ? 14 : isCompact ? 18 : 22;
@@ -358,12 +371,13 @@ export default class MainMenuScene extends Phaser.Scene {
             updateAudioSetting(this, 'sfxEnabled', value);
         });
         panel.add([musicToggle, sfxToggle]);
+        const backButtonY = height / 2 + panelHeight / 2 - 34;
         if (showFullscreenButton) {
             const isFullscreen = this.scale.isFullscreen === true;
             panel.add(createPixelButton(
                 this,
                 0,
-                112,
+                panelHeight / 2 - 74,
                 Math.min(240, panelWidth - 48),
                 isCompact ? 42 : 40,
                 isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN',
@@ -376,7 +390,7 @@ export default class MainMenuScene extends Phaser.Scene {
                 }
             ));
         }
-        this.uiRoot.add(createPixelButton(this, width / 2, height / 2 + panelHeight / 2 - 34, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
+        this.uiRoot.add(createPixelButton(this, width / 2, backButtonY, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
             fontSize: isCompact ? '14px' : '16px'
         }));
     }
@@ -472,11 +486,19 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     createCharacterPreview(key, x, y, displaySize = 70) {
-        const assetConfig = CHARACTER_ASSET_CONFIG[key];
+        const resolvedKey = CHARACTER_CONFIG[key] ? key : DEFAULT_CHARACTER_KEY;
+        const assetConfig = CHARACTER_ASSET_CONFIG[resolvedKey];
         const atlasKey = assetConfig?.atlas?.key;
         const frameName = assetConfig?.animations?.idle?.frames?.[0]
             ?? assetConfig?.animations?.move?.frames?.[0]
             ?? 'image.png';
+        if (!atlasKey || !this.textures.exists(atlasKey)) {
+            return createPixelText(this, x, y, '?', {
+                fontSize: `${Math.max(20, Math.floor(displaySize * 0.55))}px`,
+                color: '#fff1c9',
+                strokeThickness: 4
+            }).setOrigin(0.5);
+        }
         return this.add.sprite(x, y, atlasKey, frameName)
             .setDisplaySize(displaySize, displaySize)
             .setOrigin(0.5);
@@ -552,7 +574,9 @@ export default class MainMenuScene extends Phaser.Scene {
                 return;
             }
             this.handleMapNavigation(keyCode);
+            return;
         }
+
     }
 
     handleCharacterGridNavigation(keyCode) {

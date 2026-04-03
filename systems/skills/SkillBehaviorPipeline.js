@@ -1,13 +1,11 @@
 import SkillEffectRunner from './SkillEffectRunner.js';
 import directHitBehavior from './behaviors/directHitBehavior.js';
 import stunOnHitBehavior from './behaviors/stunOnHitBehavior.js';
-import explosionOnHitBehavior from './behaviors/explosionOnHitBehavior.js';
 import projectileResolutionBehavior from './behaviors/projectileResolutionBehavior.js';
 
 const BEHAVIOR_MAP = {
     directHit: directHitBehavior,
     stunOnHit: stunOnHitBehavior,
-    explosionOnHit: explosionOnHitBehavior,
     projectileResolution: projectileResolutionBehavior
 };
 

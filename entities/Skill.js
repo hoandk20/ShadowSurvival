@@ -1,19 +1,16 @@
 import { SKILL_CONFIG } from '../config/skill.js';
-import HolyAuraEffect from './effects/HolyAuraEffect.js';
 import CodeProjectileEffect from './effects/CodeProjectileEffect.js';
 import IceParticleEffect from './effects/IceParticleEffect.js';
 import CometTailEffect from './effects/CometTailEffect.js';
 import WaterParticleEffect from './effects/WaterParticleEffect.js';
-import WaterShieldEffect from './effects/WaterShieldEffect.js';
 import { EFFECT_CONFIG } from '../config/effects.js';
 import { resolveSkillBehaviorEntries } from '../systems/skills/skillBehaviorConfig.js';
+import { applyDamageVariance } from '../utils/damageVariance.js';
 
 const EFFECT_CLASS_MAP = {
-    auraGlow: HolyAuraEffect,
     codeProjectile: CodeProjectileEffect,
     iceTrail: IceParticleEffect,
     aquaStreamTrail: WaterParticleEffect,
-    aquaShieldBubble: WaterShieldEffect,
     cometTail: CometTailEffect,
     cometTailAstral: CometTailEffect,
 };
@@ -36,6 +33,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
 
         super(scene, 0, 0, baseTexture, baseFrame);
         this.owner = owner;
+        this.ownerPlayerId = owner?.playerId ?? null;
+        this.ownerEntityId = owner?.playerId ?? owner?.name ?? owner?.type ?? null;
         this.skillType = skillType;
         this.config = config;
         this.primaryAnimName = primaryAnimName;
@@ -46,13 +45,26 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const ownerDamageMul = owner.damageMultiplier ?? 1;
         const skillDamageMul = owner.getSkillDamageMultiplier?.(skillType) ?? 1;
         const skillDamageFlat = owner.getSkillDamageFlatBonus?.(skillType) ?? 0;
-        this.baseDamage = Math.max(0, (config.damage ?? 10) + skillDamageFlat) * ownerDamageMul * skillDamageMul;
+        const rawBaseDamage = Math.max(0, (config.damage ?? 10) + skillDamageFlat) * ownerDamageMul * skillDamageMul;
+        const projectileCount = Math.max(1, Math.round(owner.getSkillObjectCount?.(skillType) ?? config.defaultObjects ?? 1));
+        const perProjectileDamage = projectileCount <= 1
+            ? rawBaseDamage
+            : (rawBaseDamage / projectileCount) + (0.1 * rawBaseDamage);
+        this.baseDamage = Math.max(0, perProjectileDamage);
         this.damage = this.baseDamage;
         this.tintColor = config.tint ?? null;
-        this.category = config.category ?? 'area';
-        this.isAura = this.category === 'aura';
+        this.category = config.category ?? 'projectile';
+        this.isMelee = this.category === 'melee';
+        this.meleeVisualProjectile = this.isMelee && (config.meleeVisualProjectile ?? false);
+        this.meleeVisualTravelTime = Math.max(40, config.meleeVisualTravelTime ?? 90);
         this.projectileSpeed = Math.max(0, (config.projectileSpeed ?? 0) * (owner.getSkillProjectileSpeedMultiplier?.(skillType) ?? 1));
         this.travelRange = config.travelRange ?? 0;
+        this.meleeRange = Math.max(0, config.meleeRange ?? this.travelRange ?? 0);
+        this.meleeTargetMode = config.meleeTargetMode ?? 'single';
+        this.meleeArcDegrees = Phaser.Math.Clamp(config.meleeArcDegrees ?? 0, 0, 360);
+        this.meleeMaxTargets = Number.isFinite(config.meleeMaxTargets)
+            ? Math.max(1, Math.round(config.meleeMaxTargets))
+            : Infinity;
         this.homing = config.homing ?? false;
         this.destroyOnHit = config.destroyOnHit ?? false;
         this.bounceOnHit = config.bounceOnHit ?? false;
@@ -61,20 +73,16 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.alignWithMovement = config.alignWithMovement ?? false;
         this.rotationOffset = config.rotationOffset ?? 0;
         this.rotateSpriteToDirection = config.rotateSpriteToDirection ?? true;
-        this.orbitRadius = (config.orbitRadius ?? 0) * areaMultiplier;
-        this.orbitSpeed = config.orbitSpeed ?? 0;
-        this.orbitDirection = config.orbitDirection ?? 1;
-        this.orbitAngle = 0;
         this.spinOnFlight = config.spinOnFlight ?? false;
         this.spinSpeed = config.spinSpeed ?? 0;
         this.baseRotation = 0;
         this.effectKey = config.effectKey ?? null;
         this.effectInstance = null;
-        this.explosionOnHit = config.explosionOnHit ?? false;
         const explosionRadiusMultiplier = owner.getSkillExplosionRadiusMultiplier?.(skillType) ?? 1;
         this.explosionRadius = Math.max(0, Math.round((config.explosionRadius ?? 0) * explosionRadiusMultiplier));
         this.explosionDamageMultiplier = Math.max(0, config.explosionDamageMultiplier ?? 1);
         this.explosionKnockbackMultiplier = Math.max(0, config.explosionKnockbackMultiplier ?? 1);
+        this.knockback = Math.max(0, Math.round((config.knockback ?? 0) * (owner.getSkillKnockbackMultiplier?.(skillType) ?? 1)));
         this.hasExploded = false;
         this.knockbackCount = 0;
         this.direction = new Phaser.Math.Vector2(0, 0);
@@ -83,6 +91,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.prevX = 0;
         this.prevY = 0;
         this.hitTargets = new Set();
+        this.meleeHitResolved = false;
+        this.meleeVisualTween = null;
         this.dropFromSky = config.dropFromSky ?? false;
         this.dropTarget = null;
         this.dropTrackingSpeed = config.dropTrackingSpeed ?? 220;
@@ -91,8 +101,9 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.playAnimation = config.playAnimation ?? true;
         this.visibleDuringEffect = config.visibleDuringEffect ?? true;
         this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
-        this.critMultiplier = config.critMultiplier ?? 1.5;
+        this.critMultiplier = (config.critMultiplier ?? 1.5) + (owner.getSkillCritMultiplierBonus?.(skillType) ?? 0);
         this.critColor = config.critColor ?? '#ffde59';
+        this.tags = Array.isArray(config.tags) ? [...config.tags] : [];
         this.behaviorEntries = resolveSkillBehaviorEntries(config);
         const baseStunDuration = (config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1);
         const bonusEffectDuration = owner.getSkillEffectDurationBonus?.(skillType) ?? 0;
@@ -124,13 +135,20 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         return this.y >= worldView.centerY;
     }
 
+    getPrimaryStatusEffects() {
+        return Array.isArray(this.config?.statusEffects) ? this.config.statusEffects : [];
+    }
+
+    getBonusStatusEffects() {
+        return Array.isArray(this.config?.bonusStatusEffects) ? this.config.bonusStatusEffects : [];
+    }
+
     triggerAutoExplosion() {
         if (!this.active || this.hasExploded) return false;
         const effectRunner = this.scene?.skillBehaviorPipeline?.effects;
-        const explosionBehavior = Array.isArray(this.behaviorEntries)
-            ? this.behaviorEntries.find((entry) => entry?.type === 'explosionOnHit')
-            : null;
-        const behaviorConfig = explosionBehavior?.config ?? {};
+        const explosionStatusEffect = [...this.getPrimaryStatusEffects(), ...this.getBonusStatusEffects()]
+            .find((entry) => (entry?.key ?? entry?.effectKey) === 'explosion');
+        const behaviorConfig = explosionStatusEffect ?? {};
         const radius = behaviorConfig.radius ?? this.explosionRadius ?? 0;
         if (radius <= 0) {
             this.destroy();
@@ -147,10 +165,18 @@ export default class Skill extends Phaser.GameObjects.Sprite {
 
         const damageMultiplier = behaviorConfig.damageMultiplier ?? this.explosionDamageMultiplier ?? 1;
         const knockbackMultiplier = behaviorConfig.knockbackMultiplier ?? this.explosionKnockbackMultiplier ?? 1;
-        const explosionDamage = Math.max(1, Math.round(this.baseDamage * damageMultiplier));
-        const explosionForce = Math.max(0, Math.round((this.config?.knockback ?? 0) * knockbackMultiplier));
+        const explosionDamage = applyDamageVariance(Math.max(1, Math.round(this.baseDamage * damageMultiplier)));
+        const explosionForce = Math.max(0, Math.round((this.knockback ?? this.config?.knockback ?? 0) * knockbackMultiplier));
         const radiusSq = radius * radius;
         const splashTargets = this.scene?.enemies?.getChildren?.() ?? [];
+        const attackTags = Array.from(new Set([
+            ...this.tags,
+            'explosion',
+            this.skillType
+        ].filter(Boolean)));
+        const followupStatusEffects = [...this.getPrimaryStatusEffects(), ...this.getBonusStatusEffects()].filter(
+            (entry) => (entry?.key ?? entry?.effectKey) !== 'explosion'
+        );
         const tintText = typeof tint === 'string'
             ? tint
             : Phaser.Display.Color.IntegerToColor(tint ?? 0xff8c42).rgba;
@@ -169,23 +195,54 @@ export default class Skill extends Phaser.GameObjects.Sprite {
                 direction.normalize();
             }
 
-            enemy.takeDamage(
+            const damageResult = enemy.takeDamage(
                 explosionDamage,
                 explosionForce,
                 direction,
                 this,
-                { damageSource: this, fromExplosion: true, fromAutoExplosion: true },
+                {
+                    damageSource: this,
+                    fromExplosion: true,
+                    fromAutoExplosion: true,
+                    attackTags,
+                    isCritical: false
+                },
                 {
                     ...this.config,
                     knockbackTakeDamage: false,
                     knockback: explosionForce
                 }
-            );
+            ) ?? { healthDamage: explosionDamage, absorbedDamage: 0, didKill: false };
 
             effectRunner?.showDamageText(enemy, explosionDamage, {
                 color: tintText,
                 fontSize: '7px'
             });
+            const hitEvent = {
+                target: enemy,
+                sourceOwner: this.owner ?? null,
+                source: this,
+                ownerPlayerId: this.ownerPlayerId ?? null,
+                attackTags,
+                isCritical: false,
+                damage: explosionDamage,
+                damageTaken: damageResult.healthDamage ?? explosionDamage,
+                absorbedDamage: damageResult.absorbedDamage ?? 0,
+                didKill: Boolean(damageResult.didKill),
+                direction,
+                force: explosionForce
+            };
+            this.scene?.statusEffectSystem?.applyConfiguredEffects?.(followupStatusEffects, {
+                ...hitEvent,
+                trigger: 'onExplosionHit'
+            });
+            if (damageResult.didKill) {
+                this.scene?.statusEffectSystem?.applyConfiguredEffects?.(followupStatusEffects, {
+                    ...hitEvent,
+                    trigger: 'onKill'
+                });
+            }
+            this.scene?.statusEffectSystem?.notifyHit?.(hitEvent);
         }
 
         this.destroy();
@@ -195,7 +252,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
     rollCriticalDamage() {
         const isCritical = Math.random() < this.critChance;
         const multiplier = isCritical ? this.critMultiplier : 1;
-        const value = Math.max(1, Math.round(this.baseDamage * multiplier));
+        const value = applyDamageVariance(Math.max(1, Math.round(this.baseDamage * multiplier)));
         this.lastRoll = { value, isCritical };
         return this.lastRoll;
     }
@@ -203,37 +260,22 @@ export default class Skill extends Phaser.GameObjects.Sprite {
     cast() {
         this.hasExploded = false;
         this.knockbackCount = 0;
+        this.meleeHitResolved = false;
         let x = this.owner.x;
         let y = this.owner.y;
-        if (this.category === 'area' && !this.isAura) {
-            if (typeof this.customAngle === 'number') {
-                const radius = 32;
-                x = this.owner.x + Math.cos(this.customAngle) * radius;
-                y = this.owner.y + Math.sin(this.customAngle) * radius;
-            } else {
-                const ownerBounds = this.owner.getBounds ? this.owner.getBounds() : null;
-                const direction = this.owner.flipX ? -1 : 1;
-                const castGap = this.config?.castGap ?? 16;
-                const frontEdge = ownerBounds
-                    ? (this.owner.flipX ? ownerBounds.left : ownerBounds.right)
-                    : this.owner.x;
-                x = frontEdge + direction * castGap;
+        if (this.isMelee) {
+            const anchor = this.getMeleeAnchorPoint();
+            if (this.meleeVisualProjectile) {
+                x = this.owner.x;
                 y = this.owner.y;
+            } else {
+                x = anchor.x;
+                y = anchor.y;
             }
         }
-        if (this.isAura) {
-            x = this.owner.x;
-            y = this.owner.y;
-        }
-
         this.hitTargets.clear();
         this.remainingChainTargets = this.maxChainTargets;
-        if (this.category === 'area' && !this.isAura) {
-            const horizontalOrigin = this.owner.flipX ? 1 : 0;
-            this.setOrigin(horizontalOrigin, 0.5);
-        } else {
-            this.setOrigin(0.5, 0.5);
-        }
+        this.setOrigin(0.5, 0.5);
         this.setPosition(x, y);
         this.setDepth(30);
         this.setFlipX(this.owner.flipX);
@@ -247,6 +289,37 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
         this.setActive(true);
         this.setVisible(this.visibleDuringEffect);
+        if (this.isMelee) {
+            const initialAnchor = this.getMeleeAnchorPoint();
+            this.direction.copy(initialAnchor.direction);
+            this.setRotation(this.getFacingRotation(Math.atan2(initialAnchor.direction.y, initialAnchor.direction.x)));
+            this.setFlipX(initialAnchor.direction.x < 0);
+        }
+        this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getPrimaryStatusEffects(), {
+            trigger: 'onCast',
+            target: this.owner,
+            sourceOwner: this.owner ?? null,
+            source: this,
+            ownerPlayerId: this.ownerPlayerId ?? null,
+            attackTags: this.tags ?? [],
+            isCritical: false,
+            didKill: false
+        });
+        this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getBonusStatusEffects(), {
+            trigger: 'onCast',
+            target: this.owner,
+            sourceOwner: this.owner ?? null,
+            source: this,
+            ownerPlayerId: this.ownerPlayerId ?? null,
+            attackTags: this.tags ?? [],
+            isCritical: false,
+            didKill: false
+        });
+
+        if (this.config?.attackStyle === 'chain_lightning_strike') {
+            this.castChainLightningStrike();
+            return;
+        }
 
         const effectDefinition = this.effectKey ? EFFECT_CONFIG[this.effectKey] : null;
         if (this.effectKey && EFFECT_CLASS_MAP[this.effectKey]) {
@@ -274,21 +347,16 @@ export default class Skill extends Phaser.GameObjects.Sprite {
                 const directionX = this.owner.flipX ? -1 : 1;
                 this.direction.set(directionX, 0).normalize();
             }
-        } else if (this.category === 'area' && !this.isAura) {
-            this.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-                this.destroy();
-            });
         }
-
-        if (this.category === 'orbit') {
-            if (typeof this.customAngle === 'number') {
-                this.orbitAngle = this.customAngle;
-            } else {
-                this.orbitAngle = Math.random() * Math.PI * 2;
+        if (this.isMelee) {
+            if (this.meleeVisualProjectile) {
+                const previewTarget = this.getNearestEnemyInRange();
+                this.startMeleeVisualTravel(previewTarget);
             }
-            this.startX = this.owner.x + Math.cos(this.orbitAngle) * this.orbitRadius;
-            this.startY = this.owner.y + Math.sin(this.orbitAngle) * this.orbitRadius;
-            this.setPosition(this.startX, this.startY);
+            this.tryResolveMeleeHit();
+            if (!this.active) {
+                return;
+            }
         }
 
         this.scene.time.delayedCall(this.duration, () => {
@@ -298,6 +366,125 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         });
     }
 
+    castChainLightningStrike() {
+        const primaryTarget = this.getNearestEnemyTarget();
+        if (!primaryTarget) {
+            this.destroy();
+            return;
+        }
+
+        const effectRunner = this.scene?.skillBehaviorPipeline?.effects;
+        const sourcePoint = {
+            x: this.owner?.x ?? this.x,
+            y: (this.owner?.y ?? this.y) - ((this.owner?.body?.height ?? 24) * 0.2)
+        };
+        effectRunner?.spawnChainLightning?.(
+            sourcePoint,
+            primaryTarget,
+            (primaryTarget.depth ?? this.depth ?? 20) + 6,
+            {
+                color: this.config?.lightningColor ?? 0x79dfff,
+                glowColor: this.config?.lightningGlowColor ?? 0xe6fcff,
+                particleCount: 8,
+                duration: 130
+            }
+        );
+
+        const roll = this.rollCriticalDamage();
+        this.damage = roll.value;
+        const attackTags = Array.from(new Set([
+            ...(Array.isArray(this.config?.tags) ? this.config.tags : []),
+            this.skillType,
+            'lightning',
+            'shock',
+            'hit'
+        ].filter(Boolean)));
+        const direction = new Phaser.Math.Vector2(primaryTarget.x - sourcePoint.x, primaryTarget.y - sourcePoint.y);
+        if (direction.lengthSq() === 0) {
+            direction.set(1, 0);
+        } else {
+            direction.normalize();
+        }
+
+        const force = this.config?.knockback ?? 0;
+        const damageResult = primaryTarget.takeDamage(
+            roll.value,
+            force,
+            direction,
+            this,
+            {
+                damageSource: this,
+                attackTags,
+                isCritical: roll.isCritical
+            },
+            this.config
+        ) ?? { healthDamage: roll.value, absorbedDamage: 0, didKill: false };
+
+        effectRunner?.showDamageText(primaryTarget, roll.value, {
+            color: roll.isCritical ? (this.critColor ?? '#ffde59') : '#ffde59',
+            fontSize: '7px'
+        });
+
+        const hitEvent = {
+            target: primaryTarget,
+            sourceOwner: this.owner ?? null,
+            source: this,
+            ownerPlayerId: this.ownerPlayerId ?? null,
+            attackTags,
+            isCritical: roll.isCritical,
+            damage: roll.value,
+            damageTaken: damageResult.healthDamage ?? roll.value,
+            absorbedDamage: damageResult.absorbedDamage ?? 0,
+            didKill: Boolean(damageResult.didKill),
+            direction,
+            force
+        };
+        this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getPrimaryStatusEffects(), {
+            ...hitEvent,
+            trigger: 'onHit'
+        });
+        this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getBonusStatusEffects(), {
+            ...hitEvent,
+            trigger: 'onHit'
+        });
+        if (roll.isCritical) {
+            this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getPrimaryStatusEffects(), {
+                ...hitEvent,
+                trigger: 'onCrit'
+            });
+            this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getBonusStatusEffects(), {
+                ...hitEvent,
+                trigger: 'onCrit'
+            });
+        }
+        if (damageResult.didKill) {
+            this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getPrimaryStatusEffects(), {
+                ...hitEvent,
+                trigger: 'onKill'
+            });
+            this.scene?.statusEffectSystem?.applyConfiguredEffects?.(this.getBonusStatusEffects(), {
+                ...hitEvent,
+                trigger: 'onKill'
+            });
+        }
+        this.scene?.statusEffectSystem?.notifyHit?.(hitEvent);
+
+        this.scene?.statusEffectSystem?.chainLightningFrom?.(primaryTarget, {
+            ownerPlayerId: this.ownerPlayerId ?? null,
+            source: this,
+            baseDamage: roll.value,
+            chainCount: this.config?.chainCount ?? 3,
+            chainRadius: this.config?.chainRadius ?? 180,
+            damageRatios: this.config?.chainDamageRatios,
+            initialDamageRatio: this.config?.chainInitialDamageRatio ?? 0.75,
+            damageDecayFactor: this.config?.chainDamageDecayFactor ?? 0.75,
+            minimumDamageRatio: this.config?.chainMinimumDamageRatio ?? 0.3,
+            targetMode: 'enemies'
+        });
+
+        this.destroy();
+    }
+
     update(time, delta) {
         if (this.effectInstance?.update) {
             this.effectInstance.update(time, delta);
@@ -305,10 +492,13 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         if (this.active) {
             this.setDisplaySize(this.hitboxWidth, this.hitboxHeight);
         }
-        if (this.active && this.isAura && this.owner) {
-            this.setPosition(this.owner.x, this.owner.y);
-        }
-        if (this.active && this.category === 'projectile') {
+        if (this.active && this.isMelee && !this.meleeVisualProjectile) {
+            this.syncMeleePosition();
+            this.tryResolveMeleeHit();
+            if (!this.active) {
+                return;
+            }
+        } else if (this.active && this.category === 'projectile') {
             this.prevX = this.x;
             this.prevY = this.y;
             if (this.homing) {
@@ -350,13 +540,185 @@ export default class Skill extends Phaser.GameObjects.Sprite {
                     this.destroy();
                 }
             }
-        } else if (this.active && this.category === 'orbit') {
-            this.orbitAngle += ((this.orbitSpeed * this.orbitDirection) * delta) / 1000;
-            const targetX = this.owner.x + Math.cos(this.orbitAngle) * this.orbitRadius;
-            const targetY = this.owner.y + Math.sin(this.orbitAngle) * this.orbitRadius;
-            this.x = targetX;
-            this.y = targetY;
         }
+    }
+
+    getMeleeDirection(target = null) {
+        const direction = new Phaser.Math.Vector2(0, 0);
+        if (target?.active) {
+            direction.set(target.x - this.owner.x, target.y - this.owner.y);
+        } else if (this.owner?.lastMoveDirection?.lengthSq?.() > 0) {
+            direction.copy(this.owner.lastMoveDirection);
+        } else {
+            direction.set(this.owner?.flipX ? -1 : 1, 0);
+        }
+        if (direction.lengthSq() === 0) {
+            direction.set(this.owner?.flipX ? -1 : 1, 0);
+        }
+        return direction.normalize();
+    }
+
+    getMeleeAnchorPointForDirection(directionInput = null) {
+        const direction = directionInput?.clone?.() ?? new Phaser.Math.Vector2(this.owner?.flipX ? -1 : 1, 0);
+        if (direction.lengthSq() === 0) {
+            direction.set(this.owner?.flipX ? -1 : 1, 0);
+        }
+        direction.normalize();
+        const castGap = this.config?.castGap ?? Math.max(16, Math.round(this.meleeRange * 0.35));
+        const anchorX = this.owner.x + direction.x * castGap;
+        const anchorY = this.owner.y + direction.y * Math.max(10, castGap * 0.6);
+        return { x: anchorX, y: anchorY, direction };
+    }
+
+    getMeleeAnchorPoint(target = null) {
+        return this.getMeleeAnchorPointForDirection(this.getMeleeDirection(target));
+    }
+
+    syncMeleePosition(target = null, direction = null) {
+        if (!this.active || !this.owner) return;
+        const anchor = direction
+            ? this.getMeleeAnchorPointForDirection(direction)
+            : this.getMeleeAnchorPoint(target);
+        this.direction.copy(anchor.direction);
+        this.setPosition(anchor.x, anchor.y);
+        this.setRotation(this.getFacingRotation(Math.atan2(anchor.direction.y, anchor.direction.x)));
+        this.setFlipX(anchor.direction.x < 0);
+    }
+
+    getNearestEnemyInRange(range = this.meleeRange) {
+        if (!this.scene?.enemies?.getChildren || range <= 0) return null;
+        const enemies = this.scene.enemies.getChildren();
+        let nearest = null;
+        let minDistance = Number.POSITIVE_INFINITY;
+
+        for (const enemy of enemies) {
+            if (!enemy?.active || enemy.isDead) continue;
+            if (this.hitTargets.has(enemy)) continue;
+
+            const distance = Phaser.Math.Distance.Between(this.owner.x, this.owner.y, enemy.x, enemy.y);
+            const enemyRadius = Math.max(enemy.displayWidth ?? enemy.body?.width ?? 0, enemy.displayHeight ?? enemy.body?.height ?? 0) * 0.5;
+            if (distance > range + enemyRadius) continue;
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearest = enemy;
+            }
+        }
+
+        return nearest;
+    }
+
+    getEnemiesInMeleeArc(range = this.meleeRange, direction = this.getMeleeDirection(), arcDegrees = this.meleeArcDegrees) {
+        if (!this.scene?.enemies?.getChildren || range <= 0) return [];
+        const enemies = this.scene.enemies.getChildren();
+        const forward = direction?.clone?.() ?? new Phaser.Math.Vector2(this.owner?.flipX ? -1 : 1, 0);
+        if (forward.lengthSq() === 0) {
+            forward.set(this.owner?.flipX ? -1 : 1, 0);
+        }
+        forward.normalize();
+        const meleeEffect = this.config?.meleeHitEffect ?? {};
+        const effectRadius = Math.max(0, meleeEffect.radius ?? 0);
+        const arcRadius = effectRadius > 0 ? effectRadius : range;
+        const forwardOffset = Math.max(0, meleeEffect.forwardOffset ?? this.config?.castGap ?? 0);
+        const sweepOrigin = new Phaser.Math.Vector2(
+            this.owner.x + (forward.x * forwardOffset),
+            this.owner.y + (forward.y * Math.max(0, forwardOffset * 0.55))
+        );
+        const halfArcRadians = Phaser.Math.DegToRad(Math.max(0, Math.min(360, arcDegrees)) * 0.5);
+        const dotThreshold = arcDegrees >= 360 ? -1 : Math.cos(halfArcRadians);
+        const targets = [];
+
+        for (const enemy of enemies) {
+            if (!enemy?.active || enemy.isDead) continue;
+            if (this.hitTargets.has(enemy)) continue;
+
+            const toEnemy = new Phaser.Math.Vector2(enemy.x - sweepOrigin.x, enemy.y - sweepOrigin.y);
+            const enemyRadius = Math.max(enemy.displayWidth ?? enemy.body?.width ?? 0, enemy.displayHeight ?? enemy.body?.height ?? 0) * 0.5;
+            const distance = toEnemy.length();
+            const closestDistance = Math.max(0, distance - enemyRadius);
+            if (closestDistance > arcRadius) continue;
+            if (distance <= enemyRadius || toEnemy.lengthSq() === 0) {
+                targets.push({ enemy, distanceSq: 0 });
+                continue;
+            }
+
+            const nearestEdgeDirection = toEnemy.clone().normalize();
+            if (forward.dot(nearestEdgeDirection) < dotThreshold) continue;
+            targets.push({ enemy, distanceSq: closestDistance * closestDistance });
+        }
+
+        targets.sort((left, right) => left.distanceSq - right.distanceSq);
+        const maxTargets = this.meleeMaxTargets;
+        return targets
+            .slice(0, Number.isFinite(maxTargets) ? maxTargets : targets.length)
+            .map((entry) => entry.enemy);
+    }
+
+    startMeleeVisualTravel(target = null, direction = null) {
+        if (!this.active || !this.meleeVisualProjectile) return;
+        this.meleeVisualTween?.remove?.();
+        const anchor = direction
+            ? this.getMeleeAnchorPointForDirection(direction)
+            : this.getMeleeAnchorPoint(target);
+        this.direction.copy(anchor.direction);
+        this.setRotation(this.getFacingRotation(Math.atan2(anchor.direction.y, anchor.direction.x)));
+        this.setFlipX(anchor.direction.x < 0);
+        this.setPosition(this.owner.x, this.owner.y);
+        this.meleeVisualTween = this.scene?.tweens?.add?.({
+            targets: this,
+            x: anchor.x,
+            y: anchor.y,
+            duration: this.meleeVisualTravelTime,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                this.meleeVisualTween = null;
+                if (this.active) {
+                    this.destroy();
+                }
+            }
+        }) ?? null;
+    }
+
+    tryResolveMeleeHit() {
+        if (!this.active || !this.isMelee) return false;
+        if (this.meleeHitResolved) return false;
+        if (this.meleeTargetMode === 'arc') {
+            const sweepDirection = this.getMeleeDirection();
+            this.meleeSweepDirection = sweepDirection.clone();
+            const targets = this.getEnemiesInMeleeArc(this.meleeRange, sweepDirection, this.meleeArcDegrees);
+            if (!targets.length) return false;
+
+            this.meleeHitResolved = true;
+            if (!this.meleeVisualProjectile) {
+                this.syncMeleePosition(null, sweepDirection);
+            } else {
+                this.startMeleeVisualTravel(targets[0], sweepDirection);
+            }
+
+            for (const target of targets) {
+                if (!this.active) break;
+                this.scene?.onSkillHitEnemy?.(this, target);
+            }
+
+            if (this.active && !this.meleeVisualProjectile) {
+                this.destroy();
+            }
+            return true;
+        }
+
+        const target = this.getNearestEnemyInRange();
+        if (!target) return false;
+
+        this.meleeHitResolved = true;
+        if (!this.meleeVisualProjectile) {
+            this.syncMeleePosition(target);
+        } else {
+            this.startMeleeVisualTravel(target);
+        }
+        this.scene?.onSkillHitEnemy?.(this, target);
+        if (this.active && !this.meleeVisualProjectile) {
+            this.destroy();
+        }
+        return true;
     }
 
     resolveBlockBounce(nextX, nextY) {
@@ -461,8 +823,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
         if (!candidates.length) return null;
 
-        const preferredCandidates = candidates.filter(enemy => !enemy.isHacked);
-        const targetPool = preferredCandidates.length ? preferredCandidates : candidates;
+        const targetPool = candidates;
         let nearest = null;
         let minDist = Number.POSITIVE_INFINITY;
         for (const enemy of targetPool) {
@@ -572,6 +933,8 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.clearTint();
         this.setActive(false);
         this.setVisible(false);
+        this.meleeVisualTween?.remove?.();
+        this.meleeVisualTween = null;
         this.hitTargets.clear();
         this.effectInstance?.destroy();
         this.effectInstance = null;

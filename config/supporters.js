@@ -1,0 +1,537 @@
+export const SUPPORTER_CONFIG = {
+    blackcat: {
+        key: 'blackcat',
+        label: 'Black Cat',
+        atlas: {
+            key: 'supporter_blackcat',
+            texture: 'assets/suporter/blackcat/spritesheet.png',
+            atlasJSON: 'assets/suporter/blackcat/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 7,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 11,
+            height: 11
+        },
+        orbitRadius: 30,
+        orbitSpeed: 1.55,
+        hoverAmplitude: 6,
+        followLerp: 0.2,
+        attackRange: 140,
+        fireCooldownMs: 1350,
+        projectileSpeed: 300,
+        projectileDamage: 25,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xb3a0ff,
+        projectileGlowColor: 0x7b62ff,
+        projectileTrailColor: 0xd9d0ff,
+        projectileBurstColor: 0x4f35d8,
+        passiveBonuses: {
+            goldGainMultiplier: 0.15,
+            critChance: 0.05
+        },
+        tags: [],
+        statusEffects: []
+    },
+    blood_wolf: {
+        key: 'blood_wolf',
+        label: 'Blood Wolf',
+        movementStyle: 'melee_follow',
+        atlas: {
+            key: 'supporter_blood_wolf',
+            texture: 'assets/suporter/blood_wolf/spritesheet.png',
+            atlasJSON: 'assets/suporter/blood_wolf/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            },
+            move: {
+                frames: ['image_5.png', 'image_6.png', 'image_7.png', 'image_8.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 25,
+            height: 25
+        },
+        orbitRadius: 26,
+        orbitSpeed: 2.05,
+        hoverAmplitude: 4,
+        followLerp: 0.28,
+        moveSpeed: 150,
+        followOffsetX: 20,
+        followOffsetY: 6,
+        followSlackDistance: 14,
+        returnSpeedMultiplier: 0.8,
+        engageDistance: 18,
+        attackArea: 100,
+        attackRange: 20,
+        fireCooldownMs: 900,
+        attackStyle: 'claw_slash',
+        projectileDamage: 30,
+        projectileColor: 0xff7288,
+        projectileGlowColor: 0xffd6dd,
+        projectileTrailColor: 0xffc0ca,
+        projectileBurstColor: 0xc92d45,
+        slashColor: 0xff667f,
+        slashGlowColor: 0xffd0d6,
+        slashLength: 18,
+        slashSpacing: 6,
+        passiveBonuses: {
+            lifesteal: 0.1
+        },
+        conditionalPassiveCombatStyle: 'melee',
+        conditionalPassiveBonuses: {
+            attackSpeed: 0.3
+        },
+        tags: [],
+        statusEffects: []
+    },
+    fairy: {
+        key: 'fairy',
+        label: 'Fairy',
+        atlas: {
+            key: 'supporter_fairy',
+            texture: 'assets/suporter/fairy/spritesheet.png',
+            atlasJSON: 'assets/suporter/fairy/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 12,
+            height: 12
+        },
+        orbitRadius: 24,
+        orbitSpeed: 1.75,
+        hoverAmplitude: 10,
+        followLerp: 0.26,
+        supportStyle: 'heal_aura',
+        supportIntervalMs: 15000,
+        supportHealAmount: 35,
+        supportPulseColor: 0xa6ffcb,
+        supportGlowColor: 0xf2fff7,
+        supportPulseRadius: 10,
+        passiveBonuses: {
+            healthRegenPerSecond: 2,
+            maxHealthPercent: 0.1
+        },
+        tags: [],
+        statusEffects: []
+    },
+    bluebird: {
+        key: 'bluebird',
+        label: 'Blue Bird',
+        atlas: {
+            key: 'supporter_bluebird',
+            texture: 'assets/suporter/bluebird/spritesheet.png',
+            atlasJSON: 'assets/suporter/bluebird/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 11,
+            height: 11
+        },
+        orbitRadius: 34,
+        orbitSpeed: 1.8,
+        hoverAmplitude: 9,
+        followLerp: 0.24,
+        attackRange: 150,
+        fireCooldownMs: 1250,
+        projectileSpeed: 340,
+        projectileDamage: 26,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xa7e4ff,
+        projectileGlowColor: 0x58b8ff,
+        projectileTrailColor: 0xe3f8ff,
+        projectileBurstColor: 0x2f83d4,
+        passiveBonuses: {
+            projectileSpeedPercent: 0.2,
+            armorPierce: 0.2
+        },
+        tags: [],
+        statusEffects: []
+    },
+    eye_monster: {
+        key: 'eye_monster',
+        label: 'Eye Monster',
+        atlas: {
+            key: 'supporter_eye_monster',
+            texture: 'assets/suporter/eye_monster/spritesheet.png',
+            atlasJSON: 'assets/suporter/eye_monster/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 7,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 11,
+            height: 11
+        },
+        orbitRadius: 26,
+        orbitSpeed: 1.35,
+        hoverAmplitude: 7,
+        followLerp: 0.18,
+        attackRange: 130,
+        fireCooldownMs: 1500,
+        projectileSpeed: 260,
+        projectileDamage: 28,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xffe082,
+        projectileGlowColor: 0xffc14d,
+        projectileTrailColor: 0xfff2bc,
+        projectileBurstColor: 0xffd56b,
+        passiveBonuses: {
+            skillRange: 30,
+            critMultiplier: 0.1
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'mark',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1
+            }
+        ]
+    },
+    dragon_ice: {
+        key: 'dragon_ice',
+        label: 'Dragon Ice',
+        atlas: {
+            key: 'supporter_dragon_ice',
+            texture: 'assets/suporter/dragon_ice/spritesheet.png',
+            atlasJSON: 'assets/suporter/dragon_ice/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 12,
+            height: 12
+        },
+        orbitRadius: 36,
+        orbitSpeed: 1.5,
+        hoverAmplitude: 8,
+        followLerp: 0.2,
+        attackRange: 145,
+        fireCooldownMs: 1300,
+        projectileSpeed: 320,
+        projectileDamage: 29,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xb7ecff,
+        projectileGlowColor: 0x63c8ff,
+        projectileTrailColor: 0xe8fbff,
+        projectileBurstColor: 0x2f8fd9,
+        passiveBonuses: {
+            effectDurationMultiplier: 0.3
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'freeze',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1
+            }
+        ]
+    },
+    fire_spirite: {
+        key: 'fire_spirite',
+        label: 'Fire Spirite',
+        atlas: {
+            key: 'supporter_fire_spirite',
+            texture: 'assets/suporter/fire_spirite/spritesheet.png',
+            atlasJSON: 'assets/suporter/fire_spirite/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 11,
+            height: 11
+        },
+        orbitRadius: 24,
+        orbitSpeed: 1.95,
+        hoverAmplitude: 5,
+        followLerp: 0.26,
+        attackRange: 135,
+        fireCooldownMs: 1100,
+        projectileSpeed: 360,
+        projectileDamage: 27,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xffcf7a,
+        projectileGlowColor: 0xff7a2f,
+        projectileTrailColor: 0xffefb0,
+        projectileBurstColor: 0xff4d00,
+        passiveBonuses: {
+            effectDamageMultiplier: 0.3
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'burn',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1
+            }
+        ]
+    },
+    shock_mouse: {
+        key: 'shock_mouse',
+        label: 'Shock Mouse',
+        atlas: {
+            key: 'supporter_shock_mouse',
+            texture: 'assets/suporter/shock_mouse/spritesheet.png',
+            atlasJSON: 'assets/suporter/shock_mouse/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 12,
+            height: 12
+        },
+        orbitRadius: 32,
+        orbitSpeed: 1.9,
+        hoverAmplitude: 7,
+        followLerp: 0.24,
+        attackRange: 150,
+        fireCooldownMs: 1150,
+        attackStyle: 'chain_lightning',
+        projectileSpeed: 380,
+        projectileDamage: 31,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xfff08a,
+        projectileGlowColor: 0xffcf2f,
+        projectileTrailColor: 0xfff7be,
+        projectileBurstColor: 0xf5a700,
+        lightningColor: 0xffdc57,
+        lightningGlowColor: 0xfff8c7,
+        lightningParticleCount: 8,
+        lightningDuration: 130,
+        passiveBonuses: {
+            shockChainCountBonus: 2,
+            attackSpeed: 0.1
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'shock',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1
+            }
+        ]
+    },
+    poison_ball: {
+        key: 'poison_ball',
+        label: 'Poison Ball',
+        atlas: {
+            key: 'supporter_poison_ball',
+            texture: 'assets/suporter/poison_ball/spritesheet.png',
+            atlasJSON: 'assets/suporter/poison_ball/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 12,
+            height: 12
+        },
+        orbitRadius: 28,
+        orbitSpeed: 1.6,
+        hoverAmplitude: 6,
+        followLerp: 0.22,
+        attackRange: 140,
+        fireCooldownMs: 1200,
+        projectileSpeed: 320,
+        projectileDamage: 27,
+        projectileRadius: 4,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xa7ff8a,
+        projectileGlowColor: 0x57cf54,
+        projectileTrailColor: 0xdffff0,
+        projectileBurstColor: 0x2f9d44,
+        passiveBonuses: {
+            effectDurationMultiplier: 0.2,
+            effectDamageMultiplier: 0.1
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'poison',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1
+            }
+        ]
+    },
+    shield_drone: {
+        key: 'shield_drone',
+        label: 'Shield Drone',
+        atlas: {
+            key: 'supporter_shield_drone',
+            texture: 'assets/suporter/shield_drone/spritesheet.png',
+            atlasJSON: 'assets/suporter/shield_drone/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 8,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 12,
+            height: 12
+        },
+        orbitRadius: 30,
+        orbitSpeed: 1.45,
+        hoverAmplitude: 5,
+        followLerp: 0.22,
+        supportStyle: 'armor_aura',
+        supportIntervalMs: 2200,
+        supportArmorBonus: 8,
+        supportPulseColor: 0x8fdfff,
+        supportGlowColor: 0xe8fbff,
+        supportPulseRadius: 10,
+        passiveBonuses: {
+            armor: 1,
+            shieldResetAmount: 20,
+            shieldResetIntervalMs: 10000
+        },
+        tags: [],
+        statusEffects: []
+    },
+    rock: {
+        key: 'rock',
+        label: 'Rock',
+        movementStyle: 'melee_follow',
+        atlas: {
+            key: 'supporter_rock',
+            texture: 'assets/suporter/rock/spritesheet.png',
+            atlasJSON: 'assets/suporter/rock/spritesheet.json'
+        },
+        animations: {
+            idle: {
+                frames: ['image.png', 'image_2.png', 'image_3.png', 'image_4.png'],
+                frameRate: 7,
+                loop: true
+            },
+            move: {
+                frames: ['image_5.png', 'image_6.png', 'image_7.png', 'image_8.png'],
+                frameRate: 7,
+                loop: true
+            }
+        },
+        displaySize: {
+            width: 30,
+            height: 30
+        },
+        orbitRadius: 28,
+        orbitSpeed: 1.25,
+        hoverAmplitude: 3,
+        followLerp: 0.18,
+        moveSpeed: 120,
+        followOffsetX: 18,
+        followOffsetY: 8,
+        followSlackDistance: 16,
+        returnSpeedMultiplier: 0.8,
+        engageDistance: 22,
+        attackArea: 100,
+        attackRange: 20,
+        fireCooldownMs: 2000,
+        attackStyle: 'claw_slash',
+        projectileSpeed: 250,
+        projectileDamage: 35,
+        projectileRadius: 5,
+        projectileLifetimeMs: 2200,
+        projectileColor: 0xbca38a,
+        projectileGlowColor: 0xe5d2bf,
+        projectileTrailColor: 0xdcc8b2,
+        projectileBurstColor: 0x8d6e56,
+        slashColor: 0xbca38a,
+        slashGlowColor: 0xe5d2bf,
+        slashLength: 10,
+        slashSpacing: 0,
+        slashWidth: 8,
+        slashCount: 1,
+        slashAngle: 0,
+        slashImpactRadius: 12,
+        slashOffsetX: 2,
+        slashOffsetY: 0,
+        passiveBonuses: {
+            knockbackMultiplier: 0.1,
+            armor: 5
+        },
+        tags: [],
+        statusEffects: [
+            {
+                key: 'explosion',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1,
+                damageRatio: 0.3,
+                radius: 45,
+                tint: '#9a9a9a',
+                effect: {
+                    coreColor: 0xd9d9d9,
+                    outerColor: 0x9a9a9a,
+                    ringColor: 0x5f5f5f,
+                    emberColor: 0xb8b8b8
+                }
+            }
+        ]
+    }
+};
+
+export const SUPPORTER_KEYS = Object.keys(SUPPORTER_CONFIG);
+
+export function getSupporterConfig(supporterKey) {
+    return SUPPORTER_CONFIG[supporterKey] ?? null;
+}

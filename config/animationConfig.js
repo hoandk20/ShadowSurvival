@@ -21,13 +21,6 @@ export const ANIMATION_CONFIG = {
         hurt: { frames: [0, 2], frameRate: 8, loop: false },
         dead: { frames: [0, 5], frameRate: 10, loop: false }
     },
-    grum: {
-        idle: { frames: [0, 3], frameRate: 6, loop: true },
-        move: { frames: [0, 5], frameRate: 10, loop: true },
-        attack: { frames: [0, 4], frameRate: 12, loop: false },
-        hurt: { frames: [0, 2], frameRate: 8, loop: false },
-        dead: { frames: [0, 5], frameRate: 10, loop: false }
-    },
     raiji: {
         idle: { frames: [0, 3], frameRate: 6, loop: true },
         move: { frames: [0, 5], frameRate: 10, loop: true },

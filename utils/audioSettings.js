@@ -1,5 +1,5 @@
 export const DEFAULT_AUDIO_SETTINGS = {
-    musicEnabled: true,
+    musicEnabled: false,
     sfxEnabled: true
 };
 

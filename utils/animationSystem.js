@@ -1,14 +1,28 @@
 // utils/animationSystem.js
 import { ASSET_CONFIG } from '../config/assets.js';
 import { SKILL_CONFIG } from '../config/skill.js';
-import { CARD_CONFIG } from '../config/card.js';
 import { ITEM_CONFIG } from '../config/items.js';
+import { SUPPORTER_CONFIG } from '../config/supporters.js';
+import { SHOP_ITEM_CONFIG } from '../config/shopItems.js';
 
 const MISSING_TEXTURE_KEY = '__missing_texture__';
 const AUDIO_ASSET_CONFIG = {
     sfx_coin: 'assets/audio/coin.mp3',
     sfx_enemy_kill: 'assets/audio/enemies-kill.mp3',
     sfx_levelup: 'assets/audio/levelup.mp3'
+};
+const STATUS_EFFECT_ATLAS = {
+    key: 'status_effect_icons',
+    texture: 'assets/statuseffect/spritesheet.png',
+    atlasJSON: 'assets/statuseffect/spritesheet.json'
+};
+
+const buildAtlasFrames = (scene, atlasKey, frameNames = []) => {
+    if (!scene.textures.exists(atlasKey)) return [];
+    const texture = scene.textures.get(atlasKey);
+    return (frameNames ?? [])
+        .filter((frameName) => texture.has(frameName))
+        .map((frameName) => ({ key: atlasKey, frame: frameName }));
 };
 
 export function preloadAllAssets(scene) {
@@ -81,17 +95,12 @@ export function preloadAllAssets(scene) {
         }
     }
 
-    // Load card icons
-    const cardBasePath = 'assets/card/';
-    const cardIconPath = cardBasePath + 'icons/';
-    for (const card of CARD_CONFIG) {
-        const iconKey = `card_icon_${card.key}`;
-        if (card.assetPath) {
-            scene.load.image(iconKey, card.assetPath);
-            continue;
+    for (const supporterKey in SUPPORTER_CONFIG) {
+        const supporterConfig = SUPPORTER_CONFIG[supporterKey];
+        const atlas = supporterConfig?.atlas;
+        if (atlas && !scene.textures.exists(atlas.key)) {
+            scene.load.atlas(atlas.key, atlas.texture, atlas.atlasJSON);
         }
-        const iconFile = card.iconFile || `${card.key}.png`;
-        scene.load.image(iconKey, cardIconPath + iconFile);
     }
 
     for (const itemKey in ITEM_CONFIG) {
@@ -102,9 +111,20 @@ export function preloadAllAssets(scene) {
         scene.load.image(key, config.assetPath);
     }
 
+    for (const shopItem of SHOP_ITEM_CONFIG) {
+        const key = shopItem.iconKey ?? null;
+        if (!shopItem.assetPath || !key) continue;
+        if (scene.textures.exists(key)) continue;
+        scene.load.image(key, shopItem.assetPath);
+    }
+
     for (const [key, path] of Object.entries(AUDIO_ASSET_CONFIG)) {
         if (scene.cache.audio.exists(key)) continue;
         scene.load.audio(key, path);
+    }
+
+    if (!scene.textures.exists(STATUS_EFFECT_ATLAS.key)) {
+        scene.load.atlas(STATUS_EFFECT_ATLAS.key, STATUS_EFFECT_ATLAS.texture, STATUS_EFFECT_ATLAS.atlasJSON);
     }
 }
 
@@ -124,7 +144,7 @@ export function createAllAnimations(scene) {
                     console.warn(`Atlas ${atlasConfig.key} missing, skipping animation ${animKey}.`);
                     continue;
                 }
-                frames = animConfig.frames.map(frameName => ({ key: atlasConfig.key, frame: frameName }));
+                frames = buildAtlasFrames(scene, atlasConfig.key, animConfig.frames);
             } else if (sheetConfig && Array.isArray(animConfig.frameIndexes)) {
                 if (!scene.textures.exists(sheetConfig.key)) {
                     console.warn(`Spritesheet ${sheetConfig.key} missing, skipping animation ${animKey}.`);
@@ -165,7 +185,8 @@ export function createAllAnimations(scene) {
                     console.warn(`Skill atlas ${atlasConfig.key} missing, skipping animation ${animKey}.`);
                     continue;
                 }
-                const frames = animConfig.frames.map(frameName => ({ key: atlasConfig.key, frame: frameName }));
+                const frames = buildAtlasFrames(scene, atlasConfig.key, animConfig.frames);
+                if (!frames.length) continue;
                 scene.anims.create({
                     key: animKey,
                     frames,
@@ -199,6 +220,27 @@ export function createAllAnimations(scene) {
                     repeat: animConfig.loop ? -1 : 0
                 });
             }
+        }
+    }
+
+    for (const supporterKey in SUPPORTER_CONFIG) {
+        const supporterConfig = SUPPORTER_CONFIG[supporterKey];
+        const atlasConfig = supporterConfig?.atlas;
+        if (!atlasConfig) continue;
+        const animations = supporterConfig?.animations ?? {};
+        for (const animName in animations) {
+            const animConfig = animations[animName];
+            const animKey = `supporter_${supporterKey}_${animName}`;
+            if (scene.anims.exists(animKey)) continue;
+            if (!scene.textures.exists(atlasConfig.key)) continue;
+            const frames = buildAtlasFrames(scene, atlasConfig.key, animConfig.frames ?? []);
+            if (!frames.length) continue;
+            scene.anims.create({
+                key: animKey,
+                frames,
+                frameRate: animConfig.frameRate ?? 6,
+                repeat: animConfig.loop ? -1 : 0
+            });
         }
     }
 }

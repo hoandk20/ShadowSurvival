@@ -1,153 +1,202 @@
 // config/characters/characters.js
+import { createCharacterConfig } from '../stats.js';
+
 export const CHARACTER_CONFIG = {
-    lumina: {
+    lumina: createCharacterConfig({
         label: 'Lumina',
-        description: 'A light mage, the last beacon against the darkness.',
+        description: 'A light mage, the last beacon against the darkness. Passive: +80 skill range.',
         assetKey: 'lumina',
         assetFormat: 'spritesheet',
-        defaultSkill: 'heavenfall',
-        hp: 110,
-        armor: 1,
-        speed: 75,
+        defaultSkill: 'shooting_star',
+        statsBonus: {
+            hp: -25,
+            skillRange: 40
+        },
         size: { width: 20, height: 20 }
-    },
-    aqua: {
+    }),
+    knight: createCharacterConfig({
+        label: 'Knight',
+        description: 'A heavily armored melee fighter who sweeps a broad blade arc across enemies in front.',
+        assetKey: 'knight',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'slash',
+        combatStyle: 'melee',
+        meleeHitEffect: {
+            color: 0xf4f1df,
+            glowColor: 0xffffff,
+            length: 28,
+            spacing: 0,
+            slashWidth: 6,
+            slashCount: 1,
+            impactRadius: 10,
+            impactAlpha: 0.22,
+            duration: 140
+        },
+        statsBonus: {
+            hp: 20,
+            armor: 2,
+            moveSpeed: -5
+        },
+        size: { width: 22, height: 22 }
+    }),
+    aqua: createCharacterConfig({
         label: 'Aqua',
         description: 'A water sage who controls the flow to cleanse and protect.',
         assetKey: 'aqua',
         assetFormat: 'spritesheet',
         defaultSkill: 'nova',
-        hp: 140,
-        armor: 1,
-        speed: 75,
+        statsBonus: {
+            hp: 40
+        },
         size: { width: 20, height: 20 }
-    },
-    radian: {
+    }),
+    radian: createCharacterConfig({
         label: 'Radian',
         description: 'An eastern exorcist, sealing demons with talismans and barriers.',
         assetKey: 'radian',
         assetFormat: 'spritesheet',
         defaultSkill: 'charm',
-        hp: 100,
-        armor: 1,
-        speed: 75,
+        statsBonus: {},
         size: { width: 20, height: 20 }
-    },
-    frost: {
+    }),
+    frost: createCharacterConfig({
         label: 'Frost',
         description: 'An ice mage who freezes enemies and slows the horde.',
         assetKey: 'frost',
         assetFormat: 'spritesheet',
         defaultSkill: 'ice',
-        hp: 100,
-        armor: 1,
-        speed: 78,
+        statsBonus: {
+            moveSpeed: 3
+        },
         size: { width: 20, height: 20 }
-    },
-    holy: {
-        label: 'Holy',
-        description: 'An exorcist nun wielding sacred flames to purge evil.',
-        assetKey: 'holy',
-        assetFormat: 'spritesheet',
-        defaultSkill: 'aura',
-        hp: 85,
-        armor: 1,
-        speed: 80,
-        size: { width: 20, height: 20 }
-    },
-    witch: {
+    }),
+    witch: createCharacterConfig({
         label: 'Witch',
         description: 'An ancient sorceress using forbidden magic to bend the battlefield.',
         assetKey: 'witch',
         assetFormat: 'spritesheet',
         defaultSkill: 'avada',
-        hp: 75,
-        armor: 1,
-        speed: 82,
+        statsBonus: {
+            hp: -25,
+            moveSpeed: 7
+        },
         size: { width: 20, height: 20 }
-    },
-    asian_dragon: {
+    }),
+    asian_dragon: createCharacterConfig({
         label: 'Asian Dragon',
         description: 'A mystical dragon spirit channeling arcane force with elegant precision.',
         assetKey: 'asian_dragon',
         assetFormat: 'spritesheet',
         defaultSkill: 'flame',
-        hp: 75,
-        armor: 1,
-        speed: 82,
+        statsBonus: {
+            hp: -25,
+            moveSpeed: 7
+        },
         size: { width: 30, height: 25 }
-    },
-    bodoi: {
+    }),
+    bodoi: createCharacterConfig({
         label: 'Bodoi',
         description: 'Bodoi is a warrior from Vietnam who has come to this land to eliminate the monsters threatening it.',
         assetKey: 'bodoi',
         assetFormat: 'spritesheet',
         defaultSkill: 'mu_coi',
-        hp: 75,
-        armor: 1,
-        speed: 82,
+        statsBonus: {
+            hp: -25,
+            moveSpeed: 7
+        },
         size: { width: 20, height: 23 }
-    },
-    hoan: {
-        label: 'Hoan',
-        description: 'Hoan, an IT specialist from 2030, wakes up trapped in a monster-filled world. With no way back, he turns code into weapons to survive.',
-        assetKey: 'hoan',
-        assetFormat: 'spritesheet',
-        defaultSkill: 'code',
-        hp: 75,
-        armor: 1,
-        speed: 82,
-        size: { width: 20, height: 23 }
-    },
-    gambler: {
+    }),
+    gambler: createCharacterConfig({
         label: 'Gambler',
         description: 'A rogue cardsharp who bets everything on impossible rolls.',
         assetKey: 'gambler',
         assetFormat: 'spritesheet',
         defaultSkill: 'card_toss',
-        hp: 80,
-        armor: 1,
-        speed: 78,
+        statsBonus: {
+            hp: -20,
+            moveSpeed: 3
+        },
         size: { width: 20, height: 20 }
-    },
-    raiji: {
+    }),
+    raiji: createCharacterConfig({
         label: 'Raiji',
         description: 'A lightning mage calling down thunder upon the swarm.',
         assetKey: 'raiji',
         assetFormat: 'spritesheet',
         defaultSkill: 'thunder',
-        hp: 70,
-        armor: 2,
-        speed: 85,
+        statsBonus: {
+            hp: -30,
+            armor: 1,
+            moveSpeed: 10
+        },
         size: { width: 20, height: 20 }
-    },
-    warden: {
+    }),
+    warden: createCharacterConfig({
         label: 'Warden',
         description: 'A prison keeper who binds and suppresses dark entities.',
         assetKey: 'warden',
         assetFormat: 'spritesheet',
         defaultSkill: 'fire',
-        hp: 100,
-        armor: 2,
-        speed: 75,
+        statsBonus: {
+            armor: 1
+        },
         size: { width: 20, height: 20 }
-    },
-    grum: {
-        label: 'Grum',
-        description: 'A wrestler who crushes enemies with sheer physical power.',
-        assetKey: 'grum',
+    }),
+    werewolf: createCharacterConfig({
+        label: 'Werewolf',
+        description: 'A feral melee hunter that tears through enemies with oversized claw strikes.',
+        assetKey: 'werewolf',
         assetFormat: 'spritesheet',
-        defaultSkill: 'iron_fist',
-        hp: 170,
-        armor: 3,
-        speed: 70,
+        defaultSkill: 'claw',
+        combatStyle: 'melee',
+        meleeHitEffect: {
+            color: 0xff667f,
+            glowColor: 0xffd0d6,
+            length: 18,
+            spacing: 6
+        },
+        statsBonus: {
+            hp: 35,
+            armor: 1,
+            moveSpeed: 2,
+            critChance: 0.08
+        },
         size: { width: 25, height: 25 }
-    }
+    }),
+    assasin: createCharacterConfig({
+        label: 'Assasin',
+        description: 'A close-range killer who darts in with fast knife stabs and clean finishing cuts.',
+        assetKey: 'assasin',
+        assetFormat: 'spritesheet',
+        defaultSkill: 'stab',
+        combatStyle: 'melee',
+        meleeHitEffect: {
+            color: 0xe8eef7,
+            glowColor: 0xffffff,
+            length: 24,
+            spacing: 0,
+            slashWidth: 4,
+            slashCount: 1,
+            impactRadius: 8,
+            impactAlpha: 0.18,
+            duration: 120
+        },
+        statsBonus: {
+            hp: -10,
+            moveSpeed: 8,
+            critChance: 0.12
+        },
+        size: { width: 20, height: 22 }
+    })
 };
 
 export const DEFAULT_CHARACTER_KEY = 'lumina';
 
-export const CHARACTER_KEYS = Object.keys(CHARACTER_CONFIG);
+export const CHARACTER_KEYS = [
+    'lumina',
+    'knight',
+    ...Object.keys(CHARACTER_CONFIG).filter((key) => key !== 'lumina' && key !== 'knight')
+];
 
 export function getCharacterConfig(key) {
     return CHARACTER_CONFIG[key] ?? CHARACTER_CONFIG[DEFAULT_CHARACTER_KEY];

@@ -12,6 +12,11 @@ const MAP_DEFINITIONS = {
         label: 'MapRock Plateau',
         description: 'A ruined stone field layered with broken ground, props, and blocking terrain.',
         mapKey: MAPROCK_KEY,
+        infiniteHorizontal: true,
+        alternatingMirroredChunks: true,
+        activeSegmentRadius: 2,
+        preloadSegmentRadius: 2,
+        segmentLoadMarginTiles: 12,
         music: {
             key: 'bgm_maprock_the_weight_of_stone',
             path: `${MUSIC_BASE_PATH}/The_Weight_of_Stone.mp3`,
@@ -107,7 +112,7 @@ const MAP_DEFINITIONS = {
     }
 };
 
-export const DEFAULT_MAP_KEY = CHURCH_KEY;
+export const DEFAULT_MAP_KEY = MAPROCK_KEY;
 
 export function getMapDefinition(mapKey) {
     return MAP_DEFINITIONS[mapKey];

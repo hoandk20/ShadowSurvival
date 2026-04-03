@@ -42,30 +42,13 @@ export default class LootSystem {
 
     buildLootTable(enemyType, enemy = null) {
         const baseTable = getLootTableForEnemy(enemyType) ?? [];
-        if (!enemy?.isElite) {
-            return baseTable;
-        }
-        const eliteTable = this.scene?.stageScenario?.elite?.lootTable;
-        if (!Array.isArray(eliteTable) || !eliteTable.length) {
-            return baseTable;
-        }
-        const merged = new Map();
-        baseTable.forEach((entry) => {
-            if (entry?.itemKey) {
-                merged.set(entry.itemKey, { ...entry });
-            }
-        });
-        eliteTable.forEach((entry) => {
-            if (entry?.itemKey) {
-                merged.set(entry.itemKey, { ...entry });
-            }
-        });
-        return Array.from(merged.values());
+        return baseTable;
     }
 
     spawnLoot(enemyType, x, y, enemy = null) {
         const table = this.buildLootTable(enemyType, enemy);
         if (!table?.length) return;
+        const lootOwnership = this.resolveLootOwnership(enemy);
         table.forEach(entry => {
             if (Math.random() > entry.chance) return;
             const amount = Phaser.Math.Between(entry.minAmount, entry.maxAmount ?? entry.minAmount);
@@ -75,16 +58,27 @@ export default class LootSystem {
                 entry.itemKey,
                 x + Math.cos(angle) * radius,
                 y + Math.sin(angle) * radius,
-                amount
+                amount,
+                lootOwnership
             );
         });
     }
 
-    spawnItem(itemKey, x, y, amount = 1) {
+    resolveLootOwnership(enemy = null) {
+        const ownerPlayerId = enemy?.pendingDeathSource?.ownerPlayerId
+            ?? enemy?.pendingDeathSource?.playerId
+            ?? null;
+        return {
+            ownerPlayerId,
+            ownershipReserveMs: LOOT_CONFIG.ownershipReserveMs ?? 0
+        };
+    }
+
+    spawnItem(itemKey, x, y, amount = 1, options = {}) {
         const config = ITEM_CONFIG[itemKey];
         if (!config) return null;
         if (config.type === 'xp') {
-            const mergedOrb = this.findNearbyMergeTarget(itemKey, x, y, XP_MERGE_RADIUS);
+            const mergedOrb = this.findNearbyMergeTarget(itemKey, x, y, XP_MERGE_RADIUS, options);
             if (mergedOrb) {
                 mergedOrb.amount += Math.max(1, amount);
                 mergedOrb.refreshVisualState?.();
@@ -96,22 +90,27 @@ export default class LootSystem {
         if (activeGroundItems >= maxGroundItems) {
             return null;
         }
-        const item = new Item(this.scene, x, y, itemKey, amount);
+        const item = new Item(this.scene, x, y, itemKey, amount, options);
         this.itemGroup.add(item);
         return item;
     }
 
-    findNearbyMergeTarget(itemKey, x, y, radius) {
+    findNearbyMergeTarget(itemKey, x, y, radius, options = {}) {
         const items = this.itemGroup?.getChildren?.() ?? [];
         const radiusSq = radius * radius;
         let bestMatch = null;
         let bestDistanceSq = Number.POSITIVE_INFINITY;
+        const nextOwnerPlayerId = options.ownerPlayerId ?? null;
+        const nextIsReserved = Boolean(nextOwnerPlayerId && (options.ownershipReserveMs ?? LOOT_CONFIG.ownershipReserveMs ?? 0) > 0);
         for (const item of items) {
             if (!item?.active || item.collected) continue;
             if (item.config?.type !== 'xp') continue;
+            item.releaseOwnershipIfExpired?.();
             const targetKey = item.config?.textureKey ?? item.texture?.key;
             const sourceKey = ITEM_CONFIG[itemKey]?.textureKey ?? itemKey;
             if (targetKey !== sourceKey) continue;
+            if ((item.ownerPlayerId ?? null) !== nextOwnerPlayerId) continue;
+            if (Boolean(item.ownerPlayerId && (item.reservedUntil ?? 0) > (this.scene?.time?.now ?? 0)) !== nextIsReserved) continue;
             const dx = item.x - x;
             const dy = item.y - y;
             const distanceSq = (dx * dx) + (dy * dy);
@@ -120,5 +119,15 @@ export default class LootSystem {
             bestDistanceSq = distanceSq;
         }
         return bestMatch;
+    }
+
+    clearGroundItems() {
+        const items = [...(this.itemGroup?.getChildren?.() ?? [])];
+        items.forEach((item) => {
+            if (!item) return;
+            this.itemGroup?.remove?.(item, false, false);
+            item.destroy?.();
+        });
+        this.itemGroup?.clear?.(false, false);
     }
 }

@@ -14,18 +14,6 @@ function buildLegacyBehaviorEntries(config = {}) {
         entries.push({ type: 'stunOnHit' });
     }
 
-    if (config.explosionOnHit) {
-        entries.push({
-            type: 'explosionOnHit',
-            config: {
-                radius: config.explosionRadius,
-                damageMultiplier: config.explosionDamageMultiplier,
-                knockbackMultiplier: config.explosionKnockbackMultiplier,
-                tint: config.explosionTint
-            }
-        });
-    }
-
     if (config.category === 'projectile') {
         entries.push({ type: 'projectileResolution' });
     }

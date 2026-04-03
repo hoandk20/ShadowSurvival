@@ -1,6 +1,5 @@
 // systems/SpawnSystem.js
 import Enemy from '../entities/Enemy.js';
-import { ELITE_CONFIGS, ELITE_SPAWN_TIERS, ELITE_SPAWN_SETTINGS } from '../config/elites.js';
 
 export default class SpawnSystem {
     constructor(scene, player) {

@@ -1,13 +1,13 @@
 const DEFAULT_CONFIG = {
-    coreRadius: 14,
-    outerRadius: 28,
-    ringRadius: 40,
+    coreRadius: 7,
+    outerRadius: 14,
+    ringRadius: 20,
     coreColor: 0xfff2b3,
     outerColor: 0xff8c42,
     ringColor: 0xff5a36,
     emberColor: 0xffd27a,
     emberCount: 10,
-    emberDistance: { min: 16, max: 42 },
+    emberDistance: { min: 8, max: 21 },
     emberDuration: { min: 160, max: 280 },
     style: 'default'
 };

@@ -3,9 +3,13 @@ import BaseEntity from './BaseEntity.js';
 import Skill from './Skill.js';
 import { ENTITY_SIZE_CONFIG, CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { SKILL_CONFIG } from '../config/skill.js';
+import { getCharacterLevelGrowth } from '../config/characterLevelGrowth.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY, getCharacterConfig } from '../config/characters/characters.js';
+import { getCharacterStats, PLAYER_BASE_STATS } from '../config/stats.js';
 import { LOOT_CONFIG } from '../config/loot.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
+import SupporterClawEffect from './effects/SupporterClawEffect.js';
+import KnightSlashEffect from './effects/KnightSlashEffect.js';
 import { playSfx } from '../utils/audioSettings.js';
 
 const selectAnimationName = (config) => {
@@ -16,16 +20,19 @@ const selectAnimationName = (config) => {
 };
 
 const buildFrameKey = (assetKey, animName, frameIndex = 0) => `${assetKey}_${animName}_${frameIndex}`;
-const DEFAULT_CHARACTER_HP = 10000;
-const DEFAULT_CHARACTER_ARMOR = 1;
+const DEFAULT_CHARACTER_HP = PLAYER_BASE_STATS.hp;
+const DEFAULT_CHARACTER_ARMOR = PLAYER_BASE_STATS.armor;
 const MAX_ACTIVE_SKILLS = 6;
 const TARGET_VIEW_MARGIN = 100;
+
+const getRunState = (scene, player) => scene?.getRunStateForPlayer?.(player) ?? null;
 
 export default class Player extends BaseEntity {
     constructor(scene, x, y, characterKey = DEFAULT_CHARACTER_KEY) {
         const requestedKey = characterKey ?? DEFAULT_CHARACTER_KEY;
         const resolvedKey = CHARACTER_CONFIG[requestedKey] ? requestedKey : DEFAULT_CHARACTER_KEY;
         const characterConfig = getCharacterConfig(resolvedKey);
+        const characterStats = getCharacterStats(characterConfig);
         const characterAssetConfig = CHARACTER_ASSET_CONFIG[resolvedKey] ?? CHARACTER_ASSET_CONFIG[characterConfig?.assetKey ?? resolvedKey] ?? {};
         const assetKey = characterConfig?.assetKey ?? resolvedKey;
         const animName = selectAnimationName(characterAssetConfig);
@@ -34,10 +41,12 @@ export default class Player extends BaseEntity {
             ? (characterAssetConfig.animations?.move?.frames?.[0] ?? characterAssetConfig.animations?.idle?.frames?.[0])
             : undefined;
         super(scene, x, y, initialTexture, initialFrame);
-        this.speed = 200;
-        this.maxHealth = characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
+        this.speed = characterStats.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed;
+        this.maxHealth = characterStats.hp ?? DEFAULT_CHARACTER_HP;
         this.health = this.maxHealth;
-        this.armor = characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR;
+        this.armor = characterStats.armor ?? DEFAULT_CHARACTER_ARMOR;
+        this.armorPierce = Math.max(0, characterStats.armorPierce ?? PLAYER_BASE_STATS.armorPierce ?? 0);
+        this.skillRange = Math.max(0, characterStats.skillRange ?? PLAYER_BASE_STATS.skillRange ?? 0);
         this.displayedHealth = this.health;
         this.level = 1;
         this.currentXP = 0;
@@ -51,12 +60,25 @@ export default class Player extends BaseEntity {
         this.lastDamageTime = -Infinity;
         this.damageCooldown = 300;
         this.damageMultiplier = 1;
+        this.attackSpeedMultiplier = 1;
+        this.critMultiplierBonus = 0;
         this.bonusMaxHealthFlat = 0;
         this.bonusMaxHealthPercent = 0;
+        this.levelGrowthMaxHealthBonus = 0;
         this.bonusArmor = 0;
+        this.bonusArmorPierce = 0;
+        this.bonusSkillRange = 0;
+        this.shockChainDamageBonus = 0;
+        this.shockChainCountBonus = 0;
         this.bonusSpeedFlat = 0;
         this.bonusSpeedPercent = 0;
+        this.bonusKnockbackMultiplier = 0;
         this.globalCritChanceBonus = 0;
+        this.globalEffectChanceBonus = 0;
+        this.globalEffectDamageMultiplier = 1;
+        this.globalEffectDurationMultiplier = 1;
+        this.goldGainMultiplier = 1;
+        this.lifesteal = 0;
         this.xpGainMultiplier = 1;
         this.lootMagnetRadiusMultiplier = 1;
         this.healthRegenPerSecond = 0;
@@ -67,11 +89,6 @@ export default class Player extends BaseEntity {
         this.itemShieldResetAmount = 0;
         this.itemShieldResetIntervalMs = 30000;
         this.itemShieldTimer = 0;
-        this.aquaShieldValue = 0;
-        this.aquaShieldResetAmount = 100;
-        this.aquaShieldResetIntervalMs = 30000;
-        this.aquaShieldTimer = 0;
-        this.aquaShieldActive = false;
         this.shieldGainOnLevelUp = 0;
         this.shieldGainOnLevelUpBySource = {};
         this.shieldRegenAmount = 0;
@@ -79,9 +96,11 @@ export default class Player extends BaseEntity {
         this.shieldRegenTimer = 0;
         this.globalProjectileSpeedMultiplier = 1;
         this.globalSkillAreaMultiplier = 1;
+        this.globalSkillDurationMultiplier = 1;
         this.globalSkillDurationOffsetMs = 0;
         this.skillDamageBonusPercent = {};
         this.skillDamageFlatBonus = {};
+        this.levelGrowthSkillDamageBonuses = {};
         this.skillCooldownOffsets = {};
         this.skillAreaMultipliers = {};
         this.skillProjectileSpeedMultipliers = {};
@@ -90,8 +109,6 @@ export default class Player extends BaseEntity {
         this.skillEffectDurationBonuses = {};
         this.skillKnockbackCountBonuses = {};
         this.skillRuntimeConfigOverrides = {};
-        this.hiddenSkillFeatureOverrides = {};
-
         this.readyAnimated = false;
 
         // Skill cooldown
@@ -103,16 +120,98 @@ export default class Player extends BaseEntity {
         this.skillObjectCount = 1;
         this.wasMovingLastFrame = false;
         this.lastMoveDirection = new Phaser.Math.Vector2(1, 0);
-        this.activeSingleOrbitSkill = null;
         this.lastTrackedPosition = new Phaser.Math.Vector2(x, y);
+        this.playerId = scene.playerPartySystem?.createPlayerId?.(resolvedKey) ?? `${resolvedKey}_1`;
+        this.scene?.statusEffectSystem?.attach?.(this, { entityType: 'player' });
 
         this.setCharacter(resolvedKey);
         this.motionTrailEffect = new MotionTrailEffect(scene, this);
+        this.meleeHitEffect = new SupporterClawEffect(scene);
+        this.knightSlashEffect = new KnightSlashEffect(scene);
 
         this.once(Phaser.GameObjects.Events.ADDED_TO_SCENE, () => {
             this.ensurePhysicsSize();
             this.ensureVisibleState();
             this.setState('move');
+        });
+    }
+
+    resolveCharacterStats() {
+        this.characterStats = getCharacterStats(this.characterConfig);
+        return this.characterStats;
+    }
+
+    isMeleeCharacter() {
+        return this.characterConfig?.combatStyle === 'melee';
+    }
+
+    spawnMeleeHitEffect(target, options = {}) {
+        if (!target?.active) return;
+        const skillConfig = options.skill?.config
+            ?? (options.skillKey ? this.getSkillConfig(options.skillKey) : null);
+        if (skillConfig?.category !== 'melee') return;
+
+        const effectConfig = skillConfig?.meleeHitEffect
+            ?? this.characterConfig?.meleeHitEffect
+            ?? {};
+        if ((effectConfig.style === 'arcSweep' || effectConfig.style === 'knightSlash') && options.skill) {
+            if (options.skill.__meleeEffectSpawned) return;
+            options.skill.__meleeEffectSpawned = true;
+        }
+        const direction = options.skill?.meleeSweepDirection?.clone?.()
+            ?? options.direction?.clone?.()
+            ?? this.lastMoveDirection?.clone?.()
+            ?? new Phaser.Math.Vector2(this.flipX ? -1 : 1, 0);
+        if (direction.lengthSq() === 0) {
+            direction.set(this.flipX ? -1 : 1, 0);
+        } else {
+            direction.normalize();
+        }
+        if (effectConfig.style === 'knightSlash') {
+            this.knightSlashEffect?.spawn?.(this, target, {
+                radius: effectConfig.radius,
+                arcDegrees: effectConfig.arcDegrees,
+                duration: effectConfig.duration,
+                particleLifespan: effectConfig.particleLifespan,
+                quantity: effectConfig.quantity,
+                speedMin: effectConfig.speedMin,
+                speedMax: effectConfig.speedMax,
+                scaleFrom: effectConfig.scaleFrom,
+                scaleTo: effectConfig.scaleTo,
+                alphaFrom: effectConfig.alphaFrom,
+                alphaTo: effectConfig.alphaTo,
+                tint: effectConfig.tint ?? effectConfig.color,
+                glowTint: effectConfig.glowTint ?? effectConfig.glowColor,
+                streakTint: effectConfig.streakTint,
+                forwardOffset: effectConfig.forwardOffset,
+                flashWidth: effectConfig.flashWidth ?? effectConfig.arcWidth,
+                centerFlashRadius: effectConfig.centerFlashRadius ?? effectConfig.impactRadius,
+                direction
+            });
+            return;
+        }
+        const slashAngle = direction.x < 0
+            ? Phaser.Math.FloatBetween(0.2, 0.55)
+            : Phaser.Math.FloatBetween(-0.55, -0.2);
+        this.meleeHitEffect?.spawn?.(this, target, {
+            style: effectConfig.style,
+            color: effectConfig.color ?? 0xff667f,
+            glowColor: effectConfig.glowColor ?? 0xffd0d6,
+            length: effectConfig.length ?? 18,
+            spacing: effectConfig.spacing ?? 6,
+            slashWidth: effectConfig.slashWidth ?? 3,
+            slashCount: effectConfig.slashCount ?? 3,
+            impactRadius: effectConfig.impactRadius ?? 9,
+            impactAlpha: effectConfig.impactAlpha ?? 0.28,
+            duration: effectConfig.duration ?? 150,
+            angle: effectConfig.angle ?? slashAngle,
+            arcRadius: effectConfig.arcRadius,
+            arcWidth: effectConfig.arcWidth,
+            arcDegrees: effectConfig.arcDegrees,
+            offsetX: effectConfig.offsetX,
+            offsetY: effectConfig.offsetY,
+            direction,
+            depth: (target.depth ?? 20) + 10
         });
     }
 
@@ -157,14 +256,24 @@ export default class Player extends BaseEntity {
         const lastCast = this.lastSkillCastTimes[skillType] ?? -Infinity;
         if (now - lastCast < skillCooldown) return 0;
 
+        const skillDefinition = this.getSkillConfig(skillType) ?? {};
+        if (skillDefinition.category === 'projectile') {
+            const skillRange = Math.max(0, skillDefinition.travelRange ?? 0);
+            if (!this.hasEnemyInSkillRange(skillRange)) {
+                return 0;
+            }
+        }
+
         const count = this.getSkillObjectCount(skillType);
-        this.scene.skillObjectSpawnCounts = this.scene.skillObjectSpawnCounts ?? {};
-        this.scene.skillObjectSpawnCounts[skillType] = (this.scene.skillObjectSpawnCounts[skillType] ?? 0) + count;
+        const runState = getRunState(this.scene, this);
+        if (runState) {
+            runState.skillObjectSpawnCounts = runState.skillObjectSpawnCounts ?? {};
+            runState.skillObjectSpawnCounts[skillType] = (runState.skillObjectSpawnCounts[skillType] ?? 0) + count;
+        }
         const movementDirection = this.lastMoveDirection.clone();
         if (movementDirection.lengthSq() === 0) {
             movementDirection.set(this.flipX ? -1 : 1, 0);
         }
-        const skillDefinition = this.getSkillConfig(skillType) ?? {};
         const alignWithMovement = skillDefinition.alignWithMovement ?? false;
         const timeNow = this.scene?.time?.now ?? now;
         const hasRotatingCast = typeof skillDefinition.castRotationSpeed === 'number';
@@ -266,12 +375,9 @@ export default class Player extends BaseEntity {
                     skill.setRotation(skill.getFacingRotation(Math.atan2(dy, dx)));
                     skill.setFlipX(false);
                 }
-            } else if (!skill.isAura) {
+            } else {
                 skill.x = this.x + Math.cos(angle) * 16;
                 skill.y = this.y + Math.sin(angle) * 16;
-            } else {
-                skill.x = this.x;
-                skill.y = this.y;
             }
             this.scene.skills.add(skill);
             return skill;
@@ -292,32 +398,17 @@ export default class Player extends BaseEntity {
             }
         };
 
-        if (skillDefinition.category === 'orbit' && count === 1) {
-            if (this.activeSingleOrbitSkill && this.activeSingleOrbitSkill.active) {
-                return 0;
-            }
-            this.activeSingleOrbitSkill = spawnSkillObject(0);
-            if (this.activeSingleOrbitSkill) {
-                this.activeSingleOrbitSkill.once('destroy', () => {
-                    if (this.activeSingleOrbitSkill === this.activeSingleOrbitSkill) {
-                        this.activeSingleOrbitSkill = null;
-                    }
-                });
-            }
-        } else {
-            spawnAll();
-        }
+        spawnAll();
 
         const skillDuration = this.getSkillDuration(skillType);
-        this.lastSkillCastTimes[skillType] = skillDefinition.category === 'orbit'
-            ? now + skillDuration
-            : now;
+        this.lastSkillCastTimes[skillType] = now;
         return attackDuration;
     }
 
 
     update(time, delta) {
         if (this.isDead) return;
+        this.statusEffects?.update?.(delta);
 
         this.trackMovedDistance();
         this.ensureVisibleState();
@@ -341,8 +432,9 @@ export default class Player extends BaseEntity {
             movementInput.normalize();
         }
 
-        const velocityX = movementInput.x * this.speed;
-        const velocityY = movementInput.y * this.speed;
+        const effectiveSpeed = this.getStatusAdjustedSpeed?.(this.speed) ?? this.speed;
+        const velocityX = movementInput.x * effectiveSpeed;
+        const velocityY = movementInput.y * effectiveSpeed;
 
         this.setVelocity(velocityX, velocityY);
 
@@ -391,7 +483,6 @@ export default class Player extends BaseEntity {
         this.updateRegeneration(delta);
         this.updateShieldRegeneration(delta);
         this.updateItemShield(delta);
-        this.updateAquaShield(delta);
         this.attractLoot(delta);
         super.update(time, delta);
         this.wasMovingLastFrame = isMoving;
@@ -401,6 +492,8 @@ export default class Player extends BaseEntity {
     trackMovedDistance() {
         const scene = this.scene;
         if (!scene) return;
+        const runState = getRunState(scene, this);
+        if (!runState) return;
         const previous = this.lastTrackedPosition;
         if (!previous) {
             this.lastTrackedPosition = new Phaser.Math.Vector2(this.x, this.y);
@@ -408,7 +501,7 @@ export default class Player extends BaseEntity {
         }
         const movedDistance = Phaser.Math.Distance.Between(previous.x, previous.y, this.x, this.y);
         if (!Number.isFinite(movedDistance) || movedDistance <= 0) return;
-        scene.totalMovedDistance = (scene.totalMovedDistance ?? 0) + movedDistance;
+        runState.totalMovedDistance = (runState.totalMovedDistance ?? 0) + movedDistance;
     }
 
     updateRegeneration(delta) {
@@ -449,26 +542,6 @@ export default class Player extends BaseEntity {
         }
     }
 
-    updateAquaShield(delta) {
-        if (!this.hasSkill?.('aqua_shield') || this.isDead) {
-            this.aquaShieldActive = false;
-            this.aquaShieldValue = 0;
-            this.aquaShieldTimer = 0;
-            return;
-        }
-        if (!this.aquaShieldActive) {
-            this.aquaShieldActive = true;
-            this.aquaShieldValue = this.aquaShieldResetAmount;
-            this.aquaShieldTimer = 0;
-            return;
-        }
-        this.aquaShieldTimer += delta;
-        while (this.aquaShieldTimer >= this.aquaShieldResetIntervalMs) {
-            this.aquaShieldTimer -= this.aquaShieldResetIntervalMs;
-            this.aquaShieldValue = this.aquaShieldResetAmount;
-        }
-    }
-
     attractLoot(delta) {
         const scene = this.scene;
         if (!scene) return;
@@ -483,8 +556,10 @@ export default class Player extends BaseEntity {
         const items = this.getNearbyLootItems(radius);
         const radiusSq = radius * radius;
         const thresholdSq = threshold * threshold;
+        const now = scene.time?.now ?? 0;
         for (const item of items) {
             if (!item || !item.active || item.collected) continue;
+            if (!item.canBeMagnetizedBy?.(this, now)) continue;
             item.isMagnetized = false;
             const dx = this.x - item.x;
             const dy = this.y - item.y;
@@ -520,13 +595,14 @@ export default class Player extends BaseEntity {
         if (Array.isArray(overlapBodies) && overlapBodies.length) {
             return overlapBodies
                 .map((body) => body?.gameObject)
-                .filter((item) => item && group.contains?.(item));
+                .filter((item) => item && group.contains?.(item) && item.canBeMagnetizedBy?.(this));
         }
 
         const items = group.getChildren();
         const nearbyItems = [];
         for (const item of items) {
             if (!item || !item.active || item.collected) continue;
+            if (!item.canBeMagnetizedBy?.(this)) continue;
             const dx = Math.abs(this.x - item.x);
             if (dx > radius) continue;
             const dy = Math.abs(this.y - item.y);
@@ -541,16 +617,94 @@ export default class Player extends BaseEntity {
     }
 
     getAutoAimTargets(count = 1) {
-        if (!this.scene || !this.scene.enemies) return null;
-        const enemies = this.scene.enemies.getChildren?.() ?? [];
-        const activeEnemies = enemies.filter(enemy => this.isEnemyWithinTargetView(enemy));
+        const limit = Math.max(1, count);
+        const activeEnemies = this.getNearbyAutoAimEnemies();
         if (!activeEnemies.length) return [];
 
-        const preferredEnemies = activeEnemies.filter(enemy => !enemy.isHacked);
-        const fallbackEnemies = preferredEnemies.length ? preferredEnemies : activeEnemies;
-        fallbackEnemies.sort((a, b) => Phaser.Math.Distance.Between(this.x, this.y, a.x, a.y)
-            - Phaser.Math.Distance.Between(this.x, this.y, b.x, b.y));
-        return fallbackEnemies.slice(0, Math.max(1, count));
+        return this.pickClosestEnemies(activeEnemies, limit);
+    }
+
+    getNearbyAutoAimEnemies(margin = TARGET_VIEW_MARGIN) {
+        if (!this.scene || !this.scene.enemies) return [];
+        const overlapRadius = Math.max(this.scene.scale.width, this.scene.scale.height) * 0.75;
+        const overlapBodies = this.scene.physics?.overlapCirc?.(this.x, this.y, overlapRadius, true, true);
+        if (Array.isArray(overlapBodies) && overlapBodies.length) {
+            return overlapBodies
+                .map((body) => body?.gameObject)
+                .filter((enemy, index, array) => (
+                    enemy
+                    && this.scene.enemies.contains?.(enemy)
+                    && this.isEnemyWithinTargetView(enemy, margin)
+                    && array.indexOf(enemy) === index
+                ));
+        }
+
+        const enemies = this.scene.enemies.getChildren?.() ?? [];
+        const nearbyEnemies = [];
+        for (const enemy of enemies) {
+            if (!this.isEnemyWithinTargetView(enemy, margin)) continue;
+            nearbyEnemies.push(enemy);
+        }
+        return nearbyEnemies;
+    }
+
+    hasEnemyInSkillRange(range) {
+        if (!this.scene?.enemies?.getChildren || range <= 0) return false;
+        const overlapBodies = this.scene.physics?.overlapCirc?.(this.x, this.y, range, true, true);
+        if (Array.isArray(overlapBodies) && overlapBodies.length) {
+            const rangeSq = range * range;
+            for (const body of overlapBodies) {
+                const enemy = body?.gameObject;
+                if (!enemy?.active || enemy?.isDead) continue;
+                if (!this.scene.enemies.contains?.(enemy)) continue;
+                if (!this.isEnemyWithinTargetView(enemy, range)) continue;
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const enemyRadius = Math.max(enemy.displayWidth ?? enemy.body?.width ?? 0, enemy.displayHeight ?? enemy.body?.height ?? 0) * 0.5;
+                const maxDistance = range + enemyRadius;
+                if ((dx * dx) + (dy * dy) <= maxDistance * maxDistance) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        const enemies = this.scene.enemies.getChildren();
+        const viewMargin = Math.max(TARGET_VIEW_MARGIN, range);
+        const rangeSq = range * range;
+        for (const enemy of enemies) {
+            if (!enemy?.active || enemy?.isDead) continue;
+            if (!this.isEnemyWithinTargetView(enemy, viewMargin)) continue;
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const enemyRadius = Math.max(enemy.displayWidth ?? enemy.body?.width ?? 0, enemy.displayHeight ?? enemy.body?.height ?? 0) * 0.5;
+            const maxDistance = range + enemyRadius;
+            if ((dx * dx) + (dy * dy) <= Math.max(rangeSq, maxDistance * maxDistance)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pickClosestEnemies(enemies, count) {
+        const closest = [];
+        for (const enemy of enemies) {
+            if (!enemy?.active) continue;
+            const dx = enemy.x - this.x;
+            const dy = enemy.y - this.y;
+            const distanceSq = (dx * dx) + (dy * dy);
+
+            if (closest.length < count) {
+                closest.push({ enemy, distanceSq });
+                closest.sort((a, b) => a.distanceSq - b.distanceSq);
+                continue;
+            }
+
+            if (distanceSq >= closest[closest.length - 1].distanceSq) continue;
+            closest[closest.length - 1] = { enemy, distanceSq };
+            closest.sort((a, b) => a.distanceSq - b.distanceSq);
+        }
+        return closest.map((entry) => entry.enemy);
     }
 
     isEnemyWithinTargetView(enemy, margin = TARGET_VIEW_MARGIN) {
@@ -575,25 +729,29 @@ export default class Player extends BaseEntity {
         skill.setRotation(skill.getFacingRotation(Math.atan2(dir.y, dir.x)));
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, source = null, options = {}) {
         if (!this.scene) return;
         const now = this.scene.time.now;
         const last = this.lastDamageTime ?? -Infinity;
         if (now - last < this.damageCooldown) {
-            return;
+            return null;
         }
         this.lastDamageTime = now;
-        if (this.isDead) return;
-        const mitigatedDamage = Math.max(1, Math.round((amount ?? 0) - (this.armor ?? DEFAULT_CHARACTER_ARMOR)));
+        if (this.isDead) return null;
+        const incomingDamageContext = this.statusEffects?.beforeDamageTaken?.({
+            amount,
+            source,
+            options,
+            attackTags: options?.attackTags ?? [],
+            isCritical: options?.isCritical ?? false
+        }) ?? { amount, absorbedDamage: 0 };
+        const incomingAmount = incomingDamageContext.amount ?? amount ?? 0;
+        const armorValue = Number.isFinite(this.armor) ? this.armor : DEFAULT_CHARACTER_ARMOR;
+        const mitigatedDamage = Math.max(0, Math.round(incomingAmount - armorValue));
         let remainingDamage = mitigatedDamage;
         if (this.itemShieldValue > 0) {
             const absorbedDamage = Math.min(this.itemShieldValue, remainingDamage);
             this.itemShieldValue -= absorbedDamage;
-            remainingDamage -= absorbedDamage;
-        }
-        if (this.aquaShieldValue > 0) {
-            const absorbedDamage = Math.min(this.aquaShieldValue, remainingDamage);
-            this.aquaShieldValue -= absorbedDamage;
             remainingDamage -= absorbedDamage;
         }
         if (this.temporaryShield > 0) {
@@ -614,11 +772,18 @@ export default class Player extends BaseEntity {
                 this.scene.events.emit('player-dead');
             }
         }
+        return {
+            healthDamage: Math.max(0, mitigatedDamage - remainingDamage),
+            absorbedDamage: incomingDamageContext.absorbedDamage ?? 0,
+            didKill: this.health <= 0
+        };
     }
 
     heal(amount) {
         if (typeof amount !== 'number' || amount <= 0) return;
-        this.health = Phaser.Math.Clamp(this.health + amount, 0, this.maxHealth);
+        const healingContext = this.statusEffects?.beforeHealingReceived?.({ amount }) ?? { amount };
+        const resolvedAmount = Math.max(0, healingContext.amount ?? amount);
+        this.health = Phaser.Math.Clamp(this.health + resolvedAmount, 0, this.maxHealth);
         this.updateHealthBarUI();
     }
 
@@ -636,13 +801,24 @@ export default class Player extends BaseEntity {
 
     addGold(amount) {
         if (typeof amount !== 'number' || amount <= 0) return;
-        this.gold += amount;
+        const effectiveAmount = Math.max(0, Math.round(amount * (this.goldGainMultiplier ?? 1)));
+        this.gold += effectiveAmount;
         this.updateGoldText();
+    }
+
+    spendGold(amount) {
+        const goldCost = Math.max(0, Math.floor(Number(amount) || 0));
+        if (goldCost <= 0) return true;
+        if ((this.gold ?? 0) < goldCost) return false;
+        this.gold -= goldCost;
+        this.updateGoldText();
+        return true;
     }
 
     onLevelUp() {
         const scene = this.scene;
         if (!scene) return;
+        this.syncCharacterLevelGrowth({ healForMaxHealthGain: true });
         if ((this.shieldGainOnLevelUp ?? 0) > 0) {
             this.grantShield(this.shieldGainOnLevelUp);
         }
@@ -662,16 +838,17 @@ export default class Player extends BaseEntity {
             });
         }
         this.playLevelUpEffect(this.x, this.y);
-        if (scene.queueLevelUp) {
-            scene.queueLevelUp();
-        }
     }
 
-    playLevelUpEffect(x, y) {
+    playFloatingAnnouncementEffect(x, y, {
+        text = 'LEVEL UP',
+        glowColor = 0xffd966,
+        textColor = '#ffe066'
+    } = {}) {
         const scene = this.scene;
         if (!scene) return;
         const heightOffset = this.baseHeight ? this.baseHeight * 0.6 : 30;
-        const glow = scene.add.circle(x, y - heightOffset, 10, 0xffd966, 0.6);
+        const glow = scene.add.circle(x, y - heightOffset, 10, glowColor, 0.6);
         glow.setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({
             targets: glow,
@@ -685,23 +862,31 @@ export default class Player extends BaseEntity {
             }
         });
 
-        const text = scene.add.text(x, y - heightOffset - 20, 'LEVEL UP', {
+        const announcementText = scene.add.text(x, y - heightOffset - 20, text, {
             fontSize: '18px',
             fontFamily: 'Arial',
-            color: '#ffe066',
+            color: textColor,
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
         scene.tweens.add({
-            targets: text,
-            y: text.y - 30,
+            targets: announcementText,
+            y: announcementText.y - 30,
             alpha: 0,
             scale: 1.1,
             duration: 700,
             ease: 'Cubic.easeOut',
             onComplete: () => {
-                text.destroy();
+                announcementText.destroy();
             }
+        });
+    }
+
+    playLevelUpEffect(x, y) {
+        this.playFloatingAnnouncementEffect(x, y, {
+            text: 'LEVEL UP',
+            glowColor: 0xffd966,
+            textColor: '#ffe066'
         });
     }
 
@@ -748,6 +933,21 @@ export default class Player extends BaseEntity {
                 this.bonusArmor += effect.value ?? 0;
                 this.updateArmorFromConfig();
                 break;
+            case 'armorPierce':
+                this.bonusArmorPierce += effect.value ?? 0;
+                this.updateArmorPierceFromConfig();
+                break;
+            case 'skillRange':
+                this.bonusSkillRange += effect.value ?? 0;
+                this.updateSkillRangeFromConfig();
+                break;
+            case 'skillRangeFlat':
+                this.bonusSkillRange += effect.value ?? 0;
+                this.updateSkillRangeFromConfig();
+                break;
+            case 'knockbackPercent':
+                this.bonusKnockbackMultiplier += effect.value ?? 0;
+                break;
             case 'heal':
                 this.heal(effect.value ?? 0);
                 break;
@@ -762,6 +962,9 @@ export default class Player extends BaseEntity {
                 break;
             case 'damage':
                 this.damageMultiplier = (this.damageMultiplier ?? 1) * (1 + (effect.value ?? 0));
+                break;
+            case 'attackSpeed':
+                this.attackSpeedMultiplier = Math.max(0.1, (this.attackSpeedMultiplier ?? 1) * (1 + (effect.value ?? 0)));
                 break;
             case 'skillDamagePercent':
                 this.addSkillDamagePercent(effect.skillKey, effect.value ?? 0);
@@ -807,17 +1010,17 @@ export default class Player extends BaseEntity {
             case 'healthRegenPerSecond':
                 this.healthRegenPerSecond += effect.value ?? 0;
                 break;
+            case 'lifesteal':
+                this.lifesteal = Math.max(0, (this.lifesteal ?? 0) + (effect.value ?? 0));
+                break;
             case 'lootMagnetRadiusPercent':
                 this.lootMagnetRadiusMultiplier *= (1 + (effect.value ?? 0));
                 break;
+            case 'goldGainMultiplier':
+                this.goldGainMultiplier = Math.max(0, (this.goldGainMultiplier ?? 1) * (1 + (effect.value ?? 0)));
+                break;
             case 'shieldGrant':
                 this.grantShield(effect.value ?? 0);
-                break;
-            case 'shieldResetPool':
-                this.syncItemShieldReset(effect, context.cardConfig);
-                break;
-            case 'shieldOnLevelUp':
-                this.syncShieldGainOnLevelUp(effect, context.cardConfig);
                 break;
             case 'shieldRegen':
                 this.shieldRegenAmount += effect.value ?? 0;
@@ -846,107 +1049,47 @@ export default class Player extends BaseEntity {
             case 'critChance':
                 this.globalCritChanceBonus += effect.value ?? 0;
                 break;
+            case 'critMultiplier':
+                this.critMultiplierBonus += effect.value ?? 0;
+                break;
+            case 'effectChance':
+                this.globalEffectChanceBonus += effect.value ?? 0;
+                break;
+            case 'effectDamageMultiplier':
+                this.globalEffectDamageMultiplier *= (1 + (effect.value ?? 0));
+                break;
+            case 'effectDurationMultiplier':
+                this.globalEffectDurationMultiplier *= (1 + (effect.value ?? 0));
+                break;
             default:
         }
     }
 
-    syncShieldGainOnLevelUp(effect = {}, cardConfig = null) {
-        const inventoryKey = cardConfig?.inventoryKey ?? cardConfig?.key ?? effect.inventoryKey ?? null;
-        if (!inventoryKey) {
-            this.shieldGainOnLevelUp += effect.value ?? 0;
-            return;
-        }
-        const currentLevel = this.scene?.inventoryItemLevels?.[inventoryKey] ?? 0;
-        this.shieldGainOnLevelUpBySource[inventoryKey] = Math.max(0, (effect.value ?? 0) * currentLevel);
-        this.shieldGainOnLevelUp = Object.values(this.shieldGainOnLevelUpBySource)
-            .reduce((sum, value) => sum + (value ?? 0), 0);
-    }
-
-    syncItemShieldReset(effect = {}, cardConfig = null) {
-        const inventoryKey = cardConfig?.inventoryKey ?? cardConfig?.key ?? effect.inventoryKey ?? null;
-        const currentLevel = this.scene?.inventoryItemLevels?.[inventoryKey] ?? 0;
-        if (!inventoryKey || currentLevel <= 0) {
-            this.itemShieldResetAmount = 0;
-            this.itemShieldValue = 0;
-            this.itemShieldTimer = 0;
-            return;
-        }
-
-        const baseValue = Math.max(0, effect.baseValue ?? 0);
-        const perLevelValue = Math.max(0, effect.perLevelValue ?? 0);
-        const maxValue = Math.max(baseValue, effect.maxValue ?? baseValue);
-        const shieldAmount = currentLevel >= 8
-            ? maxValue
-            : Math.min(maxValue, baseValue + Math.max(0, currentLevel - 1) * perLevelValue);
-
-        this.itemShieldResetAmount = shieldAmount;
-        if (typeof effect.intervalMs === 'number' && effect.intervalMs > 0) {
-            this.itemShieldResetIntervalMs = effect.intervalMs;
-        }
-        this.itemShieldValue = shieldAmount;
-        this.itemShieldTimer = 0;
-    }
-
     getActiveSkillKey() {
-        return this.scene?.activeSkillKey || 'thunder';
+        return getRunState(this.scene, this)?.activeSkillKey || 'thunder';
     }
 
     getSkillConfig(skillKey) {
         const baseConfig = SKILL_CONFIG[skillKey] ?? {};
         const runtimeOverride = this.skillRuntimeConfigOverrides[skillKey] ?? {};
-        const hiddenFeatureOverride = this.getHiddenSkillFeatureOverride(skillKey);
-        const resolvedConfig = {
+        const mergedConfig = {
             ...baseConfig,
-            ...runtimeOverride,
-            ...hiddenFeatureOverride
+            ...runtimeOverride
         };
-        const disabledBehaviorTypes = [
-            ...(Array.isArray(runtimeOverride.disabledBehaviorTypes) ? runtimeOverride.disabledBehaviorTypes : []),
-            ...(Array.isArray(hiddenFeatureOverride.disabledBehaviorTypes) ? hiddenFeatureOverride.disabledBehaviorTypes : [])
-        ];
-        if (disabledBehaviorTypes.length) {
-            resolvedConfig.behaviors = Array.isArray(resolvedConfig.behaviors)
-                ? resolvedConfig.behaviors.filter((entry) => !disabledBehaviorTypes.includes(entry?.type))
-                : resolvedConfig.behaviors;
-        }
-        return resolvedConfig;
-    }
-
-    getHiddenSkillFeatureOverride(skillKey) {
-        const sourceOverrides = this.hiddenSkillFeatureOverrides[skillKey];
-        if (!sourceOverrides) return {};
-        return Object.values(sourceOverrides).reduce((merged, overrides) => {
-            if (!overrides || typeof overrides !== 'object') return merged;
-            const nextMerged = { ...merged, ...overrides };
-            const mergedDisabled = [
-                ...(Array.isArray(merged.disabledBehaviorTypes) ? merged.disabledBehaviorTypes : []),
-                ...(Array.isArray(overrides.disabledBehaviorTypes) ? overrides.disabledBehaviorTypes : [])
-            ];
-            if (mergedDisabled.length) {
-                nextMerged.disabledBehaviorTypes = Array.from(new Set(mergedDisabled));
+        const rangeBonus = Math.max(0, this.skillRange ?? 0);
+        if (rangeBonus > 0) {
+            if (typeof mergedConfig.travelRange === 'number') {
+                mergedConfig.travelRange += rangeBonus;
             }
-            return nextMerged;
-        }, {});
-    }
-
-    setHiddenSkillFeatureOverride(skillKey, sourceKey, overrides = {}) {
-        if (!skillKey || !sourceKey) return;
-        this.hiddenSkillFeatureOverrides[skillKey] = {
-            ...(this.hiddenSkillFeatureOverrides[skillKey] ?? {}),
-            [sourceKey]: overrides
-        };
-    }
-
-    clearHiddenSkillFeatureOverride(skillKey, sourceKey) {
-        if (!skillKey || !sourceKey || !this.hiddenSkillFeatureOverrides[skillKey]) return;
-        delete this.hiddenSkillFeatureOverrides[skillKey][sourceKey];
-        if (!Object.keys(this.hiddenSkillFeatureOverrides[skillKey]).length) {
-            delete this.hiddenSkillFeatureOverrides[skillKey];
+            if (typeof mergedConfig.meleeRange === 'number') {
+                mergedConfig.meleeRange += rangeBonus;
+            }
         }
+        return mergedConfig;
     }
 
     getActiveSkillKeys() {
-        const activeSkillKeys = this.scene?.activeSkillKeys;
+        const activeSkillKeys = getRunState(this.scene, this)?.activeSkillKeys;
         if (Array.isArray(activeSkillKeys) && activeSkillKeys.length) {
             return activeSkillKeys;
         }
@@ -1001,17 +1144,21 @@ export default class Player extends BaseEntity {
     }
 
     hasSkill(skillKey) {
-        return Array.isArray(this.scene?.activeSkillKeys) && this.scene.activeSkillKeys.includes(skillKey);
+        const activeSkillKeys = getRunState(this.scene, this)?.activeSkillKeys;
+        return Array.isArray(activeSkillKeys) && activeSkillKeys.includes(skillKey);
     }
 
     unlockSkill(skillKey, options = {}) {
         if (!skillKey || !SKILL_CONFIG[skillKey]) return false;
         const ignoreCap = options?.ignoreCap === true;
-        const currentSkills = Array.isArray(this.scene?.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
+        const runState = getRunState(this.scene, this);
+        const currentSkills = Array.isArray(runState?.activeSkillKeys) ? [...runState.activeSkillKeys] : [];
         if (currentSkills.includes(skillKey)) return false;
         if (!ignoreCap && currentSkills.length >= MAX_ACTIVE_SKILLS) return false;
         currentSkills.push(skillKey);
-        this.scene.activeSkillKeys = currentSkills;
+        if (runState) {
+            runState.activeSkillKeys = currentSkills;
+        }
         this.skillObjectCounts[skillKey] = this.getSkillConfig(skillKey)?.defaultObjects ?? 1;
         if (this.scene?.skillInputs?.[skillKey]) {
             this.scene.skillInputs[skillKey].checked = true;
@@ -1025,7 +1172,8 @@ export default class Player extends BaseEntity {
 
     replaceSkill(sourceSkillKey, evolvedSkillKey) {
         if (!sourceSkillKey || !evolvedSkillKey || !SKILL_CONFIG[evolvedSkillKey] || !this.scene) return false;
-        const currentSkills = Array.isArray(this.scene.activeSkillKeys) ? [...this.scene.activeSkillKeys] : [];
+        const runState = getRunState(this.scene, this);
+        const currentSkills = Array.isArray(runState?.activeSkillKeys) ? [...runState.activeSkillKeys] : [];
         const sourceIndex = currentSkills.indexOf(sourceSkillKey);
         if (sourceIndex === -1) return false;
 
@@ -1036,15 +1184,17 @@ export default class Player extends BaseEntity {
         }
 
         this.migrateSkillRuntimeState(sourceSkillKey, evolvedSkillKey);
-        this.scene.activeSkillKeys = Array.from(new Set(currentSkills));
-        if (this.scene.activeSkillKey === sourceSkillKey || !this.scene.activeSkillKeys.includes(this.scene.activeSkillKey)) {
-            this.scene.activeSkillKey = evolvedSkillKey;
+        if (runState) {
+            runState.activeSkillKeys = Array.from(new Set(currentSkills));
+        }
+        if (runState && (runState.activeSkillKey === sourceSkillKey || !runState.activeSkillKeys.includes(runState.activeSkillKey))) {
+            runState.activeSkillKey = evolvedSkillKey;
         }
         if (this.getDefaultSkillKey() === sourceSkillKey) {
             this.runtimeDefaultSkillKey = evolvedSkillKey;
         }
         Object.entries(this.scene.skillInputs ?? {}).forEach(([key, input]) => {
-            input.checked = this.scene.activeSkillKeys.includes(key);
+            input.checked = runState?.activeSkillKeys?.includes(key) ?? false;
         });
         return true;
     }
@@ -1123,12 +1273,14 @@ export default class Player extends BaseEntity {
     getSkillCooldown(skillKey) {
         const baseCooldown = this.getSkillConfig(skillKey)?.cooldown ?? 1000;
         const adjusted = baseCooldown + this.skillCooldownOffset + (this.skillCooldownOffsets[skillKey] ?? 0);
-        return Math.max(200, adjusted);
+        const attackSpeed = Math.max(0.1, this.attackSpeedMultiplier ?? 1);
+        return Math.max(200, adjusted / attackSpeed);
     }
 
     getSkillDuration(skillKey) {
         const baseDuration = this.getSkillConfig(skillKey)?.duration ?? 500;
-        return Math.max(1, baseDuration + (this.globalSkillDurationOffsetMs ?? 0));
+        const durationMultiplier = Math.max(0.1, this.globalSkillDurationMultiplier ?? 1);
+        return Math.max(1, baseDuration * durationMultiplier + (this.globalSkillDurationOffsetMs ?? 0));
     }
 
     addSkillDamagePercent(skillKey, value) {
@@ -1188,7 +1340,7 @@ export default class Player extends BaseEntity {
     }
 
     getTotalShield() {
-        return Math.max(0, (this.temporaryShield ?? 0) + (this.itemShieldValue ?? 0) + (this.aquaShieldValue ?? 0));
+        return Math.max(0, (this.temporaryShield ?? 0) + (this.itemShieldValue ?? 0));
     }
 
     getSkillDamageMultiplier(skillKey) {
@@ -1207,12 +1359,17 @@ export default class Player extends BaseEntity {
         return this.skillExplosionRadiusMultipliers[skillKey] ?? 1;
     }
 
+    getSkillKnockbackMultiplier(_skillKey) {
+        return Math.max(0, (this.resolveCharacterStats()?.knockbackMultiplier ?? 1) + (this.bonusKnockbackMultiplier ?? 0));
+    }
+
     getSkillAreaMultiplier(skillKey) {
         const skillConfig = this.getSkillConfig(skillKey) ?? {};
-        const category = skillConfig.category ?? 'area';
-        const supportsGlobalArea = category === 'projectile' || category === 'orbit' || category === 'area' || category === 'aura';
+        const category = skillConfig.category ?? 'projectile';
+        const supportsGlobalArea = category === 'projectile';
+        const baseAreaMultiplier = this.resolveCharacterStats()?.areaSizeMultiplier ?? 1;
         const skillMultiplier = this.skillAreaMultipliers[skillKey] ?? 1;
-        return skillMultiplier * (supportsGlobalArea ? (this.globalSkillAreaMultiplier ?? 1) : 1);
+        return skillMultiplier * (supportsGlobalArea ? (baseAreaMultiplier * (this.globalSkillAreaMultiplier ?? 1)) : 1);
     }
 
     getSkillStunDurationMultiplier(skillKey) {
@@ -1231,6 +1388,10 @@ export default class Player extends BaseEntity {
         return this.globalCritChanceBonus ?? 0;
     }
 
+    getSkillCritMultiplierBonus() {
+        return this.critMultiplierBonus ?? 0;
+    }
+
     resolveAttackAnimationDuration() {
         if (!this.scene) return 400;
         const animKey = `${this.assetKey}_attack`;
@@ -1242,18 +1403,22 @@ export default class Player extends BaseEntity {
         const requestedKey = characterKey ?? DEFAULT_CHARACTER_KEY;
         const resolvedKey = CHARACTER_CONFIG[requestedKey] ? requestedKey : DEFAULT_CHARACTER_KEY;
         const config = getCharacterConfig(resolvedKey);
+        const stats = getCharacterStats(config);
         const assetKey = config?.assetKey ?? resolvedKey;
         const defaultSkill = config.defaultSkill ?? 'thunder';
         if (this.characterKey === resolvedKey) {
             this.characterConfig = config;
+            this.characterStats = stats;
             this.runtimeDefaultSkillKey = this.runtimeDefaultSkillKey ?? defaultSkill;
-            this.updateHealthFromCharacterConfig();
+            this.syncCharacterLevelGrowth();
             this.updateArmorFromConfig();
+            this.updateSkillRangeFromConfig();
             this.updateSpeedFromConfig();
             return this.runtimeDefaultSkillKey;
         }
         this.characterKey = resolvedKey;
         this.characterConfig = config;
+        this.characterStats = stats;
         this.assetKey = assetKey;
         this.type = assetKey;
         const charSize = config.size ?? ENTITY_SIZE_CONFIG[assetKey] ?? { width: 42, height: 48 };
@@ -1286,14 +1451,63 @@ export default class Player extends BaseEntity {
         this.isCastingSkill = false;
         this.attackAnimationDuration = this.resolveAttackAnimationDuration();
         this.idleFrameIndex = config?.idleFrameIndex ?? this.idleFrameIndex;
-        this.updateHealthFromCharacterConfig();
+        this.syncCharacterLevelGrowth();
         this.updateArmorFromConfig();
+        this.updateSkillRangeFromConfig();
         this.updateSpeedFromConfig();
         return defaultSkill;
     }
 
+    syncCharacterLevelGrowth(options = {}) {
+        const healForMaxHealthGain = options.healForMaxHealthGain === true;
+        const previousMaxHealth = Math.max(this.maxHealth ?? 1, 1);
+        const previousHealth = Math.max(0, this.health ?? previousMaxHealth);
+
+        if ((this.levelGrowthMaxHealthBonus ?? 0) !== 0) {
+            this.bonusMaxHealthFlat -= this.levelGrowthMaxHealthBonus;
+        }
+        this.levelGrowthMaxHealthBonus = 0;
+
+        Object.entries(this.levelGrowthSkillDamageBonuses ?? {}).forEach(([skillKey, value]) => {
+            if (!skillKey || !value) return;
+            this.skillDamageFlatBonus[skillKey] = (this.skillDamageFlatBonus[skillKey] ?? 0) - value;
+            if (Math.abs(this.skillDamageFlatBonus[skillKey]) < 1e-9) {
+                delete this.skillDamageFlatBonus[skillKey];
+            }
+        });
+        this.levelGrowthSkillDamageBonuses = {};
+
+        const growthConfig = getCharacterLevelGrowth(this.characterKey);
+        const gainedLevels = Math.max(0, (this.level ?? 1) - 1);
+        if (growthConfig && gainedLevels > 0) {
+            const hpBonus = Math.max(0, Number(growthConfig.hpPerLevel) || 0) * gainedLevels;
+            if (hpBonus > 0) {
+                this.levelGrowthMaxHealthBonus = hpBonus;
+                this.bonusMaxHealthFlat += hpBonus;
+            }
+
+            const damageBonus = Math.max(0, Number(growthConfig.damagePerLevel) || 0) * gainedLevels;
+            const growthSkillKey = growthConfig.skillKey
+                ?? this.characterConfig?.defaultSkill
+                ?? this.getDefaultSkillKey();
+            if (damageBonus > 0 && growthSkillKey) {
+                this.levelGrowthSkillDamageBonuses[growthSkillKey] = damageBonus;
+                this.skillDamageFlatBonus[growthSkillKey] = (this.skillDamageFlatBonus[growthSkillKey] ?? 0) + damageBonus;
+            }
+        }
+
+        this.updateHealthFromCharacterConfig();
+        if (healForMaxHealthGain) {
+            const gainedMaxHealth = Math.max(0, this.maxHealth - previousMaxHealth);
+            if (gainedMaxHealth > 0) {
+                this.health = Math.min(this.maxHealth, previousHealth + gainedMaxHealth);
+                this.displayedHealth = this.health;
+            }
+        }
+    }
+
     updateHealthFromCharacterConfig() {
-        const baseMaxHealth = this.characterConfig?.hp ?? DEFAULT_CHARACTER_HP;
+        const baseMaxHealth = this.resolveCharacterStats()?.hp ?? DEFAULT_CHARACTER_HP;
         const nextMaxHealth = Math.max(
             1,
             Math.round((baseMaxHealth * (1 + (this.bonusMaxHealthPercent ?? 0))) + (this.bonusMaxHealthFlat ?? 0))
@@ -1306,12 +1520,22 @@ export default class Player extends BaseEntity {
     }
 
     updateSpeedFromConfig() {
-        const baseSpeed = this.characterConfig?.speed ?? 200;
+        const baseSpeed = this.resolveCharacterStats()?.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed;
         this.speed = Math.max(1, Math.round((baseSpeed * (1 + (this.bonusSpeedPercent ?? 0))) + (this.bonusSpeedFlat ?? 0)));
     }
 
     updateArmorFromConfig() {
-        this.armor = (this.characterConfig?.armor ?? DEFAULT_CHARACTER_ARMOR) + (this.bonusArmor ?? 0);
+        this.armor = (this.resolveCharacterStats()?.armor ?? DEFAULT_CHARACTER_ARMOR) + (this.bonusArmor ?? 0);
+    }
+
+    updateArmorPierceFromConfig() {
+        const baseArmorPierce = this.resolveCharacterStats()?.armorPierce ?? PLAYER_BASE_STATS.armorPierce ?? 0;
+        this.armorPierce = Math.max(0, baseArmorPierce + (this.bonusArmorPierce ?? 0));
+    }
+
+    updateSkillRangeFromConfig() {
+        const baseSkillRange = this.resolveCharacterStats()?.skillRange ?? PLAYER_BASE_STATS.skillRange ?? 0;
+        this.skillRange = Math.max(0, baseSkillRange + (this.bonusSkillRange ?? 0));
     }
 
     createHealthBarUI() {
@@ -1331,11 +1555,22 @@ export default class Player extends BaseEntity {
     }
 
     getDisplayedDamage() {
-        if (!this.scene) return 0;
-        const skillKey = this.scene.activeSkillKey ?? 'thunder';
-        const baseDamage = this.getSkillConfig(skillKey)?.damage ?? 0;
+        const skillKey = this.getActiveSkillKey();
+        return this.getDamageSnapshotForSkill(skillKey);
+    }
+
+    getDamageSnapshotForSkill(skillKey = null) {
+        const resolvedSkillKey = skillKey && this.getSkillConfig(skillKey) ? skillKey : this.getActiveSkillKey();
+        if (!resolvedSkillKey) return 0;
+        const baseDamage = this.getSkillConfig(resolvedSkillKey)?.damage ?? 0;
+        const flatBonus = this.getSkillDamageFlatBonus(resolvedSkillKey);
         const multiplier = this.damageMultiplier ?? 1;
-        return Math.round(baseDamage * multiplier);
+        const skillMultiplier = this.getSkillDamageMultiplier(resolvedSkillKey);
+        return Math.round(Math.max(0, baseDamage + flatBonus) * multiplier * skillMultiplier);
+    }
+
+    getStatusEffectDamageSnapshot(skillKey = null) {
+        return this.getDamageSnapshotForSkill(skillKey);
     }
 
     updateExpBarUI() {
@@ -1367,6 +1602,8 @@ export default class Player extends BaseEntity {
     }
 
     destroy(fromScene) {
+        this.statusEffects?.destroy?.();
+        this.statusEffects = null;
         this.motionTrailEffect?.destroy();
         this.motionTrailEffect = null;
         this.destroyHealthBarUI();

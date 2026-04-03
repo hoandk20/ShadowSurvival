@@ -1,40 +1,117 @@
 // scenes/MainScene.js
 import Player from '../entities/Player.js';
 import Enemy from '../entities/Enemy.js';
-import { CARD_CONFIG } from '../config/card.js';
 import { ENEMIES } from '../config/enemies.js';
 import { SKILL_CONFIG } from '../config/skill.js';
-import { SKILL_EVOLUTION_CONFIG } from '../config/skillEvolution.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
+import { SUPPORTER_CONFIG, SUPPORTER_KEYS } from '../config/supporters.js';
 import MapManager from '../systems/mapsystem.js';
 import LootSystem from '../systems/LootSystem.js';
 import { DEFAULT_MAP_KEY } from '../config/map.js';
+import { SHOP_ITEM_CONFIG, getConditionalShopExcludeIds, getRandomShopItemStock, getShopItemConfig } from '../config/shopItems.js';
+import { getRandomPreShopCards } from '../config/preShopCards.js';
 import { preloadAllAssets, createAllAnimations } from '../utils/animationSystem.js';
-import { ELITE_CONFIGS, ELITE_KILL_MILESTONES } from '../config/elites.js';
 import {
-    createStageScenarioState,
     getScenarioEnemyHealthMultiplier,
     getStageScenario,
-    getScenarioEnemySpawnWeights,
     getScenarioSpawnRate,
     getScenarioSpawnInterval,
-    getTriggeredWaves,
-    handleAuraSystem,
-    getActiveEliteCount,
+    getScenarioWaveDurationSeconds,
+    getScenarioWavePlan,
     getUnlockedEnemyTypes,
-    spawnEnemyWithEliteChance
 } from '../config/stageScenarios.js';
 import CriticalHitEffect from '../entities/effects/CriticalHitEffect.js';
 import SkillBehaviorPipeline from '../systems/skills/SkillBehaviorPipeline.js';
-import SkillEvolutionSystem from '../systems/SkillEvolutionSystem.js';
-import HiddenSkillUnlockSystem from '../systems/HiddenSkillUnlockSystem.js';
+import SupporterSystem from '../systems/SupporterSystem.js';
+import PlayerPartySystem from '../systems/PlayerPartySystem.js';
+import PlayerRunState from '../systems/PlayerRunState.js';
+import TargetingSystem from '../systems/TargetingSystem.js';
+import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
 import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
+import EnemyProjectile from '../entities/EnemyProjectile.js';
 
 const SPAWN_PADDING = 50;
 const DESPAWN_MARGIN = 150;
 const MAX_ACTIVE_SKILLS = 6;
+const SKILL_HIT_CHECK_INTERVAL_MS = 50;
+const DEBUG_DEFAULT_HP_OVERRIDE = 10000;
+const MAP_WAVE_COUNT = 20;
+const ENEMIES_PER_WAVE = 1;
+const INITIAL_WAVE_SPAWN_BURST = 1;
+const SHOP_REROLL_COST = 10;
+const SUPPORTER_SELECTION_REROLL_COST = 10;
+const SUPPORTER_SELECTION_MAX_REROLLS = 3;
+const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
+const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 3;
+const WAVE_START_DELAY_MS = 2000;
 
 export default class MainScene extends Phaser.Scene {
+    get activeSkillKey() {
+        return this.getPrimaryRunState()?.activeSkillKey ?? null;
+    }
+
+    set activeSkillKey(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.activeSkillKey = value;
+        }
+    }
+
+    get activeSkillKeys() {
+        return this.getPrimaryRunState()?.activeSkillKeys ?? [];
+    }
+
+    set activeSkillKeys(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.activeSkillKeys = Array.isArray(value) ? value : [];
+        }
+    }
+
+    get skillObjectSpawnCounts() {
+        return this.getPrimaryRunState()?.skillObjectSpawnCounts ?? {};
+    }
+
+    set skillObjectSpawnCounts(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.skillObjectSpawnCounts = value ?? {};
+        }
+    }
+
+    get skillHitCounts() {
+        return this.getPrimaryRunState()?.skillHitCounts ?? {};
+    }
+
+    set skillHitCounts(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.skillHitCounts = value ?? {};
+        }
+    }
+
+    get totalMovedDistance() {
+        return this.getPrimaryRunState()?.totalMovedDistance ?? 0;
+    }
+
+    set totalMovedDistance(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.totalMovedDistance = Number.isFinite(value) ? value : 0;
+        }
+    }
+
+    get killCount() {
+        return this.getPrimaryRunState()?.killCount ?? 0;
+    }
+
+    set killCount(value) {
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.killCount = Number.isFinite(value) ? value : 0;
+        }
+    }
+
     constructor() {
         super('MainScene');
         this.mapManager = new MapManager(this);
@@ -43,7 +120,36 @@ export default class MainScene extends Phaser.Scene {
         this.touchMoveState = null;
         this.touchControlsEnabled = false;
         this.debugSpawnIntervalOverrideMs = null;
-        this.skillEvolutionInputs = {};
+        this.skillHitCheckTimer = 0;
+        this.playerLootOverlaps = new Map();
+        this.isShopOpen = false;
+        this.shopPauseStartedAt = null;
+        this.shopPausedDurationMs = 0;
+        this.maxWaveCount = MAP_WAVE_COUNT;
+        this.waveEnemyCount = ENEMIES_PER_WAVE;
+        this.currentWaveNumber = 1;
+        this.waveSpawnRemaining = ENEMIES_PER_WAVE;
+        this.waveKillCount = 0;
+        this.waveShopPending = false;
+        this.waveSystemEnabled = true;
+        this.waveStartPending = false;
+        this.isRunComplete = false;
+        this.isTransitioningToMenu = false;
+        this.currentWavePlan = null;
+        this.currentWaveDurationSeconds = 45;
+        this.currentWaveElapsedMs = 0;
+        this.waveEnding = false;
+        this.waveSpawnQueue = [];
+        this.shopOpenReason = null;
+        this.waveShopDelayTimer = null;
+        this.waveStartDelayTimer = null;
+        this.debugPlayerHealthOverride = 0;
+        this.debugSkillEffectSelections = {};
+        this.debugSkillEffectTargetKey = null;
+        this.debugSupporterEffectSelections = {};
+        this.isChoosingSupporter = false;
+        this.supporterSelectionRerollsRemaining = 0;
+        this.preShopCardSelectionRerollsRemaining = 0;
     }
 
     preload() {
@@ -56,8 +162,14 @@ export default class MainScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         this.isGameOver = false;
+        this.isTransitioningToMenu = false;
         this.debugMode = this.registry.get('debugMode') === true;
-        this.debugEnemyHealthOverride = 0;
+        this.waveSystemEnabled = !this.debugMode;
+        this.debugEnemyHealthOverride = this.debugMode ? DEBUG_DEFAULT_HP_OVERRIDE : 0;
+        this.debugPlayerHealthOverride = this.debugMode ? DEBUG_DEFAULT_HP_OVERRIDE : 0;
+        this.debugPlayerSpeedOverride = 0;
+        this.selectedSupporterKey = null;
+        this.registry.set('selectedSupporterKey', null);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         ensureAudioSettings(this.registry);
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -68,7 +180,10 @@ export default class MainScene extends Phaser.Scene {
         createAllAnimations(this);
         const selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
         this.stageScenario = getStageScenario(selectedMapKey);
-        this.stageScenarioState = createStageScenarioState(this.stageScenario);
+        const scenarioWavePlans = Array.isArray(this.stageScenario?.wavePlans) ? this.stageScenario.wavePlans : [];
+        if (scenarioWavePlans.length > 0) {
+            this.maxWaveCount = scenarioWavePlans.length;
+        }
         const mapDef = this.mapManager.loadMap(selectedMapKey);
         if (mapDef) {
             this.mapManager.applyWorldBounds();
@@ -79,17 +194,28 @@ export default class MainScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#808080');
         this.activeCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
         const initialCharacter = CHARACTER_CONFIG[this.activeCharacterKey];
-        this.activeSkillKey = initialCharacter?.defaultSkill ?? 'thunder';
-        this.activeSkillKeys = [this.activeSkillKey];
         this.skillInputs = {};
-        this.skillEvolutionInputs = {};
         this.characterInputs = {};
+        this.playerPartySystem = new PlayerPartySystem(this);
+        this.targetingSystem = new TargetingSystem(this);
+        this.statusEffectSystem = new StatusEffectSystem(this);
 
         // Create player
         const worldBounds = this.physics.world.bounds || { centerX: width / 2, centerY: height / 2 };
         const spawnX = worldBounds.centerX ?? width / 2;
         const spawnY = worldBounds.centerY ?? height / 2;
         this.player = new Player(this, spawnX, spawnY, this.activeCharacterKey);
+        if (this.debugMode) {
+            this.player.gold = 9999;
+        }
+        this.player.selectedSupporterKey = this.selectedSupporterKey;
+        const primaryRunState = new PlayerRunState({
+            playerId: this.player.playerId,
+            characterKey: this.activeCharacterKey,
+            activeSkillKey: initialCharacter?.defaultSkill ?? 'thunder',
+            activeSkillKeys: [initialCharacter?.defaultSkill ?? 'thunder']
+        });
+        this.playerPartySystem.registerPlayer(this.player, { isPrimary: true, runState: primaryRunState });
         this.add.existing(this.player);
         this.physics.add.existing(this.player);
         this.player.setCollideWorldBounds(true);
@@ -104,35 +230,32 @@ export default class MainScene extends Phaser.Scene {
             sparkDuration: { min: 120, max: 260 }
         });
         this.skillBehaviorPipeline = new SkillBehaviorPipeline(this);
-        this.skillEvolutionSystem = new SkillEvolutionSystem(this);
-        this.hiddenSkillUnlockSystem = new HiddenSkillUnlockSystem(this);
+        this.supporterSystem = new SupporterSystem(this);
         this.lootSystem = new LootSystem(this);
-        this.physics.add.overlap(this.player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
+        this.refreshPlayerInteractionBindings();
         this.player.once('player-dead', () => this.handlePlayerDeath());
+        this.supporterSystem.syncPlayerSupporter(this.player);
 
         if (!this.scene.isActive('HudScene')) {
             this.scene.launch('HudScene');
         }
         this.scene.bringToTop('HudScene');
 
-        this.cameras.main.startFollow(this.player, false, 1, 1);
+        this.cameraFollowTarget = this.add.zone(this.player.x, this.player.y, 1, 1);
+        this.cameras.main.startFollow(this.cameraFollowTarget, false, 1, 1);
         this.cameras.main.setDeadzone(0, 0);
 
         this.enemies = this.physics.add.group();
         this.separationZones = this.physics.add.group();
+        this.enemyProjectiles = this.add.group();
         this.showEnemyHP = false;
         this.despawnMargin = DESPAWN_MARGIN;
         this.respawnPool = 0;
         this.initializeEnemySpawnStatus();
-        this.killCount = 0;
-        this.eliteKillCount = 0;
-        this.eliteMilestonesTriggered = new Set();
-        this.maxEnemiesOnMap = 150;
+        this.maxEnemiesOnMap = 25;
         this.events.on('enemy-dead', this.handleEnemyDeath, this);
-        for (let i = 0; i < 5; i++) {
-            this.spawnRandomEnemy();
-            if (!this.canSpawnMoreEnemies()) break;
-        }
+        this.resetWaveProgress(1);
+        this.scheduleWaveStart();
 
         // Create skills group
         this.skills = this.add.group();
@@ -143,7 +266,7 @@ export default class MainScene extends Phaser.Scene {
             this.blockPlayerAgainstEnemy,
             this
         );
-        this.physics.add.collider(this.enemies, this.enemies, this.handleEnemyCollision, null, this);
+        this.physics.add.collider(this.enemies, this.enemies, null, this.shouldProcessEnemyCollision, this);
         this.physics.add.overlap(this.separationZones, this.enemies, this.handleSeparationZoneOverlap, null, this);
         this.setupDebugMenu();
 
@@ -152,29 +275,114 @@ export default class MainScene extends Phaser.Scene {
         this.isChoosingCard = false;
         this.upgradeOverlay = null;
         this.upgradeContainer = null;
-        this.levelUpQueue = 0;
-        this.cardSelectionCounts = {};
-        this.inventoryItems = [];
-        this.inventoryItemLevels = {};
-        this.skillObjectSpawnCounts = {};
-        this.skillHitCounts = {};
-        this.totalMovedDistance = 0;
-        this.ensureDefaultSkillInventoryEntry(this.activeCharacterKey);
         this.levelUpCards = [];
         this.cardFocusIndex = 0;
         this.keyboardNavigationActive = false;
-        this.input.keyboard.on('keydown', this.handleCardNavigation, this);
         this.runStartTime = this.time.now;
         this.levelUpPausedDurationMs = 0;
         this.levelUpPauseStartedAt = null;
+        this.isShopOpen = false;
+        this.shopPauseStartedAt = null;
+        this.shopPausedDurationMs = 0;
+        this.isRunComplete = false;
         this.registry.set('hasStartedGame', true);
-        this.scene.get('HudScene')?.refreshInventory?.(this.inventoryItems);
-        this.hiddenSkillUnlockSystem?.process?.();
+    }
+
+    getPrimaryPlayer() {
+        return this.playerPartySystem?.getPrimaryPlayer?.() ?? this.player ?? null;
+    }
+
+    getPrimaryRunState() {
+        return this.playerPartySystem?.getRunState?.() ?? null;
+    }
+
+    getActivePlayers() {
+        const players = this.playerPartySystem?.getAllPlayers?.() ?? [];
+        return players.length ? players : (this.player ? [this.player] : []);
+    }
+
+    getPlayerById(playerId) {
+        return this.playerPartySystem?.getPlayerById?.(playerId) ?? null;
+    }
+
+    getRunStateForPlayer(playerOrId) {
+        return this.playerPartySystem?.getRunState?.(playerOrId) ?? null;
+    }
+
+    resolvePlayerRunContext(playerOrId = null, runState = null) {
+        const resolvedPlayer = playerOrId ?? this.getPrimaryPlayer();
+        const resolvedRunState = runState ?? this.getRunStateForPlayer(resolvedPlayer) ?? this.getPrimaryRunState();
+        return {
+            player: resolvedPlayer,
+            runState: resolvedRunState
+        };
+    }
+
+    getSourceOwnerContext(source = null) {
+        const ownerPlayer = source?.ownerPlayerId
+            ? (this.getPlayerById(source.ownerPlayerId) ?? null)
+            : null;
+        return this.resolvePlayerRunContext(ownerPlayer);
+    }
+
+    registerPlayerInteractions(player) {
+        if (!player?.body || !this.physics || !this.lootSystem?.itemGroup) return;
+        const playerId = player.playerId ?? player.name ?? `${player.x}_${player.y}`;
+        if (this.playerLootOverlaps.has(playerId)) return;
+        const overlap = this.physics.add.overlap(player, this.lootSystem.itemGroup, this.handleItemPickup, null, this);
+        this.playerLootOverlaps.set(playerId, overlap);
+    }
+
+    unregisterPlayerInteractions(playerOrId) {
+        const playerId = typeof playerOrId === 'string' ? playerOrId : playerOrId?.playerId;
+        if (!playerId) return;
+        const overlap = this.playerLootOverlaps.get(playerId);
+        overlap?.destroy?.();
+        this.playerLootOverlaps.delete(playerId);
+    }
+
+    clearPlayerInteractionBindings() {
+        this.playerLootOverlaps.forEach((overlap) => overlap?.destroy?.());
+        this.playerLootOverlaps.clear();
+    }
+
+    refreshPlayerInteractionBindings() {
+        const activePlayers = this.getActivePlayers();
+        const activePlayerIds = new Set(activePlayers.map((player) => player?.playerId).filter(Boolean));
+        this.playerLootOverlaps.forEach((_overlap, playerId) => {
+            if (!activePlayerIds.has(playerId)) {
+                this.unregisterPlayerInteractions(playerId);
+            }
+        });
+        activePlayers.forEach((player) => this.registerPlayerInteractions(player));
+    }
+
+    getNearestPlayerTarget(x, y, options = {}) {
+        return this.targetingSystem?.getNearestPlayer?.(x, y, options) ?? this.getPrimaryPlayer();
+    }
+
+    getPartyCenter(options = {}) {
+        return this.targetingSystem?.getPartyCenter?.(options) ?? new Phaser.Math.Vector2(this.player?.x ?? 0, this.player?.y ?? 0);
+    }
+
+    updateCameraFollowTarget() {
+        if (!this.cameraFollowTarget) return;
+        const center = this.getPartyCenter();
+        this.cameraFollowTarget.setPosition(center.x, center.y);
     }
 
     update(time, delta) {
         if (this.isGameOver) return;
         if (this.isChoosingCard) return;
+        if (this.isShopOpen) return;
+        if (this.isRunComplete) return;
+        if (this.waveSystemEnabled && !this.waveStartPending && !this.waveEnding) {
+            this.currentWaveElapsedMs += delta;
+            if (this.hasCurrentWaveTimedOut()) {
+                this.endCurrentWave('timeout');
+                return;
+            }
+        }
         if (typeof this.debugSpawnIntervalOverrideMs === 'number' && this.debugSpawnIntervalOverrideMs > 0) {
             this.spawnInterval = this.debugSpawnIntervalOverrideMs;
         } else {
@@ -183,30 +391,37 @@ export default class MainScene extends Phaser.Scene {
         }
         // Update player
         this.player.update(time, delta);
-        this.hiddenSkillUnlockSystem?.process?.();
+        this.applyDebugPlayerSpeedOverride();
+        this.applyDebugPlayerHealthOverride();
         this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
-        handleAuraSystem(this.enemies?.getChildren?.() ?? [], this.stageScenario);
+        this.updateCameraFollowTarget();
         if ((this.debugEnemyHealthOverride ?? 0) > 0) {
             this.applyDebugEnemyHealthOverrideToAllEnemies();
         }
-        this.processStageWaves();
-
         this.despawnOffscreenEnemies();
-        if (this.respawnPool > 0 && this.canSpawnMoreEnemies()) {
+        if (!this.waveStartPending && this.waveSystemEnabled && this.respawnPool > 0 && this.canSpawnMoreEnemies() && this.waveSpawnRemaining > 0) {
             this.respawnPool -= 1;
-            this.spawnRandomEnemy();
+            this.spawnNextWaveEnemy();
         }
         this.spawnTimer += delta;
-        if (this.spawnTimer >= this.spawnInterval) {
+        if (this.debugMode && this.spawnTimer >= this.spawnInterval) {
             this.spawnTimer -= this.spawnInterval;
             if (this.canSpawnMoreEnemies()) {
-                this.spawnRandomEnemy();
+                this.spawnRandomEnemy(null, { countsTowardWave: false });
+            }
+        } else if (!this.waveStartPending && this.waveSystemEnabled && this.spawnTimer >= this.spawnInterval) {
+            this.spawnTimer -= this.spawnInterval;
+            if (this.canSpawnMoreEnemies() && this.waveSpawnRemaining > 0) {
+                this.spawnNextWaveEnemy();
             }
         }
         // Update enemies
         const enemyChildren = this.enemies.getChildren();
         this.enemies.children.each(enemy => {
-            enemy.update(time, delta, this.player, enemyChildren);
+            enemy.update(time, delta, this.getActivePlayers(), enemyChildren);
+        });
+        this.enemyProjectiles.children.each((projectile) => {
+            projectile?.update?.(time, delta, this.getActivePlayers());
         });
 
         this.skills.children.each(skill => {
@@ -214,7 +429,12 @@ export default class MainScene extends Phaser.Scene {
                 skill.update(time, delta);
             }
         });
-        this.checkSkillHits();
+        this.supporterSystem?.update?.(time, delta);
+        this.skillHitCheckTimer += delta;
+        if (this.skillHitCheckTimer >= SKILL_HIT_CHECK_INTERVAL_MS) {
+            this.skillHitCheckTimer %= SKILL_HIT_CHECK_INTERVAL_MS;
+            this.checkSkillHits();
+        }
         this.updateEnemyCountDisplay();
     }
 
@@ -235,8 +455,9 @@ export default class MainScene extends Phaser.Scene {
             const outTop = enemy.y < view.top - margin;
             const outBottom = enemy.y > view.bottom + margin;
             if (outLeft || outRight || outTop || outBottom) {
-                if (enemy.isElite) {
-                    return; // keep elites alive
+                if (enemy.countsTowardWave && !enemy.isDead && this.waveSystemEnabled) {
+                    this.waveSpawnRemaining += 1;
+                    this.requeueWaveEnemy(enemy);
                 }
                 enemy.destroy();
                 this.respawnPool += 1;
@@ -246,11 +467,13 @@ export default class MainScene extends Phaser.Scene {
 
     checkSkillHits() {
         const skills = this.skills.getChildren();
-        const enemies = this.enemies.getChildren();
 
         for (const skill of skills) {
             if (!skill.active) continue;
+            if ((skill.damage ?? 0) <= 0) continue;
+            if (skill.config?.visualOnly) continue;
             const skillBounds = skill.getBounds();
+            const enemies = this.getNearbyEnemiesForSkill(skill, skillBounds);
             for (const enemy of enemies) {
                 if (!enemy.active) continue;
                 if (Phaser.Geom.Intersects.RectangleToRectangle(skillBounds, enemy.getBounds())) {
@@ -263,15 +486,69 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    getNearbyEnemiesForSkill(skill, skillBounds = skill?.getBounds?.()) {
+        if (!skill || !skillBounds || !this.enemies?.getChildren) return [];
+        const halfWidth = skillBounds.width * 0.5;
+        const halfHeight = skillBounds.height * 0.5;
+        const queryRadius = Math.max(halfWidth, halfHeight) + 24;
+        const overlapBodies = this.physics?.overlapCirc?.(skill.x, skill.y, queryRadius, true, true);
+        if (Array.isArray(overlapBodies) && overlapBodies.length) {
+            return overlapBodies
+                .map((body) => body?.gameObject)
+                .filter((enemy, index, array) => enemy && this.enemies.contains?.(enemy) && array.indexOf(enemy) === index);
+        }
+
+        const enemies = this.enemies.getChildren();
+        const nearbyEnemies = [];
+        const minX = skillBounds.left - 24;
+        const maxX = skillBounds.right + 24;
+        const minY = skillBounds.top - 24;
+        const maxY = skillBounds.bottom + 24;
+        for (const enemy of enemies) {
+            if (!enemy?.active) continue;
+            if (enemy.x < minX || enemy.x > maxX || enemy.y < minY || enemy.y > maxY) continue;
+            nearbyEnemies.push(enemy);
+        }
+        return nearbyEnemies;
+    }
+
+    spawnEnemyProjectile(enemy, target, options = {}) {
+        if (!enemy?.active || !target?.active) return null;
+        const projectile = new EnemyProjectile(this, enemy, target, options);
+        this.enemyProjectiles.add(projectile);
+        return projectile;
+    }
+
+    spawnEnemyProjectileDirection(enemy, x, y, dirX, dirY, options = {}) {
+        if (!enemy?.active) return null;
+        const projectile = new EnemyProjectile(this, enemy, {
+            active: true,
+            x: x + dirX,
+            y: y + dirY
+        }, {
+            ...options,
+            spawnX: x,
+            spawnY: y,
+            directionX: dirX,
+            directionY: dirY
+        });
+        this.enemyProjectiles.add(projectile);
+        return projectile;
+    }
+
     onSkillHitEnemy(skill, enemy) {
         if (!skill.active) return;
         if (skill.config?.dropFromSky && skill.dropTarget && enemy !== skill.dropTarget) {
             return;
         }
         if (skill.recordHit && !skill.recordHit(enemy)) return;
+        const ownerContext = this.getSourceOwnerContext(skill);
         if (skill.skillType) {
-            this.skillHitCounts = this.skillHitCounts ?? {};
-            this.skillHitCounts[skill.skillType] = (this.skillHitCounts[skill.skillType] ?? 0) + 1;
+            const ownerRunState = ownerContext.runState;
+            if (ownerRunState) {
+                ownerRunState.skillHitCounts = ownerRunState.skillHitCounts ?? {};
+                ownerRunState.skillHitCounts[skill.skillType] = (ownerRunState.skillHitCounts[skill.skillType] ?? 0) + 1;
+            }
         }
         this.skillBehaviorPipeline?.processHit(skill, enemy);
     }
@@ -279,20 +556,14 @@ export default class MainScene extends Phaser.Scene {
 
     onPlayerHitEnemy(player, enemy) {
         if (!player || !enemy) return;
-        if (enemy.isHacked) return;
-        if (player.takeDamage && !player.isDead) {
-            player.takeDamage(enemy.damage ?? 10);
-            const effectConfig = {
-                glowColors: enemy.attackGlowColors ?? [0x000000, 0x110000],
-                rayLineColor: enemy.attackEffectTint ?? 0x000000,
-                sparkTints: enemy.attackSparkTints ?? [0x000000]
-            };
-            this.playerHitEffect?.spawn(player, effectConfig);
-        }
+        enemy.handlePlayerContact?.(player, this.time.now);
     }
 
     handleItemPickup(player, item) {
         if (!item || typeof item.collect !== 'function') return;
+        if (typeof item.canBeCollectedBy === 'function' && !item.canBeCollectedBy(player)) {
+            return;
+        }
         item.collect(player);
     }
 
@@ -371,18 +642,20 @@ export default class MainScene extends Phaser.Scene {
             });
             syncToggleLabel();
         }
-        const skillContainer = panel.querySelector('#skill-list');
         const enemyContainer = panel.querySelector('#enemy-list');
-        if (!skillContainer || !enemyContainer) return;
-        skillContainer.innerHTML = '';
+        if (!enemyContainer) return;
         enemyContainer.innerHTML = '';
         this.skillInputs = {};
-        this.skillEvolutionInputs = {};
         this.characterInputs = {};
         const enemySection = enemyContainer.closest('.panel-section');
-        skillContainer.classList.add('panel-list');
         enemyContainer.classList.add('panel-list');
-        const enemyCountLabel = document.createElement('div');
+        const skillSection = panel.querySelector('#skill-section');
+        if (skillSection) {
+            skillSection.style.display = 'none';
+        }
+        const existingEnemyCountLabels = Array.from(panel.querySelectorAll('#enemy-count-display'));
+        existingEnemyCountLabels.slice(1).forEach((label) => label.remove());
+        const enemyCountLabel = existingEnemyCountLabels[0] ?? document.createElement('div');
         enemyCountLabel.id = 'enemy-count-display';
         enemyCountLabel.classList.add('panel-text');
         enemyCountLabel.textContent = 'Enemies on map: 0';
@@ -392,71 +665,6 @@ export default class MainScene extends Phaser.Scene {
             panel.appendChild(enemyCountLabel);
         }
         this.enemyCountDisplay = enemyCountLabel;
-        Object.entries(SKILL_CONFIG).forEach(([key, config]) => {
-            const label = document.createElement('label');
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.value = key;
-            input.checked = (this.activeSkillKeys ?? []).includes(key);
-            input.addEventListener('change', () => {
-                const selectedKeys = Object.entries(this.skillInputs ?? {})
-                    .filter(([, skillInput]) => skillInput.checked)
-                    .map(([skillKey]) => skillKey);
-                this.setSelectedSkills(selectedKeys, input.checked ? key : this.activeSkillKey);
-            });
-            label.appendChild(input);
-            label.appendChild(document.createTextNode(config.label || key));
-            this.skillInputs[key] = input;
-            skillContainer.appendChild(label);
-        });
-        let skillEvolutionSection = panel.querySelector('#skill-evolution-section');
-        if (!skillEvolutionSection) {
-            skillEvolutionSection = document.createElement('div');
-            skillEvolutionSection.id = 'skill-evolution-section';
-            skillEvolutionSection.classList.add('panel-section');
-            panel.insertBefore(skillEvolutionSection, enemySection ?? null);
-        }
-        skillEvolutionSection.innerHTML = '';
-        const skillEvolutionTitle = document.createElement('div');
-        skillEvolutionTitle.classList.add('panel-title');
-        skillEvolutionTitle.textContent = 'Skill Evolution';
-        skillEvolutionSection.appendChild(skillEvolutionTitle);
-        const skillEvolutionList = document.createElement('div');
-        skillEvolutionList.classList.add('panel-list');
-        skillEvolutionSection.appendChild(skillEvolutionList);
-        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
-            const evolvedSkillKey = entry.evolvedSkillKey;
-            const sourceSkillKey = entry.sourceSkillKey;
-            if (!evolvedSkillKey || !SKILL_CONFIG[evolvedSkillKey]) return;
-
-            const label = document.createElement('label');
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.value = evolvedSkillKey;
-            input.checked = (this.activeSkillKeys ?? []).includes(evolvedSkillKey);
-            input.addEventListener('change', () => {
-                if (this.skillInputs?.[evolvedSkillKey]) {
-                    this.skillInputs[evolvedSkillKey].checked = input.checked;
-                }
-                if (input.checked && this.skillInputs?.[sourceSkillKey]) {
-                    this.skillInputs[sourceSkillKey].checked = false;
-                }
-                const selectedKeys = Object.entries(this.skillInputs ?? {})
-                    .filter(([, skillInput]) => skillInput.checked)
-                    .map(([skillKey]) => skillKey);
-                if (input.checked && !selectedKeys.includes(evolvedSkillKey)) {
-                    selectedKeys.push(evolvedSkillKey);
-                }
-                const preferredSkillKey = input.checked
-                    ? evolvedSkillKey
-                    : (selectedKeys[0] ?? sourceSkillKey ?? null);
-                this.setSelectedSkills(selectedKeys, preferredSkillKey);
-            });
-            label.appendChild(input);
-            label.appendChild(document.createTextNode(`${SKILL_CONFIG[sourceSkillKey]?.label ?? sourceSkillKey} -> ${SKILL_CONFIG[evolvedSkillKey]?.label ?? evolvedSkillKey}`));
-            this.skillEvolutionInputs[evolvedSkillKey] = input;
-            skillEvolutionList.appendChild(label);
-        });
         let characterSection = panel.querySelector('#character-section');
         if (!characterSection) {
             characterSection = document.createElement('div');
@@ -494,6 +702,53 @@ export default class MainScene extends Phaser.Scene {
             this.characterInputs[key] = input;
         });
 
+        let supporterSection = panel.querySelector('#supporter-section');
+        if (!supporterSection) {
+            supporterSection = document.createElement('div');
+            supporterSection.id = 'supporter-section';
+            supporterSection.classList.add('panel-section');
+            if (enemySection) {
+                panel.insertBefore(supporterSection, enemySection);
+            } else {
+                panel.appendChild(supporterSection);
+            }
+        }
+        supporterSection.innerHTML = '';
+        const supporterTitle = document.createElement('div');
+        supporterTitle.classList.add('panel-title');
+        supporterTitle.textContent = 'Supporters';
+        supporterSection.appendChild(supporterTitle);
+
+        const supporterLabel = document.createElement('label');
+        supporterLabel.textContent = 'Active Supporter';
+        supporterLabel.style.display = 'flex';
+        supporterLabel.style.flexDirection = 'column';
+        supporterLabel.style.gap = '4px';
+        supporterLabel.style.fontSize = '12px';
+        const supporterSelect = document.createElement('select');
+        supporterSelect.style.padding = '4px';
+        supporterSelect.style.borderRadius = '4px';
+        supporterSelect.style.background = '#222';
+        supporterSelect.style.color = '#fff';
+        supporterSelect.style.border = '1px solid rgba(255,255,255,0.2)';
+        const noSupporterOption = document.createElement('option');
+        noSupporterOption.value = '';
+        noSupporterOption.textContent = 'None';
+        noSupporterOption.selected = !this.selectedSupporterKey;
+        supporterSelect.appendChild(noSupporterOption);
+        SUPPORTER_KEYS.forEach((supporterKey) => {
+            const option = document.createElement('option');
+            option.value = supporterKey;
+            option.textContent = SUPPORTER_CONFIG[supporterKey]?.label ?? supporterKey;
+            option.selected = supporterKey === this.selectedSupporterKey;
+            supporterSelect.appendChild(option);
+        });
+        supporterSelect.addEventListener('change', () => {
+            this.setSelectedSupporterKey(supporterSelect.value || null);
+        });
+        supporterLabel.appendChild(supporterSelect);
+        supporterSection.appendChild(supporterLabel);
+
         Object.entries(ENEMIES).forEach(([type, config]) => {
             this.enemySpawnStatus[type] = this.enemySpawnStatus[type] ?? false;
             const label = document.createElement('label');
@@ -510,6 +765,149 @@ export default class MainScene extends Phaser.Scene {
         const clearButton = panel.querySelector('#clear-enemies-btn');
         if (clearButton) {
             clearButton.onclick = () => this.clearEnemies();
+        }
+
+        let skillEffectSection = panel.querySelector('#skill-effect-section');
+        if (!skillEffectSection) {
+            skillEffectSection = document.createElement('div');
+            skillEffectSection.id = 'skill-effect-section';
+            skillEffectSection.classList.add('panel-section');
+            panel.appendChild(skillEffectSection);
+        }
+        skillEffectSection.innerHTML = '';
+        const skillEffectTitle = document.createElement('div');
+        skillEffectTitle.classList.add('panel-title');
+        skillEffectTitle.textContent = 'Skill Effects';
+        skillEffectSection.appendChild(skillEffectTitle);
+
+        const activeSkillKeys = this.player?.getActiveSkillKeys?.() ?? this.activeSkillKeys ?? [];
+        const effectTargetSelect = document.createElement('select');
+        effectTargetSelect.style.padding = '4px';
+        effectTargetSelect.style.borderRadius = '4px';
+        effectTargetSelect.style.background = '#222';
+        effectTargetSelect.style.color = '#fff';
+        effectTargetSelect.style.border = '1px solid rgba(255,255,255,0.2)';
+        const fallbackTargetKey = activeSkillKeys.includes(this.debugSkillEffectTargetKey)
+            ? this.debugSkillEffectTargetKey
+            : (this.activeSkillKey ?? activeSkillKeys[0] ?? null);
+        this.debugSkillEffectTargetKey = fallbackTargetKey;
+        activeSkillKeys.forEach((skillKey) => {
+            const option = document.createElement('option');
+            option.value = skillKey;
+            option.textContent = SKILL_CONFIG[skillKey]?.label ?? skillKey;
+            option.selected = skillKey === fallbackTargetKey;
+            effectTargetSelect.appendChild(option);
+        });
+        skillEffectSection.appendChild(effectTargetSelect);
+
+        const effectList = document.createElement('div');
+        effectList.classList.add('panel-list');
+        skillEffectSection.appendChild(effectList);
+        const effectDefinitions = this.getDebugSkillEffectDefinitions();
+        const renderSkillEffectOptions = (skillKey) => {
+            effectList.innerHTML = '';
+            const selection = this.getDebugSkillEffectSelection(skillKey);
+            Object.entries(effectDefinitions).forEach(([effectKey, definition]) => {
+                const label = document.createElement('label');
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = `skill-effect-${skillKey}`;
+                input.value = effectKey;
+                input.checked = Boolean(selection[effectKey]);
+                input.addEventListener('change', () => {
+                    Object.keys(selection).forEach((key) => {
+                        selection[key] = false;
+                    });
+                    if (input.checked) {
+                        selection[effectKey] = true;
+                    }
+                    this.applyDebugSkillEffectOverride(skillKey);
+                });
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(definition.label));
+                effectList.appendChild(label);
+            });
+
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.textContent = 'Clear Effect';
+            clearButton.style.padding = '4px 6px';
+            clearButton.style.borderRadius = '4px';
+            clearButton.style.background = '#333';
+            clearButton.style.color = '#fff';
+            clearButton.style.border = '1px solid rgba(255,255,255,0.2)';
+            clearButton.style.cursor = 'pointer';
+            clearButton.addEventListener('click', () => {
+                Object.keys(selection).forEach((key) => {
+                    selection[key] = false;
+                });
+                this.applyDebugSkillEffectOverride(skillKey);
+                renderSkillEffectOptions(skillKey);
+            });
+            effectList.appendChild(clearButton);
+        };
+        if (fallbackTargetKey) {
+            renderSkillEffectOptions(fallbackTargetKey);
+        }
+        effectTargetSelect.addEventListener('change', () => {
+            this.debugSkillEffectTargetKey = effectTargetSelect.value || null;
+            renderSkillEffectOptions(this.debugSkillEffectTargetKey);
+        });
+
+        const currentSupporterKey = this.player?.characterKey ? (this.supporterSystem?.getSupporterForPlayer?.(this.player.playerId)?.supporterKey ?? null) : null;
+        if (currentSupporterKey) {
+            const supporterEffectSection = document.createElement('div');
+            supporterEffectSection.classList.add('panel-section');
+            const supporterEffectTitle = document.createElement('div');
+            supporterEffectTitle.classList.add('panel-title');
+            supporterEffectTitle.textContent = 'Supporter Effects';
+            supporterEffectSection.appendChild(supporterEffectTitle);
+            const supporterEffectList = document.createElement('div');
+            supporterEffectList.classList.add('panel-list');
+            supporterEffectSection.appendChild(supporterEffectList);
+            const renderSupporterEffectOptions = (supporterKey) => {
+                supporterEffectList.innerHTML = '';
+                const selection = this.getDebugSupporterEffectSelection(supporterKey);
+                Object.entries(effectDefinitions).forEach(([effectKey, definition]) => {
+                    const label = document.createElement('label');
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = `supporter-effect-${supporterKey}`;
+                    input.value = effectKey;
+                    input.checked = Boolean(selection[effectKey]);
+                    input.addEventListener('change', () => {
+                        Object.keys(selection).forEach((key) => {
+                            selection[key] = false;
+                        });
+                        if (input.checked) {
+                            selection[effectKey] = true;
+                        }
+                        this.applyDebugSupporterEffectOverride(supporterKey);
+                    });
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(definition.label));
+                    supporterEffectList.appendChild(label);
+                });
+                const clearButton = document.createElement('button');
+                clearButton.type = 'button';
+                clearButton.textContent = 'Clear Supporter Effect';
+                clearButton.style.padding = '4px 6px';
+                clearButton.style.borderRadius = '4px';
+                clearButton.style.background = '#333';
+                clearButton.style.color = '#fff';
+                clearButton.style.border = '1px solid rgba(255,255,255,0.2)';
+                clearButton.style.cursor = 'pointer';
+                clearButton.addEventListener('click', () => {
+                    Object.keys(selection).forEach((key) => {
+                        selection[key] = false;
+                    });
+                    this.applyDebugSupporterEffectOverride(supporterKey);
+                    renderSupporterEffectOptions(supporterKey);
+                });
+                supporterEffectList.appendChild(clearButton);
+            };
+            renderSupporterEffectOptions(currentSupporterKey);
+            skillEffectSection.appendChild(supporterEffectSection);
         }
 
         let mapSection = panel.querySelector('#map-section');
@@ -548,13 +946,13 @@ export default class MainScene extends Phaser.Scene {
             if (mapDef) {
                 this.registry.set('selectedMapKey', mapSelect.value);
                 this.stageScenario = getStageScenario(mapSelect.value);
-                this.stageScenarioState = createStageScenarioState(this.stageScenario);
                 this.updateMapBounds();
                 this.mapManager.enableObjectCollisions(this.player);
                 this.mapManager.enableObjectCollisions(this.enemies);
                 this.repositionPlayerForCurrentMap();
-                this.cameras.main.startFollow(this.player, false, 1, 1);
-                this.cameras.main.centerOn(this.player.x, this.player.y);
+                this.updateCameraFollowTarget();
+                this.cameras.main.startFollow(this.cameraFollowTarget ?? this.player, false, 1, 1);
+                this.cameras.main.centerOn(this.cameraFollowTarget?.x ?? this.player.x, this.cameraFollowTarget?.y ?? this.player.y);
                 this.syncMapMusic(mapDef);
             }
         });
@@ -611,6 +1009,68 @@ export default class MainScene extends Phaser.Scene {
         spawnIntervalLabel.appendChild(spawnIntervalInput);
         uiSection.appendChild(spawnIntervalLabel);
 
+        const playerSpeedLabel = document.createElement('label');
+        playerSpeedLabel.textContent = 'Player Speed';
+        playerSpeedLabel.style.display = 'flex';
+        playerSpeedLabel.style.flexDirection = 'column';
+        playerSpeedLabel.style.gap = '4px';
+        playerSpeedLabel.style.fontSize = '12px';
+        const playerSpeedInput = document.createElement('input');
+        playerSpeedInput.type = 'number';
+        playerSpeedInput.min = '0';
+        playerSpeedInput.step = '5';
+        playerSpeedInput.value = String(Math.max(0, Math.round(this.debugPlayerSpeedOverride ?? 0)));
+        playerSpeedInput.style.padding = '4px';
+        playerSpeedInput.style.borderRadius = '4px';
+        playerSpeedInput.style.background = '#222';
+        playerSpeedInput.style.color = '#fff';
+        playerSpeedInput.style.border = '1px solid rgba(255,255,255,0.2)';
+        const applyPlayerSpeedInput = () => {
+            const nextValue = Number(playerSpeedInput.value);
+            if (!Number.isFinite(nextValue) || nextValue < 0) {
+                playerSpeedInput.value = String(Math.max(0, Math.round(this.debugPlayerSpeedOverride ?? 0)));
+                return;
+            }
+            this.debugPlayerSpeedOverride = Math.max(0, Math.round(nextValue));
+            playerSpeedInput.value = String(this.debugPlayerSpeedOverride);
+            this.applyDebugPlayerSpeedOverride();
+        };
+        playerSpeedInput.addEventListener('change', applyPlayerSpeedInput);
+        playerSpeedInput.addEventListener('input', applyPlayerSpeedInput);
+        playerSpeedLabel.appendChild(playerSpeedInput);
+        uiSection.appendChild(playerSpeedLabel);
+
+        const playerHpOverrideLabel = document.createElement('label');
+        playerHpOverrideLabel.textContent = 'Player HP';
+        playerHpOverrideLabel.style.display = 'flex';
+        playerHpOverrideLabel.style.flexDirection = 'column';
+        playerHpOverrideLabel.style.gap = '4px';
+        playerHpOverrideLabel.style.fontSize = '12px';
+        const playerHpOverrideInput = document.createElement('input');
+        playerHpOverrideInput.type = 'number';
+        playerHpOverrideInput.min = '0';
+        playerHpOverrideInput.step = '50';
+        playerHpOverrideInput.value = String(Math.max(0, Math.round(this.debugPlayerHealthOverride ?? 0)));
+        playerHpOverrideInput.style.padding = '4px';
+        playerHpOverrideInput.style.borderRadius = '4px';
+        playerHpOverrideInput.style.background = '#222';
+        playerHpOverrideInput.style.color = '#fff';
+        playerHpOverrideInput.style.border = '1px solid rgba(255,255,255,0.2)';
+        const applyPlayerHpOverrideInput = () => {
+            const nextValue = Number(playerHpOverrideInput.value);
+            if (!Number.isFinite(nextValue) || nextValue < 0) {
+                playerHpOverrideInput.value = String(Math.max(0, Math.round(this.debugPlayerHealthOverride ?? 0)));
+                return;
+            }
+            this.debugPlayerHealthOverride = Math.max(0, Math.round(nextValue));
+            playerHpOverrideInput.value = String(this.debugPlayerHealthOverride);
+            this.applyDebugPlayerHealthOverride();
+        };
+        playerHpOverrideInput.addEventListener('change', applyPlayerHpOverrideInput);
+        playerHpOverrideInput.addEventListener('input', applyPlayerHpOverrideInput);
+        playerHpOverrideLabel.appendChild(playerHpOverrideInput);
+        uiSection.appendChild(playerHpOverrideLabel);
+
         const enemyHpOverrideLabel = document.createElement('label');
         enemyHpOverrideLabel.textContent = 'Enemy HP';
         enemyHpOverrideLabel.style.display = 'flex';
@@ -641,7 +1101,176 @@ export default class MainScene extends Phaser.Scene {
         enemyHpOverrideInput.addEventListener('input', applyEnemyHpOverrideInput);
         enemyHpOverrideLabel.appendChild(enemyHpOverrideInput);
         uiSection.appendChild(enemyHpOverrideLabel);
+
+        const openShopButton = document.createElement('button');
+        openShopButton.type = 'button';
+        openShopButton.textContent = 'Open Shop';
+        openShopButton.style.padding = '6px 8px';
+        openShopButton.style.borderRadius = '4px';
+        openShopButton.style.background = '#6b4a22';
+        openShopButton.style.color = '#fff7dd';
+        openShopButton.style.border = '1px solid rgba(255,255,255,0.2)';
+        openShopButton.style.cursor = 'pointer';
+        openShopButton.addEventListener('click', () => {
+            if (this.isGameOver || this.isChoosingCard || this.isShopOpen) return;
+            this.presentShopOverlay('manual');
+        });
+        uiSection.appendChild(openShopButton);
         this.updateEnemyCountDisplay();
+    }
+
+    getDebugSkillEffectDefinitions() {
+        return {
+            burn: {
+                label: 'Burn',
+                tags: ['fire'],
+                statusEffects: [
+                    {
+                        key: 'burn',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            freeze: {
+                label: 'Freeze',
+                tags: ['ice'],
+                statusEffects: [
+                    {
+                        key: 'freeze',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            shock: {
+                label: 'Shock',
+                tags: ['lightning'],
+                statusEffects: [
+                    {
+                        key: 'shock',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            poison: {
+                label: 'Poison',
+                tags: ['poison'],
+                statusEffects: [
+                    {
+                        key: 'poison',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            bleed: {
+                label: 'Bleed',
+                tags: ['physical'],
+                statusEffects: [
+                    {
+                        key: 'bleed',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            explosion: {
+                label: 'Explosion',
+                tags: ['explosion'],
+                statusEffects: [
+                    {
+                        key: 'explosion',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            },
+            shield: {
+                label: 'Shield',
+                tags: ['shield'],
+                statusEffects: [
+                    {
+                        key: 'shield',
+                        trigger: 'onCast',
+                        target: 'self'
+                    }
+                ]
+            },
+            mark: {
+                label: 'Mark',
+                tags: ['mark'],
+                statusEffects: [
+                    {
+                        key: 'mark',
+                        trigger: 'onHit',
+                        target: 'target'
+                    }
+                ]
+            }
+        };
+    }
+
+    getDebugSkillEffectSelection(skillKey) {
+        if (!skillKey) return {};
+        this.debugSkillEffectSelections[skillKey] = this.debugSkillEffectSelections[skillKey] ?? {};
+        return this.debugSkillEffectSelections[skillKey];
+    }
+
+    getDebugSupporterEffectSelection(supporterKey) {
+        if (!supporterKey) return {};
+        this.debugSupporterEffectSelections[supporterKey] = this.debugSupporterEffectSelections[supporterKey] ?? {};
+        return this.debugSupporterEffectSelections[supporterKey];
+    }
+
+    buildDebugSkillEffectOverride(skillKey) {
+        const selection = this.getDebugSkillEffectSelection(skillKey);
+        const definitions = this.getDebugSkillEffectDefinitions();
+        const selectedEntry = Object.entries(selection)
+            .filter(([, enabled]) => enabled)
+            .map(([effectKey]) => definitions[effectKey])
+            .find(Boolean);
+        if (!selectedEntry) {
+            return { statusEffects: [], tags: [] };
+        }
+        return {
+            tags: Array.from(new Set(selectedEntry.tags ?? [])),
+            statusEffects: (selectedEntry.statusEffects ?? []).slice(0, 1)
+        };
+    }
+
+    applyDebugSkillEffectOverride(skillKey) {
+        if (!skillKey || !this.player?.setSkillRuntimeOverrides) return;
+        const existingOverride = this.player.skillRuntimeConfigOverrides?.[skillKey] ?? {};
+        const nextOverride = { ...existingOverride };
+        const debugOverride = this.buildDebugSkillEffectOverride(skillKey);
+        nextOverride.tags = debugOverride.tags;
+        nextOverride.statusEffects = debugOverride.statusEffects;
+        this.player.setSkillRuntimeOverrides(skillKey, nextOverride);
+    }
+
+    buildDebugSupporterEffectOverride(supporterKey) {
+        const selection = this.getDebugSupporterEffectSelection(supporterKey);
+        const definitions = this.getDebugSkillEffectDefinitions();
+        const selectedEntry = Object.entries(selection)
+            .filter(([, enabled]) => enabled)
+            .map(([effectKey]) => definitions[effectKey])
+            .find(Boolean);
+        if (!selectedEntry) {
+            return {};
+        }
+        return {
+            tags: Array.from(new Set(selectedEntry.tags ?? [])),
+            statusEffects: (selectedEntry.statusEffects ?? []).slice(0, 1)
+        };
+    }
+
+    applyDebugSupporterEffectOverride(supporterKey) {
+        if (!supporterKey) return;
+        const supporter = this.supporterSystem?.getSupporterForPlayer?.(this.player?.playerId ?? null);
+        const debugOverride = this.buildDebugSupporterEffectOverride(supporterKey);
+        supporter?.setRuntimeOverrides?.(debugOverride);
     }
 
     repositionPlayerForCurrentMap() {
@@ -660,52 +1289,47 @@ export default class MainScene extends Phaser.Scene {
         this.player.body?.updateFromGameObject?.();
     }
 
+    setSelectedSupporterKey(supporterKey = null) {
+        const nextSupporterKey = supporterKey && SUPPORTER_CONFIG[supporterKey] ? supporterKey : null;
+        this.selectedSupporterKey = nextSupporterKey;
+        this.registry.set('selectedSupporterKey', nextSupporterKey);
+        if (this.player) {
+            this.player.selectedSupporterKey = nextSupporterKey;
+        }
+        this.supporterSystem?.syncPlayerSupporter?.(this.player, nextSupporterKey);
+        if (this.debugMode) {
+            this.setupDebugMenu();
+        }
+    }
+
     switchCharacter(characterKey) {
         const config = CHARACTER_CONFIG[characterKey];
         if (!config) return;
         this.activeCharacterKey = characterKey;
+        const runState = this.getPrimaryRunState();
+        if (runState) {
+            runState.characterKey = characterKey;
+        }
         this.registry.set('selectedCharacterKey', characterKey);
         const defaultSkill = config.defaultSkill ?? 'thunder';
         const chosenSkill = this.player?.setCharacter?.(characterKey) ?? defaultSkill;
-        this.ensureDefaultSkillInventoryEntry(characterKey);
-        const currentSelected = Array.isArray(this.activeSkillKeys) ? [...this.activeSkillKeys] : [];
-        const nextSelected = currentSelected.length ? currentSelected : [chosenSkill];
-        this.setSelectedSkills(nextSelected, chosenSkill);
+        if (this.player) {
+            this.player.selectedSupporterKey = this.selectedSupporterKey;
+        }
+        this.supporterSystem?.syncPlayerSupporter?.(this.player, this.selectedSupporterKey);
+        this.applyDebugPlayerSpeedOverride();
+        this.applyDebugPlayerHealthOverride();
+        this.ensureDefaultSkillInventoryEntry(this.player, runState, characterKey);
+        this.activeSkillKeys = [chosenSkill];
+        this.activeSkillKey = chosenSkill;
+        this.debugSkillEffectTargetKey = chosenSkill;
+        this.applyDebugSkillEffectOverride(chosenSkill);
         Object.entries(this.characterInputs ?? {}).forEach(([key, input]) => {
             input.checked = key === characterKey;
         });
-    }
-
-    setSelectedSkills(skillKeys, preferredSkillKey = null) {
-        const uniqueSkillKeys = Array.from(new Set((skillKeys ?? []).filter(key => SKILL_CONFIG[key])));
-        const normalizedSkillKeys = this.normalizeEvolutionSkillSelection(uniqueSkillKeys, preferredSkillKey);
-        const fallbackSkill = preferredSkillKey && SKILL_CONFIG[preferredSkillKey]
-            ? preferredSkillKey
-            : this.player?.getDefaultSkillKey?.() ?? this.activeSkillKey ?? 'thunder';
-        const nextSelected = normalizedSkillKeys.length ? normalizedSkillKeys : [fallbackSkill];
-        this.activeSkillKeys = nextSelected;
-        this.activeSkillKey = nextSelected.includes(preferredSkillKey) ? preferredSkillKey : nextSelected[0];
-        Object.entries(this.skillInputs ?? {}).forEach(([key, input]) => {
-            input.checked = nextSelected.includes(key);
-        });
-        Object.entries(this.skillEvolutionInputs ?? {}).forEach(([key, input]) => {
-            input.checked = nextSelected.includes(key);
-        });
-    }
-
-    normalizeEvolutionSkillSelection(skillKeys, preferredSkillKey = null) {
-        const nextSelected = [...skillKeys];
-        SKILL_EVOLUTION_CONFIG.forEach((entry) => {
-            const sourceSkillKey = entry.sourceSkillKey;
-            const evolvedSkillKey = entry.evolvedSkillKey;
-            if (!sourceSkillKey || !evolvedSkillKey) return;
-            if (!nextSelected.includes(evolvedSkillKey)) return;
-            const sourceIndex = nextSelected.indexOf(sourceSkillKey);
-            if (sourceIndex === -1) return;
-            if (preferredSkillKey === sourceSkillKey && !nextSelected.includes(preferredSkillKey)) return;
-            nextSelected.splice(sourceIndex, 1);
-        });
-        return nextSelected;
+        if (this.debugMode) {
+            this.setupDebugMenu();
+        }
     }
 
     updateEnemyCountDisplay() {
@@ -713,6 +1337,32 @@ export default class MainScene extends Phaser.Scene {
         const enemies = this.enemies ? this.enemies.getChildren() : [];
         const activeCount = enemies.filter(enemy => enemy && enemy.active).length;
         this.enemyCountDisplay.textContent = `Enemies on map: ${activeCount}`;
+    }
+
+    applyDebugPlayerSpeedOverride() {
+        if (!this.player?.active) return;
+        const overrideSpeed = Math.max(0, Math.round(this.debugPlayerSpeedOverride ?? 0));
+        if (overrideSpeed <= 0) {
+            this.player.updateSpeedFromConfig?.();
+            return;
+        }
+        this.player.speed = overrideSpeed;
+    }
+
+    applyDebugPlayerHealthOverride() {
+        if (!this.player?.active) return;
+        const baseHealthFromConfig = this.player.characterStats?.hp ?? this.player.characterConfig?.hp ?? this.player.maxHealth ?? 1;
+        const baseMaxHealth = Math.max(
+            1,
+            Math.round((baseHealthFromConfig * (1 + (this.player.bonusMaxHealthPercent ?? 0))) + (this.player.bonusMaxHealthFlat ?? 0))
+        );
+        const overrideHp = Math.max(0, Math.round(this.debugPlayerHealthOverride ?? 0));
+        const nextMaxHealth = overrideHp > 0 ? overrideHp : baseMaxHealth;
+        const previousMaxHealth = Math.max(this.player.maxHealth ?? nextMaxHealth, 1);
+        const healthRatio = Phaser.Math.Clamp((this.player.health ?? nextMaxHealth) / previousMaxHealth, 0, 1);
+        this.player.maxHealth = nextMaxHealth;
+        this.player.health = Phaser.Math.Clamp(Math.round(nextMaxHealth * healthRatio), 0, nextMaxHealth);
+        this.player.displayedHealth = this.player.health;
     }
 
     applyDebugEnemyHealthOverride(enemy, options = {}) {
@@ -738,9 +1388,15 @@ export default class MainScene extends Phaser.Scene {
         enemies.forEach((enemy) => this.applyDebugEnemyHealthOverride(enemy, { preserveHealthRatio: true }));
     }
 
-    spawnEnemyAtPosition(x, y, enemyType) {
+    spawnEnemyAtPosition(x, y, enemyType, options = {}) {
         if (!enemyType || !this.canSpawnMoreEnemies()) return null;
         const enemy = new Enemy(this, x, y, enemyType);
+        enemy.countsTowardWave = options.countsTowardWave === true;
+        enemy.waveNumber = enemy.countsTowardWave ? (options.waveNumber ?? this.currentWaveNumber) : null;
+        enemy.waveSpawnEntry = options.waveSpawnEntry ? {
+            enemyType: options.waveSpawnEntry.enemyType ?? enemyType,
+            statsOverride: options.waveSpawnEntry.statsOverride ? { ...options.waveSpawnEntry.statsOverride } : null
+        } : null;
         const healthMultiplier = getScenarioEnemyHealthMultiplier(this, this.stageScenario);
         if (healthMultiplier !== 1) {
             enemy.applyRuntimeStats?.({
@@ -751,7 +1407,22 @@ export default class MainScene extends Phaser.Scene {
             }, { preserveHealthRatio: false });
             enemy.captureBaseStats?.();
         }
-        spawnEnemyWithEliteChance(this, enemy, this.stageScenario);
+        if (options.statsOverride && typeof enemy.applyRuntimeStats === 'function') {
+            enemy.applyRuntimeStats({
+                maxHealth: options.statsOverride.maxHealth ?? enemy.maxHealth,
+                damage: options.statsOverride.damage ?? enemy.damage,
+                speed: options.statsOverride.speed ?? enemy.speed,
+                scale: options.statsOverride.scale ?? enemy.scaleSize ?? 1,
+                armor: options.statsOverride.armor ?? enemy.armor,
+                effectResist: options.statsOverride.effectResist ?? enemy.effectResist,
+                attackCooldown: options.statsOverride.attackCooldown ?? enemy.attackCooldown,
+                attackRange: options.statsOverride.attackRange ?? enemy.attackRange,
+                knockbackResist: options.statsOverride.knockbackResist ?? enemy.knockbackResist,
+                stunResist: options.statsOverride.stunResist ?? enemy.stunResist,
+                ghostDuration: options.statsOverride.ghostDuration ?? enemy.ghostDuration
+            }, { preserveHealthRatio: false });
+            enemy.captureBaseStats?.();
+        }
         this.applyDebugEnemyHealthOverride(enemy, { preserveHealthRatio: false });
         this.enemies.add(enemy);
         this.add.existing(enemy);
@@ -762,43 +1433,7 @@ export default class MainScene extends Phaser.Scene {
         return enemy;
     }
 
-    processStageWaves() {
-        const waves = getTriggeredWaves(this, this.stageScenario, this.stageScenarioState);
-        waves.forEach((waveConfig) => this.spawnEnemyWave(waveConfig));
-    }
-
-    spawnEnemyWave(waveConfig) {
-        if (!waveConfig) return;
-        const center = this.getSpawnEdgePosition();
-        if (!center) return;
-        const count = Math.max(1, waveConfig.count ?? 1);
-        const clusterRadius = Math.max(0, waveConfig.clusterRadius ?? 72);
-        const waveEnemyType = this.pickEnemyTypeForWave(waveConfig);
-        if (!waveEnemyType) return;
-        for (let index = 0; index < count; index += 1) {
-            if (!this.canSpawnMoreEnemies()) break;
-            const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-            const distance = Phaser.Math.FloatBetween(0, clusterRadius);
-            const x = center.x + Math.cos(angle) * distance;
-            const y = center.y + Math.sin(angle) * distance;
-            this.spawnEnemyAtPosition(x, y, waveEnemyType);
-        }
-    }
-
-    pickEnemyTypeForWave(waveConfig) {
-        const unlockedEnemyTypes = getUnlockedEnemyTypes(this, this.stageScenario);
-        const waveTypes = (waveConfig?.enemyTypes ?? []).filter((type) => {
-            return ENEMIES[type]
-                && (this.debugMode || !unlockedEnemyTypes || unlockedEnemyTypes.has(type))
-                && ((this.enemySpawnStatus?.[type] ?? false) || !this.debugMode);
-        });
-        if (waveTypes.length) {
-            return Phaser.Utils.Array.GetRandom(waveTypes);
-        }
-        return this.pickEnemyTypeForSpawn();
-    }
-
-    spawnRandomEnemy(type) {
+    spawnRandomEnemy(type, options = {}) {
         const enemyType = type || this.pickEnemyTypeForSpawn();
         if (!enemyType) return;
         const view = this.cameras.main.worldView;
@@ -824,23 +1459,188 @@ export default class MainScene extends Phaser.Scene {
                 y = Phaser.Math.Between(view.top - padding, view.bottom + padding);
                 break;
         }
-        this.spawnEnemyAtPosition(x, y, enemyType);
+        const enemy = this.spawnEnemyAtPosition(x, y, enemyType, options);
+        if (enemy?.countsTowardWave) {
+            this.waveSpawnRemaining = Math.max(0, this.waveSpawnRemaining - 1);
+        }
     }
 
-    handleEnemyDeath({ enemy }) {
+    resetWaveProgress(waveNumber = 1) {
+        this.currentWaveNumber = Phaser.Math.Clamp(Math.round(waveNumber), 1, this.maxWaveCount);
+        this.currentWavePlan = this.buildWavePlanEntries(this.currentWaveNumber);
+        this.currentWaveDurationSeconds = getScenarioWaveDurationSeconds(this.stageScenario, this.currentWaveNumber, 45);
+        this.currentWaveElapsedMs = 0;
+        this.waveEnemyCount = this.currentWavePlan.length || ENEMIES_PER_WAVE;
+        this.waveSpawnQueue = this.currentWavePlan.map((entry) => ({
+            enemyType: entry.enemyType,
+            statsOverride: entry.statsOverride ? { ...entry.statsOverride } : null
+        }));
+        this.waveSpawnRemaining = this.waveEnemyCount;
+        this.waveKillCount = 0;
+        this.waveShopPending = false;
+        this.respawnPool = 0;
+        this.waveStartPending = false;
+        this.waveEnding = false;
+    }
+
+    scheduleWaveStart() {
+        if (!this.waveSystemEnabled || this.isGameOver || this.isRunComplete) return;
+        this.waveStartDelayTimer?.remove?.(false);
+        this.waveStartPending = true;
+        this.spawnTimer = 0;
+        this.scene.get('HudScene')?.showWaveAnnouncement?.({
+            waveNumber: this.currentWaveNumber,
+            durationMs: Math.max(700, WAVE_START_DELAY_MS - 250)
+        });
+        this.waveStartDelayTimer = this.time.delayedCall(WAVE_START_DELAY_MS, () => {
+            this.waveStartDelayTimer = null;
+            if (!this.waveSystemEnabled || this.isGameOver || this.isRunComplete || this.isShopOpen) {
+                this.waveStartPending = false;
+                return;
+            }
+            this.waveStartPending = false;
+            this.currentWaveElapsedMs = 0;
+            this.spawnWaveBurst(INITIAL_WAVE_SPAWN_BURST);
+        });
+    }
+
+    spawnWaveBurst(count = INITIAL_WAVE_SPAWN_BURST) {
+        const spawnCount = Math.min(
+            Math.max(0, Math.round(count)),
+            this.waveSpawnRemaining,
+            Math.max(0, this.maxEnemiesOnMap - (this.enemies?.countActive?.(true) ?? 0))
+        );
+        for (let index = 0; index < spawnCount; index += 1) {
+            this.spawnNextWaveEnemy();
+        }
+    }
+
+    buildWavePlanEntries(waveNumber = this.currentWaveNumber) {
+        const scenarioWavePlan = getScenarioWavePlan(this.stageScenario, waveNumber);
+        if (!Array.isArray(scenarioWavePlan) || !scenarioWavePlan.length) {
+            return [];
+        }
+        const entries = [];
+        scenarioWavePlan.forEach((group) => {
+            const count = Math.max(0, Math.round(group?.count ?? 0));
+            const enemyType = group?.enemyType;
+            if (!enemyType || count <= 0) return;
+            for (let index = 0; index < count; index += 1) {
+                entries.push({
+                    enemyType,
+                    statsOverride: group?.statsOverride ? { ...group.statsOverride } : null
+                });
+            }
+        });
+        return entries;
+    }
+
+    spawnNextWaveEnemy() {
+        if (!this.waveSystemEnabled || this.waveSpawnRemaining <= 0 || !this.canSpawnMoreEnemies()) return null;
+        const nextEntry = this.waveSpawnQueue.shift?.() ?? null;
+        if (nextEntry?.enemyType) {
+            return this.spawnRandomEnemy(nextEntry.enemyType, {
+                countsTowardWave: true,
+                waveNumber: this.currentWaveNumber,
+                statsOverride: nextEntry.statsOverride,
+                waveSpawnEntry: nextEntry
+            });
+        }
+        return this.spawnRandomEnemy(null, { countsTowardWave: true, waveNumber: this.currentWaveNumber });
+    }
+
+    requeueWaveEnemy(enemy) {
+        if (!enemy?.waveSpawnEntry || !Array.isArray(this.waveSpawnQueue)) return;
+        this.waveSpawnQueue.unshift({
+            enemyType: enemy.waveSpawnEntry.enemyType,
+            statsOverride: enemy.waveSpawnEntry.statsOverride ? { ...enemy.waveSpawnEntry.statsOverride } : null
+        });
+    }
+
+    isCurrentWaveCleared() {
+        if (!this.waveSystemEnabled || this.waveEnding) return false;
+        const activeEnemies = (this.enemies?.getChildren?.() ?? []).filter((enemy) => {
+            return enemy?.active && !enemy?.isDead;
+        });
+        return this.waveKillCount >= this.waveEnemyCount
+            && this.waveSpawnRemaining <= 0
+            && activeEnemies.length === 0;
+    }
+
+    hasCurrentWaveTimedOut() {
+        if (!this.waveSystemEnabled || this.waveStartPending || this.waveEnding) return false;
+        const durationMs = Math.max(0, Math.round((this.currentWaveDurationSeconds ?? 0) * 1000));
+        if (durationMs <= 0) return false;
+        return (this.currentWaveElapsedMs ?? 0) >= durationMs;
+    }
+
+    clearActiveWaveEnemies() {
+        const activeEnemies = this.enemies?.getChildren?.() ?? [];
+        activeEnemies.forEach((enemy) => {
+            if (!enemy?.active || enemy?.isDead) return;
+            if (!enemy.countsTowardWave || enemy.waveNumber !== this.currentWaveNumber) return;
+            enemy.countsTowardWave = false;
+            enemy.destroy();
+        });
+        this.respawnPool = 0;
+    }
+
+    endCurrentWave(reason = 'cleared') {
+        if (!this.waveSystemEnabled || this.waveEnding || this.waveShopPending || this.isShopOpen || this.isRunComplete) return;
+        this.waveEnding = true;
+        this.waveSpawnRemaining = 0;
+        this.waveSpawnQueue = [];
+        this.waveKillCount = this.waveEnemyCount;
+        if (reason === 'timeout') {
+            this.clearActiveWaveEnemies();
+        }
+        this.handleWaveCleared();
+    }
+
+    handleWaveCleared() {
+        if (!this.waveSystemEnabled || this.waveShopPending || this.isShopOpen || this.isRunComplete) return;
+        this.waveShopPending = true;
+        this.waveShopDelayTimer?.remove?.(false);
+        this.waveShopDelayTimer = this.time.delayedCall(2000, () => {
+            this.waveShopDelayTimer = null;
+            if (!this.waveSystemEnabled || this.isShopOpen || this.isRunComplete || this.isGameOver) {
+                this.waveShopPending = false;
+                return;
+            }
+            if (!this.waveEnding && !this.isCurrentWaveCleared()) {
+                this.waveShopPending = false;
+                return;
+            }
+            if (this.shouldPresentSupporterSelection()) {
+                this.presentSupporterSelection();
+                return;
+            }
+            if (this.shouldPresentPreShopCardSelection()) {
+                this.presentPreShopCardSelection();
+                return;
+            }
+            this.presentShopOverlay('wave_clear');
+        });
+    }
+
+    handleEnemyDeath({ enemy, source }) {
         if (!enemy) return;
         playSfx(this, 'sfx_enemy_kill', { volume: 0.25 });
-        this.killCount += 1;
-        if (enemy.isElite) {
-            this.eliteKillCount += 1;
+        const ownerContext = this.getSourceOwnerContext(source);
+        const ownerRunState = ownerContext.runState;
+        if (ownerRunState) {
+            ownerRunState.killCount = (ownerRunState.killCount ?? 0) + 1;
         }
-        this.skillEvolutionSystem?.processAvailableEvolutions?.();
-        this.hiddenSkillUnlockSystem?.process?.();
-        this.tryTriggerEliteKillMilestone();
+        if (enemy.countsTowardWave) {
+            this.waveKillCount = Math.min(this.waveEnemyCount, this.waveKillCount + 1);
+        }
+        if (this.isCurrentWaveCleared()) {
+            this.endCurrentWave('cleared');
+        }
     }
 
     handlePauseToggle(event) {
-        if (this.isGameOver || this.isChoosingCard) return;
+        if (this.isGameOver || this.isChoosingCard || this.isChoosingSupporter || this.isShopOpen) return;
         if (this.scene.isActive('PauseMenuScene')) return;
         event?.preventDefault?.();
         this.resetTouchMoveState();
@@ -848,6 +1648,30 @@ export default class MainScene extends Phaser.Scene {
         this.scene.pause('HudScene');
         this.scene.launch('PauseMenuScene');
         this.scene.pause();
+    }
+
+    shouldProcessEnemyCollision(enemyA, enemyB) {
+        if (!enemyA?.active || !enemyB?.active) return false;
+        if (enemyA === enemyB) return false;
+        if (enemyA.isDashAttacking || enemyB.isDashAttacking) {
+            return false;
+        }
+        return true;
+    }
+
+    quitToMainMenu() {
+        if (this.isTransitioningToMenu) return;
+        this.isTransitioningToMenu = true;
+        this.resetTouchMoveState();
+        this.physics?.world?.resume?.();
+        this.scene.stop('HudScene');
+        this.scene.stop('PauseMenuScene');
+        this.time.delayedCall(0, () => {
+            if (!this.scene.isActive('MainScene') && !this.scene.isPaused('MainScene')) {
+                return;
+            }
+            this.scene.start('MainMenuScene');
+        });
     }
 
     syncMapMusic(mapDef) {
@@ -887,11 +1711,18 @@ export default class MainScene extends Phaser.Scene {
     }
 
     shutdown() {
+        this.waveShopDelayTimer?.remove?.(false);
+        this.waveShopDelayTimer = null;
+        this.waveStartDelayTimer?.remove?.(false);
+        this.waveStartDelayTimer = null;
+        this.clearPlayerInteractionBindings();
         this.input.keyboard.off('keydown-ESC', this.handlePauseToggle, this);
+        this.input.keyboard.off('keydown', this.handleCardNavigation, this);
         this.input.off('pointerdown', this.handleTouchPointerDown, this);
         this.input.off('pointermove', this.handleTouchPointerMove, this);
         this.input.off('pointerup', this.handleTouchPointerUp, this);
         this.input.off('pointerupoutside', this.handleTouchPointerUp, this);
+        this.events.off('enemy-dead', this.handleEnemyDeath, this);
         const panel = document.getElementById('debug-panel');
         if (panel) {
             panel.style.display = 'none';
@@ -902,6 +1733,26 @@ export default class MainScene extends Phaser.Scene {
             this.currentMapMusic = null;
             this.currentMapMusicKey = null;
         }
+        this.time?.removeAllEvents?.();
+        this.playerHitEffect?.destroy?.();
+        this.playerHitEffect = null;
+        this.cameraFollowTarget?.destroy?.();
+        this.cameraFollowTarget = null;
+        this.skills?.destroy?.(true);
+        this.skills = null;
+        this.enemyProjectiles?.destroy?.(true);
+        this.enemyProjectiles = null;
+        this.enemies?.destroy?.(true);
+        this.enemies = null;
+        this.separationZones?.destroy?.(true);
+        this.separationZones = null;
+        this.lootSystem?.itemGroup?.destroy?.(true);
+        this.lootSystem = null;
+        this.statusEffectSystem?.destroy?.();
+        this.statusEffectSystem = null;
+        this.mapManager?.clearMap?.();
+        this.supporterSystem?.destroy?.();
+        this.supporterSystem = null;
     }
 
     setupTouchControls() {
@@ -975,55 +1826,6 @@ export default class MainScene extends Phaser.Scene {
         return { x: vector.x, y: vector.y, magnitude, active: true };
     }
 
-    tryTriggerEliteKillMilestone() {
-        for (const milestone of ELITE_KILL_MILESTONES) {
-            if (this.killCount >= milestone.kills && !this.eliteMilestonesTriggered.has(milestone.kills)) {
-                this.eliteMilestonesTriggered.add(milestone.kills);
-                const spawnCount = Math.max(1, milestone.spawnCount ?? 1);
-                for (let i = 0; i < spawnCount; i++) {
-                    this.spawnEliteFromId(milestone.eliteId);
-                }
-                return;
-            }
-        }
-    }
-
-    spawnEliteFromId(eliteId) {
-        const eliteConfig = ELITE_CONFIGS.find(cfg => cfg.id === eliteId);
-        if (!eliteConfig) return;
-        const maxActive = this.stageScenario?.elite?.maxActive;
-        if (typeof maxActive === 'number' && maxActive > 0 && getActiveEliteCount(this) >= maxActive) {
-            return;
-        }
-        const position = this.getSpawnEdgePosition();
-        if (!position) return;
-        const enemy = new Enemy(this, position.x, position.y, eliteConfig.baseMonsterId);
-        enemy.isElite = true;
-        enemy.eliteConfig = eliteConfig;
-        enemy.eliteAbilities = [...(eliteConfig.specialAbilities ?? [])];
-        enemy.scaleSize = eliteConfig.scaleSize ?? 1;
-        enemy.eliteTint = eliteConfig.tint ?? 0xffcc00;
-        enemy.setTint(enemy.eliteTint);
-        enemy.maxHealth = enemy.health = Math.round((enemy.maxHealth || enemy.health) * (eliteConfig.hpMultiplier ?? 1));
-        enemy.damage = Math.round((enemy.damage ?? 10) * (eliteConfig.damageMultiplier ?? 1));
-        enemy.speed = (enemy.speed ?? 100) * (eliteConfig.speedMultiplier ?? 1);
-        enemy.captureBaseStats?.();
-        enemy.enableMotionTrail?.({
-            tint: eliteConfig.trailTint ?? eliteConfig.tint ?? 0xffcc00,
-            spawnInterval: eliteConfig.trailSpawnInterval ?? 10,
-            lifetime: eliteConfig.trailLifetime ?? 30,
-            depthOffset: eliteConfig.trailDepthOffset ?? -2,
-            blendMode: eliteConfig.trailBlendMode ?? 'ADD',
-            scale: eliteConfig.trailScale ?? 0.5,
-            minAlpha: eliteConfig.trailMinAlpha ?? 0.4,
-            offsetDistance: eliteConfig.trailOffsetDistance ?? 1,
-            sizeFactor: eliteConfig.trailSizeFactor ?? 0.9
-        });
-        this.enemies.add(enemy);
-        this.add.existing(enemy);
-        this.mapManager.enableObjectCollisions(enemy);
-    }
-
     getSpawnEdgePosition() {
         const view = this.cameras.main.worldView;
         const padding = SPAWN_PADDING;
@@ -1062,22 +1864,12 @@ export default class MainScene extends Phaser.Scene {
     pickEnemyTypeForSpawn() {
         const spawnOptions = this.getSpawnableEnemyTypes();
         if (!spawnOptions.length) return null;
-        const totalWeight = spawnOptions.reduce((sum, [, cfg]) => sum + (cfg.spawnWeight ?? 0), 0);
-        if (totalWeight <= 0) return spawnOptions[0][0];
-        let roll = Math.random() * totalWeight;
-        for (const [type, cfg] of spawnOptions) {
-            const weight = cfg.spawnWeight ?? 0;
-            if (roll < weight) {
-                return type;
-            }
-            roll -= weight;
-        }
-        return spawnOptions[spawnOptions.length - 1][0];
+        const randomIndex = Phaser.Math.Between(0, spawnOptions.length - 1);
+        return spawnOptions[randomIndex][0];
     }
 
     getSpawnableEnemyTypes() {
         const unlockedEnemyTypes = getUnlockedEnemyTypes(this, this.stageScenario);
-        const scenarioSpawnWeights = getScenarioEnemySpawnWeights(this.stageScenario);
         return Object.entries(ENEMIES).filter(([type, cfg]) => {
             const enabled = this.debugMode
                 ? (this.enemySpawnStatus[type] ?? false)
@@ -1085,118 +1877,163 @@ export default class MainScene extends Phaser.Scene {
             const isUnlocked = this.debugMode
                 ? true
                 : (unlockedEnemyTypes ? unlockedEnemyTypes.has(type) : true);
-            const spawnWeight = scenarioSpawnWeights?.get(type) ?? cfg.spawnWeight ?? 0;
-            return enabled && isUnlocked && spawnWeight > 0;
-        }).map(([type, cfg]) => {
-            const spawnWeight = scenarioSpawnWeights?.get(type) ?? cfg.spawnWeight ?? 0;
-            return [type, { ...cfg, spawnWeight }];
+            return enabled && isUnlocked;
         });
     }
 
-    queueLevelUp() {
-        this.levelUpQueue += 1;
-        this.tryPresentLevelUpCards();
-    }
+    updateCardFocus() {}
 
-    tryPresentLevelUpCards() {
-        if (this.levelUpQueue <= 0 || this.isChoosingCard) return;
-        this.levelUpQueue -= 1;
-        this.presentLevelUpCards();
-    }
-
-    presentLevelUpCards() {
-        if (this.isChoosingCard) return;
-        const baseCards = this.getWeightedCards(3);
-        if (!baseCards.length) {
-            this.levelUpQueue = 0;
-            return;
-        }
-        this.isChoosingCard = true;
-        this.beginLevelUpTimerPause();
-        this.physics.world.pause();
-        const hudScene = this.scene.get('HudScene');
-        hudScene?.showLevelUpSelection?.(baseCards, (selected) => this.onCardSelected(selected));
-        this.upgradeOverlay = hudScene?.levelUpOverlay ?? null;
-        this.upgradeContainer = hudScene?.levelUpContainer ?? null;
-        this.levelUpCards = hudScene?.levelUpCards ?? [];
+    clearCardFocus() {
+        this.levelUpCards = [];
         this.cardFocusIndex = 0;
         this.keyboardNavigationActive = false;
-        this.updateCardFocus();
     }
 
-    onCardSelected(cardConfig) {
-        if (!this.isChoosingCard) return;
-        this.clearCardFocus();
-        this.isChoosingCard = false;
-        this.endLevelUpTimerPause();
+    shouldPresentSupporterSelection() {
+        return this.waveSystemEnabled
+            && this.currentWaveNumber === 3
+            && !this.selectedSupporterKey
+            && !this.isChoosingSupporter;
+    }
+
+    shouldPresentPreShopCardSelection() {
+        return this.waveSystemEnabled
+            && !this.isChoosingCard
+            && !this.isGameOver
+            && !this.isShopOpen;
+    }
+
+    getRandomSupporterChoices(count = 4) {
+        const supporterKeys = Phaser.Utils.Array.Shuffle([...SUPPORTER_KEYS]);
+        return supporterKeys.slice(0, Math.max(1, Math.min(count, supporterKeys.length)));
+    }
+
+    getRandomPreShopCardChoices(count = 4) {
+        return getRandomPreShopCards(count, this.currentWaveNumber);
+    }
+
+    presentSupporterSelection() {
+        if (this.isChoosingSupporter || this.isGameOver) return;
+        this.supporterSelectionRerollsRemaining = SUPPORTER_SELECTION_MAX_REROLLS;
+        const choices = this.getRandomSupporterChoices(4);
+        if (!choices.length) {
+            this.presentShopOverlay('wave_clear');
+            return;
+        }
+        this.isChoosingSupporter = true;
+        this.beginLevelUpTimerPause();
+        this.player?.setVelocity?.(0, 0);
+        this.physics.world.pause();
+        this.resetTouchMoveState();
         const hudScene = this.scene.get('HudScene');
-        hudScene?.hideLevelUpSelection?.();
-        this.upgradeOverlay = null;
-        this.upgradeContainer = null;
-        this.levelUpCards = [];
+        hudScene?.showSupporterSelection?.({
+            supporterKeys: choices,
+            gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
+            rerollCost: SUPPORTER_SELECTION_REROLL_COST,
+            rerollRemaining: this.supporterSelectionRerollsRemaining,
+            onSelect: (supporterKey) => this.onSupporterSelected(supporterKey),
+            onReroll: () => this.rerollSupporterSelection()
+        });
+    }
+
+    rerollSupporterSelection() {
+        if (!this.isChoosingSupporter || !this.player) return;
+        if ((this.supporterSelectionRerollsRemaining ?? 0) <= 0) return;
+        if (!this.player.spendGold?.(SUPPORTER_SELECTION_REROLL_COST)) return;
+        this.supporterSelectionRerollsRemaining = Math.max(0, (this.supporterSelectionRerollsRemaining ?? 0) - 1);
+        const choices = this.getRandomSupporterChoices(4);
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.showSupporterSelection?.({
+            supporterKeys: choices,
+            gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
+            rerollCost: SUPPORTER_SELECTION_REROLL_COST,
+            rerollRemaining: this.supporterSelectionRerollsRemaining,
+            onSelect: (supporterKey) => this.onSupporterSelected(supporterKey),
+            onReroll: () => this.rerollSupporterSelection()
+        });
+    }
+
+    onSupporterSelected(supporterKey = null) {
+        if (!this.isChoosingSupporter) return;
+        this.isChoosingSupporter = false;
+        this.supporterSelectionRerollsRemaining = 0;
+        this.endLevelUpTimerPause();
+        this.scene.get('HudScene')?.hideSupporterSelection?.();
+        this.setSelectedSupporterKey(supporterKey);
         if (this.physics.world.isPaused) {
             this.physics.world.resume();
         }
-        this.addCardToInventory(cardConfig);
-        if (this.player?.applyCardEffect) {
-            this.player.applyCardEffect(cardConfig);
-        }
-        if (cardConfig?.key) {
-            this.cardSelectionCounts[cardConfig.key] = (this.cardSelectionCounts[cardConfig.key] ?? 0) + 1;
-        }
-        this.skillEvolutionSystem?.processAvailableEvolutions?.();
-        this.hiddenSkillUnlockSystem?.process?.();
-        hudScene?.refreshInventory?.(this.inventoryItems);
-        if (this.levelUpQueue > 0) {
-            this.time.delayedCall(250, () => {
-                this.tryPresentLevelUpCards();
-            });
-        }
-    }
-
-    handleCardNavigation(event) {
-        if (!this.isChoosingCard || !this.levelUpCards.length) return;
-        const total = this.levelUpCards.length;
-        const { LEFT, RIGHT, A, D, ENTER, SPACE } = Phaser.Input.Keyboard.KeyCodes;
-        let handled = false;
-        if ([LEFT, A, RIGHT, D, ENTER, SPACE].includes(event.keyCode)) {
-            this.keyboardNavigationActive = true;
-        }
-        if (event.keyCode === LEFT || event.keyCode === A) {
-            this.cardFocusIndex = Phaser.Math.Wrap(this.cardFocusIndex - 1, 0, total);
-            handled = true;
-        } else if (event.keyCode === RIGHT || event.keyCode === D) {
-            this.cardFocusIndex = Phaser.Math.Wrap(this.cardFocusIndex + 1, 0, total);
-            handled = true;
-        } else if (event.keyCode === ENTER || event.keyCode === SPACE) {
-            const focusedCard = this.levelUpCards[this.cardFocusIndex];
-            if (focusedCard) {
-                this.onCardSelected(focusedCard.cardConfig);
+        this.time.delayedCall(0, () => {
+            if (!this.isGameOver && !this.isShopOpen) {
+                if (this.shouldPresentPreShopCardSelection()) {
+                    this.presentPreShopCardSelection();
+                    return;
+                }
+                this.presentShopOverlay('wave_clear');
             }
-            handled = true;
-        }
-        if (handled) {
-            this.updateCardFocus();
-            event.preventDefault();
-        }
+        });
     }
 
-    updateCardFocus() {
-        if (!this.levelUpCards.length) return;
-        if (!this.keyboardNavigationActive) {
-            this.levelUpCards.forEach(card => card.setFocus(false));
+    presentPreShopCardSelection() {
+        if (this.isChoosingCard || this.isGameOver || this.isShopOpen) return;
+        const cards = this.getRandomPreShopCardChoices(4);
+        if (!cards.length) {
+            this.presentShopOverlay('wave_clear');
             return;
         }
-        this.levelUpCards.forEach((card, index) => card.setFocus(index === this.cardFocusIndex));
+        this.isChoosingCard = true;
+        this.preShopCardSelectionRerollsRemaining = PRE_SHOP_CARD_SELECTION_MAX_REROLLS;
+        this.beginLevelUpTimerPause();
+        this.player?.setVelocity?.(0, 0);
+        this.lootSystem?.clearGroundItems?.();
+        this.clearAllActiveEnemiesAndProjectiles();
+        this.physics.world.pause();
+        this.resetTouchMoveState();
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.showPreShopCardSelection?.({
+            cards,
+            gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
+            rerollCost: PRE_SHOP_CARD_SELECTION_REROLL_COST,
+            rerollRemaining: this.preShopCardSelectionRerollsRemaining,
+            onSelect: (cardConfig) => this.onPreShopCardSelected(cardConfig),
+            onReroll: () => this.rerollPreShopCardSelection()
+        });
     }
 
-    clearCardFocus() {
-        if (this.levelUpCards.length) {
-            this.levelUpCards.forEach(card => card.setFocus(false));
+    rerollPreShopCardSelection() {
+        if (!this.isChoosingCard || !this.player) return;
+        if ((this.preShopCardSelectionRerollsRemaining ?? 0) <= 0) return;
+        if (!this.player.spendGold?.(PRE_SHOP_CARD_SELECTION_REROLL_COST)) return;
+        this.preShopCardSelectionRerollsRemaining = Math.max(0, (this.preShopCardSelectionRerollsRemaining ?? 0) - 1);
+        const cards = this.getRandomPreShopCardChoices(4);
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.showPreShopCardSelection?.({
+            cards,
+            gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
+            rerollCost: PRE_SHOP_CARD_SELECTION_REROLL_COST,
+            rerollRemaining: this.preShopCardSelectionRerollsRemaining,
+            onSelect: (cardConfig) => this.onPreShopCardSelected(cardConfig),
+            onReroll: () => this.rerollPreShopCardSelection()
+        });
+    }
+
+    onPreShopCardSelected(cardConfig = null) {
+        if (!this.isChoosingCard) return;
+        this.isChoosingCard = false;
+        this.preShopCardSelectionRerollsRemaining = 0;
+        this.endLevelUpTimerPause();
+        this.scene.get('HudScene')?.hidePreShopCardSelection?.();
+        if (cardConfig) {
+            this.player?.applyCardEffect?.(cardConfig);
         }
-        this.levelUpCards = [];
-        this.cardFocusIndex = 0;
-        this.keyboardNavigationActive = false;
+        if (this.physics.world.isPaused) {
+            this.physics.world.resume();
+        }
+        this.time.delayedCall(0, () => {
+            if (!this.isGameOver && !this.isShopOpen) {
+                this.presentShopOverlay('wave_clear');
+            }
+        });
     }
 
     handlePlayerDeath() {
@@ -1205,7 +2042,7 @@ export default class MainScene extends Phaser.Scene {
         this.resetTouchMoveState();
         this.physics.world.pause();
         this.scene.pause('HudScene');
-        const elapsedMs = this.getElapsedRunMs();
+        const elapsedMs = this.getTotalRunMs();
         const totalSeconds = Math.floor(elapsedMs / 1000);
         const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const seconds = String(totalSeconds % 60).padStart(2, '0');
@@ -1228,243 +2065,534 @@ export default class MainScene extends Phaser.Scene {
         this.levelUpPauseStartedAt = null;
     }
 
-    getElapsedRunMs() {
-        const now = this.time.now;
-        const baseElapsed = Math.max(0, now - (this.runStartTime ?? now));
-        const activePauseElapsed = this.levelUpPauseStartedAt === null
-            ? 0
-            : Math.max(0, now - this.levelUpPauseStartedAt);
-        return Math.max(0, baseElapsed - (this.levelUpPausedDurationMs ?? 0) - activePauseElapsed);
+    beginShopTimerPause() {
+        if (this.shopPauseStartedAt !== null) return;
+        this.shopPauseStartedAt = this.time.now;
     }
 
-    getWeightedCards(count) {
-        let pool = this.getAvailableCardPool();
-        if (!pool.length) {
-            return [];
-        }
-        const picks = [];
-        const desired = Math.min(count, pool.length);
-        const groupBuckets = new Map();
-        pool.forEach(card => {
-            const groupKey = card.inventoryKey ?? card.group ?? card.key;
-            if (!groupBuckets.has(groupKey)) {
-                groupBuckets.set(groupKey, []);
-            }
-            groupBuckets.get(groupKey).push(card);
-        });
-        const usedGroups = new Set();
+    endShopTimerPause() {
+        if (this.shopPauseStartedAt === null) return;
+        this.shopPausedDurationMs += Math.max(0, this.time.now - this.shopPauseStartedAt);
+        this.shopPauseStartedAt = null;
+    }
 
-        while (picks.length < desired) {
-            const candidateGroups = Array.from(groupBuckets.entries())
-                .filter(([groupKey]) => !usedGroups.has(groupKey));
-            if (!candidateGroups.length) break;
-            const groupEntries = candidateGroups.map(([groupKey, cards]) => {
-                const totalWeight = cards.reduce((sum, card) => sum + (card.weight ?? 1), 0);
-                return { groupKey, cards, totalWeight };
-            });
-            const totalGroupWeight = groupEntries.reduce((sum, entry) => sum + entry.totalWeight, 0);
-            let roll = Math.random() * totalGroupWeight;
-            const selectedGroup = groupEntries.find(entry => {
-                if (roll < entry.totalWeight) return true;
-                roll -= entry.totalWeight;
-                return false;
-            }) || groupEntries[0];
-            let chosenCard = selectedGroup.cards[0];
-            let innerRoll = Math.random() * selectedGroup.totalWeight;
-            for (const card of selectedGroup.cards) {
-                const cardWeight = card.weight ?? 1;
-                if (innerRoll < cardWeight) {
-                    chosenCard = card;
-                    break;
-                }
-                innerRoll -= cardWeight;
-            }
-            const groupKey = selectedGroup.groupKey;
-            for (let i = pool.length - 1; i >= 0; i--) {
-                const candidate = pool[i];
-                const candidateGroup = candidate.inventoryKey ?? candidate.group ?? candidate.key;
-                if (candidateGroup === groupKey) {
-                    pool.splice(i, 1);
-                }
-            }
-            picks.push(chosenCard);
-            usedGroups.add(groupKey);
-            groupBuckets.delete(groupKey);
+    clearAllActiveEnemiesAndProjectiles() {
+        const activeEnemies = this.enemies?.getChildren?.() ?? [];
+        activeEnemies.forEach((enemy) => {
+            if (!enemy?.active) return;
+            enemy.countsTowardWave = false;
+            enemy.destroy();
+        });
+        const activeProjectiles = this.enemyProjectiles?.getChildren?.() ?? [];
+        activeProjectiles.forEach((projectile) => {
+            if (!projectile?.active) return;
+            projectile.destroy();
+        });
+        this.respawnPool = 0;
+    }
+
+    presentShopOverlay(reason = 'manual') {
+        if (this.isGameOver || this.isChoosingCard || this.isChoosingSupporter || this.isShopOpen) return;
+        this.isShopOpen = true;
+        this.shopOpenReason = reason;
+        this.resetTouchMoveState();
+        this.beginShopTimerPause();
+        this.player?.setVelocity?.(0, 0);
+        this.lootSystem?.clearGroundItems?.();
+        this.clearAllActiveEnemiesAndProjectiles();
+        if (this.player) {
+            this.player.health = Math.max(0, Math.round(this.player.maxHealth ?? this.player.health ?? 0));
+            this.player.displayedHealth = this.player.health;
         }
-        return picks;
+        this.physics.world.pause();
+        if (reason === 'wave_clear') {
+            this.prepareShopStockForNextWave();
+        }
+        this.ensureShopStock();
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.showShopOverlay?.({
+            ...this.buildShopOverlayState(),
+            onContinue: () => this.continueFromShopOverlay(),
+            onReroll: () => this.rerollShopStock(),
+            onToggleLock: (item) => this.toggleShopItemLock(item?.id ?? item),
+            onPurchase: (item) => this.purchaseShopItem(item?.id ?? item)
+        });
+    }
+
+    continueFromShopOverlay() {
+        if (!this.isShopOpen) return;
+        this.isShopOpen = false;
+        this.endShopTimerPause();
+        const hudScene = this.scene.get('HudScene');
+        hudScene?.hideShopOverlay?.();
+        this.spawnTimer = 0;
+        const shopReason = this.shopOpenReason;
+        this.shopOpenReason = null;
+        if (shopReason === 'wave_clear' && this.waveSystemEnabled) {
+            this.waveShopPending = false;
+            if (this.currentWaveNumber >= this.maxWaveCount) {
+                this.isRunComplete = true;
+            } else {
+                this.resetWaveProgress(this.currentWaveNumber + 1);
+                this.scheduleWaveStart();
+            }
+        }
+        if (this.physics.world.isPaused) {
+            this.physics.world.resume();
+        }
+    }
+
+    getTotalRunMs() {
+        const now = this.time.now;
+        const baseElapsed = Math.max(0, now - (this.runStartTime ?? now));
+        const activeLevelUpPauseElapsed = this.levelUpPauseStartedAt === null
+            ? 0
+            : Math.max(0, now - this.levelUpPauseStartedAt);
+        const activeShopPauseElapsed = this.shopPauseStartedAt === null
+            ? 0
+            : Math.max(0, now - this.shopPauseStartedAt);
+        return Math.max(
+            0,
+            baseElapsed
+                - (this.levelUpPausedDurationMs ?? 0)
+                - activeLevelUpPauseElapsed
+                - (this.shopPausedDurationMs ?? 0)
+                - activeShopPauseElapsed
+        );
+    }
+
+    getElapsedRunMs() {
+        return this.getTotalRunMs();
+    }
+
+    getWeightedCards() {
+        return [];
     }
 
     getAvailableCardPool() {
-        return CARD_CONFIG
-            .filter(card => {
-                const selected = this.cardSelectionCounts[card.key] ?? 0;
-                const limit = card.stackLimit ?? Infinity;
-                return selected < limit;
-            })
-            .filter(card => this.isCardAllowedByInventory(card))
-            .filter(card => {
-                const requirements = card.requirements ?? {};
-                const skillUnlocked = requirements.skillUnlocked;
-                if (skillUnlocked && !this.player?.hasSkill(skillUnlocked)) {
-                    return false;
-                }
-
-                const skillLocked = requirements.skillLocked;
-                if (skillLocked && this.player?.hasSkill(skillLocked)) {
-                    return false;
-                }
-                if (skillLocked && (this.activeSkillKeys?.length ?? 0) >= MAX_ACTIVE_SKILLS) {
-                    return false;
-                }
-
-                const multipleObjectSkill = requirements.supportsMultipleObject;
-                if (multipleObjectSkill) {
-                    const skillConfig = SKILL_CONFIG[multipleObjectSkill] ?? {};
-                    if (skillConfig.multipleObject === false) {
-                        return false;
-                    }
-                    if (!this.player?.hasSkill(multipleObjectSkill)) {
-                        return false;
-                    }
-                    const maxObjects = this.player?.getSkillObjectMaxCount(multipleObjectSkill) ?? 1;
-                    const currentObjects = this.player?.getSkillObjectCount(multipleObjectSkill) ?? 1;
-                    if (currentObjects >= maxObjects) {
-                        return false;
-                    }
-                }
-
-                const areaSkill = requirements.supportsArea;
-                if (areaSkill) {
-                    const skillConfig = SKILL_CONFIG[areaSkill] ?? {};
-                    const hasAreaUpgradeCategory = skillConfig.category === 'orbit' || skillConfig.category === 'aura';
-                    if (!this.player?.hasSkill(areaSkill)) {
-                        return false;
-                    }
-                    if (!hasAreaUpgradeCategory) {
-                        return false;
-                    }
-                }
-
-                const effectDurationSkill = requirements.supportsEffectDuration;
-                if (effectDurationSkill) {
-                    const skillConfig = SKILL_CONFIG[effectDurationSkill] ?? {};
-                    if (!this.player?.hasSkill(effectDurationSkill)) {
-                        return false;
-                    }
-                    if ((skillConfig.stunDuration ?? 0) <= 0) {
-                        return false;
-                    }
-                }
-
-                const explosionRadiusSkill = requirements.supportsExplosionRadius;
-                if (explosionRadiusSkill) {
-                    const skillConfig = SKILL_CONFIG[explosionRadiusSkill] ?? {};
-                    if (!this.player?.hasSkill(explosionRadiusSkill)) {
-                        return false;
-                    }
-                    if ((skillConfig.explosionRadius ?? 0) <= 0) {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
-            .map(card => this.applySkillInventoryWeightBonus(card));
+        return [];
     }
 
     applySkillInventoryWeightBonus(cardConfig) {
-        const nextCard = { ...cardConfig };
-        if (nextCard.cardType !== 'skill') {
-            return nextCard;
+        return cardConfig;
+    }
+
+    getInventoryKeyFromCard() {
+        return null;
+    }
+
+    findStarterInventoryCardForSkill() {
+        return null;
+    }
+
+    ensureDefaultSkillInventoryEntry() {}
+
+    getInventoryMaxLevel() {
+        return 1;
+    }
+
+    isCardAllowedByInventory() {
+        return false;
+    }
+
+    addCardToInventory() {}
+
+    ensureShopRunState(runState = null) {
+        const resolvedRunState = runState ?? this.getPrimaryRunState();
+        if (!resolvedRunState) return null;
+        resolvedRunState.shopPurchasedItemIds = Array.isArray(resolvedRunState.shopPurchasedItemIds)
+            ? resolvedRunState.shopPurchasedItemIds
+            : [];
+        resolvedRunState.shopPurchaseCounts = resolvedRunState.shopPurchaseCounts ?? {};
+        resolvedRunState.shopPurchasedItems = Array.isArray(resolvedRunState.shopPurchasedItems)
+            ? resolvedRunState.shopPurchasedItems
+            : [];
+        resolvedRunState.shopCurrentStockIds = Array.isArray(resolvedRunState.shopCurrentStockIds)
+            ? resolvedRunState.shopCurrentStockIds
+            : [];
+        resolvedRunState.shopLockedItemIds = Array.isArray(resolvedRunState.shopLockedItemIds)
+            ? resolvedRunState.shopLockedItemIds
+            : [];
+        resolvedRunState.shopEffectBonuses = resolvedRunState.shopEffectBonuses ?? {};
+        resolvedRunState.shopSpecialFlags = resolvedRunState.shopSpecialFlags ?? {};
+        return resolvedRunState;
+    }
+
+    getShopItemPurchaseCount(itemId, runState = null) {
+        const resolvedRunState = this.ensureShopRunState(runState);
+        if (!resolvedRunState || !itemId) return 0;
+        return Math.max(0, Math.floor(resolvedRunState.shopPurchaseCounts?.[itemId] ?? 0));
+    }
+
+    getShopItemRuntimeCost(itemConfig, runState = null) {
+        if (!itemConfig) return 0;
+        const baseCost = Math.max(0, Math.floor(itemConfig.cost ?? 0));
+        const purchaseCount = this.getShopItemPurchaseCount(itemConfig.id, runState);
+        return Math.max(0, Math.round(baseCost * Math.pow(1.2, purchaseCount)));
+    }
+
+    prepareShopStockForNextWave(playerOrId = null, runState = null) {
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        if (!resolvedRunState || this.debugMode) return;
+        const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
+        resolvedRunState.shopCurrentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
+            .slice(0, 5)
+            .map((itemId) => (itemId && lockedSet.has(itemId) ? itemId : null));
+        resolvedRunState.shopLockedItemIds = resolvedRunState.shopCurrentStockIds.filter(Boolean);
+    }
+
+    getCurrentSkillEffectKeys(player = null) {
+        const resolvedPlayer = player ?? this.getPrimaryPlayer();
+        if (!resolvedPlayer?.getActiveSkillKey || !resolvedPlayer?.getSkillConfig) return null;
+        const activeSkillKey = resolvedPlayer.getActiveSkillKey();
+        if (!activeSkillKey) return [];
+        const activeSkillConfig = resolvedPlayer.getSkillConfig(activeSkillKey) ?? {};
+        const configuredEffects = [
+            ...(Array.isArray(activeSkillConfig.statusEffects) ? activeSkillConfig.statusEffects : []),
+            ...(Array.isArray(activeSkillConfig.bonusStatusEffects) ? activeSkillConfig.bonusStatusEffects : [])
+        ];
+        return Array.from(new Set(configuredEffects.map((entry) => entry?.key ?? entry?.effectKey).filter(Boolean)));
+    }
+
+    getUnlockElementShopExcludeIds(player = null) {
+        const currentEffectKeys = this.getCurrentSkillEffectKeys(player);
+        if (!currentEffectKeys.length) return [];
+        const effectKeySet = new Set(currentEffectKeys);
+        return SHOP_ITEM_CONFIG
+            .filter((item) => item.type === 'unlock_element' && effectKeySet.has(item.unlockElement?.effectKey))
+            .map((item) => item.id);
+    }
+
+    buildUnlockElementSkillOverride(unlockElement = null) {
+        const effectKey = unlockElement?.effectKey ?? null;
+        if (!effectKey) return null;
+        const tags = Array.isArray(unlockElement?.tags) ? unlockElement.tags : [];
+        const statusEntry = unlockElement?.statusEntry;
+        if (statusEntry && typeof statusEntry === 'object') {
+            return {
+                tags: Array.from(new Set(tags)),
+                statusEffects: [
+                    {
+                        ...statusEntry,
+                        key: statusEntry.key ?? effectKey
+                    }
+                ]
+            };
         }
-
-        const inventoryKey = this.getInventoryKeyFromCard(nextCard);
-        if (!inventoryKey) {
-            return nextCard;
-        }
-
-        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
-        if (currentLevel <= 0) {
-            return nextCard;
-        }
-
-        nextCard.weight = Math.max(1, (nextCard.weight ?? 1) + currentLevel * 0.5);
-        return nextCard;
+        return {
+            tags: Array.from(new Set(tags)),
+            statusEffects: [
+                {
+                    key: effectKey,
+                    trigger: 'onHit',
+                    target: 'target',
+                    chance: Math.max(0, Math.min(1, unlockElement?.chance ?? 0.2))
+                }
+            ]
+        };
     }
 
-    getInventoryKeyFromCard(cardConfig) {
-        return cardConfig?.inventoryKey ?? cardConfig?.key ?? null;
-    }
-
-    findStarterInventoryCardForSkill(skillKey) {
-        if (!skillKey) return null;
-        return CARD_CONFIG.find((card) => {
-            if (card?.cardType !== 'skill') return false;
-            const effects = Array.isArray(card.effects) ? card.effects : [];
-            return effects.some((effect) => effect?.type === 'skillUnlock' && effect.skillKey === skillKey);
-        }) ?? null;
-    }
-
-    ensureDefaultSkillInventoryEntry(characterKey = this.activeCharacterKey) {
-        const defaultSkill = CHARACTER_CONFIG[characterKey]?.defaultSkill ?? this.player?.getDefaultSkillKey?.() ?? null;
-        if (!defaultSkill) return;
-
-        const starterCard = this.findStarterInventoryCardForSkill(defaultSkill);
-        if (!starterCard) return;
-
-        const inventoryKey = this.getInventoryKeyFromCard(starterCard);
-        if (!inventoryKey || (this.inventoryItemLevels[inventoryKey] ?? 0) > 0) return;
-
-        this.addCardToInventory(starterCard);
-    }
-
-    getInventoryMaxLevel(cardConfig) {
-        return Math.max(1, cardConfig?.inventoryMaxLevel ?? 8);
-    }
-
-    isCardAllowedByInventory(cardConfig) {
-        const inventoryKey = this.getInventoryKeyFromCard(cardConfig);
-        if (!inventoryKey) return false;
-        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
-        if (currentLevel >= this.getInventoryMaxLevel(cardConfig)) {
+    applyUnlockElementItemToPlayer(player = null, itemConfig = null) {
+        const resolvedPlayer = player ?? this.getPrimaryPlayer();
+        const unlockElement = itemConfig?.unlockElement ?? null;
+        if (!resolvedPlayer?.setSkillRuntimeOverrides || !resolvedPlayer?.getActiveSkillKey || !unlockElement?.effectKey) {
             return false;
         }
-        const inventoryIsFull = (this.inventoryItems?.length ?? 0) >= 10;
-        if (inventoryIsFull && currentLevel <= 0) {
-            return false;
+        const activeSkillKey = resolvedPlayer.getActiveSkillKey();
+        if (!activeSkillKey) return false;
+        const existingOverride = resolvedPlayer.skillRuntimeConfigOverrides?.[activeSkillKey] ?? {};
+        const builtOverride = this.buildUnlockElementSkillOverride(unlockElement) ?? {};
+        const mergedTags = Array.from(new Set([
+            ...(Array.isArray(existingOverride.tags) ? existingOverride.tags : []),
+            ...(Array.isArray(builtOverride.tags) ? builtOverride.tags : [])
+        ]));
+        const nextOverride = {
+            ...existingOverride,
+            ...builtOverride,
+            tags: mergedTags
+        };
+        if (unlockElement.mode === 'hit_explosion') {
+            nextOverride.bonusStatusEffects = Array.isArray(builtOverride.statusEffects)
+                ? builtOverride.statusEffects.slice(0, 1)
+                : [];
+            if (Array.isArray(existingOverride.statusEffects)) {
+                nextOverride.statusEffects = existingOverride.statusEffects;
+            } else {
+                delete nextOverride.statusEffects;
+            }
         }
+        resolvedPlayer.setSkillRuntimeOverrides(activeSkillKey, nextOverride);
         return true;
     }
 
-    addCardToInventory(cardConfig) {
-        const inventoryKey = this.getInventoryKeyFromCard(cardConfig);
-        if (!inventoryKey) return;
-
-        const currentLevel = this.inventoryItemLevels[inventoryKey] ?? 0;
-        const maxLevel = this.getInventoryMaxLevel(cardConfig);
-        if (currentLevel >= maxLevel) {
-            return;
-        }
-
-        this.inventoryItemLevels[inventoryKey] = currentLevel + 1;
-        const existingEntry = this.inventoryItems.find(item => item.inventoryKey === inventoryKey);
-        if (existingEntry) {
-            existingEntry.level = this.inventoryItemLevels[inventoryKey];
-            existingEntry.cardKey = cardConfig.key;
-            existingEntry.name = cardConfig.inventoryName ?? cardConfig.name;
-            return;
-        }
-
-        if (this.inventoryItems.length >= 10) {
-            return;
-        }
-
-        this.inventoryItems.push({
-            inventoryKey,
-            cardKey: cardConfig.key,
-            name: cardConfig.inventoryName ?? cardConfig.name,
-            level: this.inventoryItemLevels[inventoryKey]
+    buildShopItemEffects(itemConfig = null) {
+        const modifiers = itemConfig?.modifiers ?? {};
+        const effects = [];
+        Object.entries(modifiers).forEach(([key, value]) => {
+            switch (key) {
+                case 'damageMultiplier':
+                    effects.push({ type: 'damage', value });
+                    break;
+                case 'critChance':
+                    effects.push({ type: 'critChance', value });
+                    break;
+                case 'critMultiplier':
+                    effects.push({ type: 'critMultiplier', value });
+                    break;
+                case 'attackSpeed':
+                    effects.push({ type: 'attackSpeed', value });
+                    break;
+                case 'armor':
+                    effects.push({ type: 'armor', value });
+                    break;
+                case 'armorPierce':
+                    effects.push({ type: 'armorPierce', value });
+                    break;
+                case 'skillRange':
+                    effects.push({ type: 'skillRange', value });
+                    break;
+                case 'hp':
+                    effects.push({ type: 'maxHealth', value });
+                    break;
+                case 'healthRegenPerSecond':
+                    effects.push({ type: 'healthRegenPerSecond', value });
+                    break;
+                case 'lifesteal':
+                    effects.push({ type: 'lifesteal', value });
+                    break;
+                case 'shield':
+                    effects.push({ type: 'shieldGrant', value });
+                    break;
+                case 'moveSpeed':
+                    effects.push({ type: 'speed', value });
+                    break;
+                case 'areaSizeMultiplier':
+                    effects.push({ type: 'allSkillAreaPercent', value });
+                    break;
+                case 'projectileCount':
+                    effects.push({ type: 'allSkillObjects', value });
+                    break;
+                case 'knockbackMultiplier':
+                    effects.push({ type: 'knockbackPercent', value });
+                    break;
+                case 'effectChance':
+                    effects.push({ type: 'effectChance', value });
+                    break;
+                case 'effectDamageMultiplier':
+                    effects.push({ type: 'effectDamageMultiplier', value });
+                    break;
+                case 'effectDurationMultiplier':
+                    effects.push({ type: 'effectDurationMultiplier', value });
+                    break;
+                case 'pickupRangeMultiplier':
+                    effects.push({ type: 'lootMagnetRadiusPercent', value });
+                    break;
+                case 'goldGainMultiplier':
+                    effects.push({ type: 'goldGainMultiplier', value });
+                    break;
+                case 'xpGainMultiplier':
+                    effects.push({ type: 'xpGainPercent', value });
+                    break;
+                default:
+            }
         });
+        return effects;
+    }
+
+    buildShopOverlayState(playerOrId = null, runState = null) {
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        const lockedIds = new Set(resolvedRunState?.shopLockedItemIds ?? []);
+        const stockIds = this.debugMode
+            ? (resolvedRunState?.shopCurrentStockIds ?? [])
+            : (resolvedRunState?.shopCurrentStockIds ?? []).slice(0, 5);
+        const items = stockIds
+            .map((itemId) => {
+                const itemConfig = getShopItemConfig(itemId);
+                if (!itemConfig) return null;
+                return {
+                    ...itemConfig,
+                    cost: this.getShopItemRuntimeCost(itemConfig, resolvedRunState),
+                    locked: lockedIds.has(itemConfig.id)
+                };
+            });
+        const purchasedItems = Object.entries(resolvedRunState?.shopPurchaseCounts ?? {})
+            .map(([itemId, count]) => {
+                const itemConfig = getShopItemConfig(itemId);
+                if (!itemConfig || count <= 0) return null;
+                return {
+                    ...itemConfig,
+                    stackCount: Math.max(1, Math.floor(count))
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.name.localeCompare(b.name));
+        return {
+            gold: Math.max(0, Math.floor(context.player?.gold ?? 0)),
+            items,
+            purchasedItems,
+            rerollCost: SHOP_REROLL_COST,
+            debugMode: this.debugMode === true
+        };
+    }
+
+    ensureShopStock(playerOrId = null, runState = null) {
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        if (!resolvedRunState) return [];
+        if (this.debugMode) {
+            resolvedRunState.shopCurrentStockIds = SHOP_ITEM_CONFIG.map((item) => item.id);
+            resolvedRunState.shopLockedItemIds = [];
+            return resolvedRunState.shopCurrentStockIds;
+        }
+        const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
+            .slice(0, 5)
+            .map((itemId) => (getShopItemConfig(itemId) ? itemId : null));
+        while (currentStockIds.length < 5) {
+            currentStockIds.push(null);
+        }
+        const lockedSet = new Set(
+            (resolvedRunState.shopLockedItemIds ?? [])
+                .filter((itemId) => currentStockIds.includes(itemId) && getShopItemConfig(itemId))
+        );
+        const existingStockIds = currentStockIds.filter(Boolean);
+        const missingCount = Math.max(0, currentStockIds.filter((itemId) => !itemId).length);
+        if (missingCount > 0) {
+            const extraItems = getRandomShopItemStock(missingCount, [
+                ...existingStockIds,
+                ...this.getUnlockElementShopExcludeIds(context.player),
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player))
+            ]);
+            let fillIndex = 0;
+            for (let i = 0; i < currentStockIds.length && fillIndex < extraItems.length; i += 1) {
+                if (currentStockIds[i]) continue;
+                currentStockIds[i] = extraItems[fillIndex].id;
+                fillIndex += 1;
+            }
+        }
+        resolvedRunState.shopCurrentStockIds = currentStockIds.slice(0, 5);
+        resolvedRunState.shopLockedItemIds = resolvedRunState.shopCurrentStockIds
+            .filter((itemId) => lockedSet.has(itemId));
+        return resolvedRunState.shopCurrentStockIds;
+    }
+
+    purchaseShopItem(itemId, playerOrId = null, runState = null) {
+        const itemConfig = getShopItemConfig(itemId);
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        const player = context.player;
+        if (!itemConfig || !resolvedRunState || !player) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+        const runtimeCost = this.getShopItemRuntimeCost(itemConfig, resolvedRunState);
+        if (!player.spendGold?.(runtimeCost)) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+
+        const effects = this.buildShopItemEffects(itemConfig);
+        effects.forEach((effect) => player.applyEffect?.(effect, { shopItemConfig: itemConfig }));
+        if (itemConfig.type === 'unlock_element') {
+            this.applyUnlockElementItemToPlayer(player, itemConfig);
+        }
+
+        resolvedRunState.shopPurchasedItemIds.push(itemConfig.id);
+        resolvedRunState.shopPurchaseCounts[itemConfig.id] = this.getShopItemPurchaseCount(itemConfig.id, resolvedRunState) + 1;
+        resolvedRunState.shopPurchasedItems.push({
+            itemId: itemConfig.id,
+            name: itemConfig.name,
+            type: itemConfig.type,
+            cost: runtimeCost
+        });
+        if (itemConfig.effectBonuses) {
+            resolvedRunState.shopEffectBonuses[itemConfig.id] = {
+                ...(resolvedRunState.shopEffectBonuses[itemConfig.id] ?? {}),
+                ...itemConfig.effectBonuses
+            };
+        }
+        if (itemConfig.special) {
+            resolvedRunState.shopSpecialFlags[itemConfig.id] = {
+                ...(resolvedRunState.shopSpecialFlags[itemConfig.id] ?? {}),
+                ...itemConfig.special
+            };
+        }
+
+        resolvedRunState.shopCurrentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
+            .slice(0, 5)
+            .map((shopItemId) => (shopItemId === itemConfig.id ? null : shopItemId));
+        resolvedRunState.shopLockedItemIds = (resolvedRunState.shopLockedItemIds ?? [])
+            .filter((shopItemId) => shopItemId !== itemConfig.id);
+        return this.buildShopOverlayState(player, resolvedRunState);
+    }
+
+    rerollShopStock(playerOrId = null, runState = null) {
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        const player = context.player;
+        if (!resolvedRunState || !player) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+        if (this.debugMode) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+        const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
+            .slice(0, 5)
+            .filter((itemId) => getShopItemConfig(itemId));
+        const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
+        const lockedCount = currentStockIds.filter((itemId) => lockedSet.has(itemId)).length;
+        if (currentStockIds.length > 0 && lockedCount >= currentStockIds.length) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+        if (!player.spendGold?.(SHOP_REROLL_COST)) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+
+        const currentStockWithSlots = (resolvedRunState.shopCurrentStockIds ?? [])
+            .slice(0, 5)
+            .map((itemId) => (getShopItemConfig(itemId) ? itemId : null));
+        while (currentStockWithSlots.length < 5) {
+            currentStockWithSlots.push(null);
+        }
+        const preservedIds = currentStockWithSlots.filter((itemId) => itemId && lockedSet.has(itemId));
+        const nextItems = getRandomShopItemStock(
+            currentStockWithSlots.length - preservedIds.length,
+            [
+                ...preservedIds,
+                ...this.getUnlockElementShopExcludeIds(player),
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(player))
+            ]
+        );
+        let nextIndex = 0;
+        resolvedRunState.shopCurrentStockIds = currentStockWithSlots.map((itemId) => {
+            if (itemId && lockedSet.has(itemId)) {
+                return itemId;
+            }
+            const nextItem = nextItems[nextIndex] ?? null;
+            nextIndex += 1;
+            return nextItem?.id ?? null;
+        });
+        return this.buildShopOverlayState(player, resolvedRunState);
+    }
+
+    toggleShopItemLock(itemId, playerOrId = null, runState = null) {
+        const itemConfig = getShopItemConfig(itemId);
+        const context = this.resolvePlayerRunContext(playerOrId, runState);
+        const resolvedRunState = this.ensureShopRunState(context.runState);
+        if (!itemConfig || !resolvedRunState || this.debugMode) {
+            return this.buildShopOverlayState(context.player, resolvedRunState);
+        }
+        const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? []).slice(0, 5);
+        if (!currentStockIds.includes(itemConfig.id)) {
+            return this.buildShopOverlayState(context.player, resolvedRunState);
+        }
+        const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
+        if (lockedSet.has(itemConfig.id)) {
+            lockedSet.delete(itemConfig.id);
+        } else {
+            lockedSet.add(itemConfig.id);
+        }
+        resolvedRunState.shopLockedItemIds = currentStockIds.filter((stockItemId) => lockedSet.has(stockItemId));
+        return this.buildShopOverlayState(context.player, resolvedRunState);
     }
 
     initializeEnemySpawnStatus() {

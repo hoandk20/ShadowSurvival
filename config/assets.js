@@ -59,6 +59,7 @@ const ENEMY_ASSET_ENTRIES = {
     rat: buildEnemyAtlasEntry('rat'),
     bat: buildEnemyAtlasEntry('bat'),
     demonbat: buildEnemyAtlasEntry('demonbat'),
+    eyes: buildEnemyAtlasEntry('eyes'),
     worm: buildEnemyAtlasEntry('worm'),
     widow: buildEnemyAtlasEntry('widow')
 };

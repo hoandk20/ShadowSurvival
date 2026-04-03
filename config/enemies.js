@@ -1,4 +1,6 @@
 // config/enemies.js
+import { createEnemyConfig } from './stats.js';
+
 const DISPLAY_SCALE = 1;
 const HITBOX_SCALE = 1;
 const scaleDimension = ({ width, height }) => ({
@@ -11,332 +13,327 @@ const scaleHitbox = ({ width, height }) => ({
 });
 
 export const ENEMIES = {
-    skeleton: {
+    skeleton: createEnemyConfig({
         name: 'Skeleton',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 550,
+        statsBonus: {
+            moveSpeed: 55,
+            attackRange: 200,
+            attackCooldown: 900,
+            knockbackResist: -0.2
+        },
+        combatType: 'melee',
+        attackStyle: 'dash_lunge_back_fan',
+        meleeAttack: {
+            engageDelayMs: 120,
+            windupMs: 750,
+            recoveryMs: 180,
+            rangePadding: 0,
+            dashSpeed: 280,
+            dashDistance: 150,
+            dashOvershootDistance: 120,
+            dashBackFan: {
+                bulletSpeed: 80,
+                bulletInterval: 300,
+                bulletsPerWave: 2,
+                spreadAngle: 100,
+                projectileRadius: 5,
+                projectileLifetimeMs: 1800,
+                projectileDamageRatio: 1,
+                projectileColor: 0xff3b3b,
+                projectileGlowColor: 0xff8c8c
+            }
+        },
         behavior: 'chase',
         texture: 'skeleton',
-        scale: 1,
-        displaySize: scaleDimension({ width: 20, height: 20 }),
-        hitboxSize: scaleHitbox({ width: 25, height: 25 }),
-        attackRange: 40,
+        displaySize: scaleDimension({ width: 35, height: 35 }),
+        hitboxSize: scaleHitbox({ width: 35, height: 35 }),
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 3,
-        knockbackResist: 0.8
-    },
-    succubus: {
+        flashDuration: 120
+    }),
+    succubus: createEnemyConfig({
         name: 'Succubus',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 550,
+        statsBonus: {
+            moveSpeed: 48,
+            attackCooldown: 100,
+            knockbackResist: -0.2
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_slash',
         behavior: 'chase',
         texture: 'succubus',
-        scale: 1,
-        displaySize: scaleDimension({ width: 20, height: 20 }),
-        hitboxSize: scaleHitbox({ width: 25, height: 25 }),
-        attackRange: 40,
-        flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 3,
-        knockbackResist: 0.8
-    },
-    lamia: {
-        name: 'Lamia',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 550,
-        behavior: 'chase',
-        texture: 'lamia',
-        scale: 1,
-        displaySize: scaleDimension({ width: 20, height: 20 }),
-        hitboxSize: scaleHitbox({ width: 25, height: 25 }),
-        attackRange: 40,
-        flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 3,
-        knockbackResist: 0.8
-    },
-    moth_woman: {
-        name: 'Moth Woman',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
-        behavior: 'chase',
-        texture: 'moth_woman',
-        scale: 1,
         displaySize: scaleDimension({ width: 20, height: 20 }),
         hitboxSize: scaleHitbox({ width: 20, height: 20 }),
-        attackRange: 20,
+        flashTint: 0xff0000,
+        flashDuration: 120
+    }),
+    lamia: createEnemyConfig({
+        name: 'Lamia',
+        statsBonus: {
+            moveSpeed: 48,
+            attackCooldown: 100,
+            knockbackResist: -0.2
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_slash',
+        behavior: 'chase',
+        texture: 'lamia',
+        displaySize: scaleDimension({ width: 20, height: 20 }),
+        hitboxSize: scaleHitbox({ width: 20, height: 20 }),
+        flashTint: 0xff0000,
+        flashDuration: 120
+    }),
+    moth_woman: createEnemyConfig({
+        name: 'Moth Woman',
+        statsBonus: {
+            moveSpeed: 45
+        },
+        behavior: 'chase',
+        texture: 'moth_woman',
+        displaySize: scaleDimension({ width: 20, height: 20 }),
+        hitboxSize: scaleHitbox({ width: 20, height: 20 }),
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 6,
-        knockbackResist: 1,
         attackEffectTint: 0x000000,
         attackGlowColors: [0x000000, 0x111111],
         attackSparkTints: [0x000000]
-    },
-    widow: {
+    }),
+    widow: createEnemyConfig({
         name: 'Widow',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 48
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_bite',
         behavior: 'chase',
         texture: 'widow',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    },
-    medusa: {
+        flashDuration: 120
+    }),
+    medusa: createEnemyConfig({
         name: 'Medusa',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'medusa',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    minotau: {
+    }),
+    minotau: createEnemyConfig({
         name: 'Minotau',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'minotau',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    baphomet: {
+    }),
+    baphomet: createEnemyConfig({
         name: 'Baphomet',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'baphomet',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    dino: {
+    }),
+    dino: createEnemyConfig({
         name: 'Dino',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'dino',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    bugmonster: {
+    }),
+    bugmonster: createEnemyConfig({
         name: 'Bug Monster',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'bugmonster',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    cursed_maiden: {
+    }),
+    cursed_maiden: createEnemyConfig({
         name: 'Cursed Maiden',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            effectResist: 0.6
+        },
         behavior: 'chase',
         texture: 'cursed_maiden',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 3,
         isBoss: true
-    }
-    ,
-    kitsume: {
+    }),
+    kitsume: createEnemyConfig({
         name: 'Kitsume',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 55,
+            attackRange: 200,
+            attackCooldown: 900
+        },
+        combatType: 'melee',
+        attackStyle: 'dash_lunge',
+        meleeAttack: {
+            engageDelayMs: 120,
+            windupMs: 750,
+            recoveryMs: 180,
+            rangePadding: 0,
+            dashSpeed: 280,
+            dashDistance: 150,
+            dashOvershootDistance: 120
+        },
         behavior: 'chase',
         texture: 'kitsume',
-        scale: 1,
-        displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        displaySize: { width: 35, height: 35 },
+        hitboxSize: { width: 35, height: 35 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    }
-    ,
-    mummy: {
+        flashDuration: 120
+    }),
+    mummy: createEnemyConfig({
         name: 'Mummy',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45
+        },
         behavior: 'chase',
         texture: 'mummy',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    }
-    ,
-    zombie_woman: {
+        flashDuration: 120
+    }),
+    zombie_woman: createEnemyConfig({
         name: 'Zombie Woman',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45,
+            knockbackResist: 8
+        },
         behavior: 'chase',
         texture: 'zombie_woman',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-        knockbackResist: 9
-    }
-    ,
-    slime: {
+        flashDuration: 120
+    }),
+    slime: createEnemyConfig({
         name: 'Slime',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_smash',
         behavior: 'chase',
         texture: 'slime',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    },
-    worm: {
+        flashDuration: 120
+    }),
+    worm: createEnemyConfig({
         name: 'Worm',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45
+        },
         behavior: 'chase',
         texture: 'worm',
-        scale: 1,
-        displaySize: { width: 25, height: 25 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        displaySize: { width: 20, height: 20 },
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    },
-    rat: {
+        flashDuration: 120
+    }),
+    rat: createEnemyConfig({
         name: 'Rat',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45
+        },
         behavior: 'chase',
         texture: 'rat',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    },
-    bat: {
+        flashDuration: 120
+    }),
+    bat: createEnemyConfig({
         name: 'Bat',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 48
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_bite',
         behavior: 'chase',
         texture: 'bat',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        spawnWeight: 6,
-    },
-    demonbat: {
+        flashDuration: 120
+    }),
+    demonbat: createEnemyConfig({
         name: 'Demon Bat',
-        health: 10,
-        speed: 35,
-        damage: 10,
-        attackCooldown: 450,
+        statsBonus: {
+            moveSpeed: 45
+        },
         behavior: 'chase',
         texture: 'demonbat',
-        scale: 1,
         displaySize: { width: 20, height: 20 },
-        hitboxSize: { width: 25, height: 25 },
-        attackRange: 20,
+        hitboxSize: { width: 20, height: 20 },
+        flashTint: 0xff0000,
+        flashDuration: 120
+    }),
+    eyes: createEnemyConfig({
+        name: 'Eyes',
+        statsBonus: {
+            damage: 4,
+            moveSpeed: 20,
+            attackCooldown: 350,
+            attackRange: 180
+        },
+        combatType: 'ranged',
+        attackStyle: 'projectile_bolt',
+        behavior: 'ranged',
+        texture: 'eyes',
+        displaySize: { width: 20, height: 20 },
+        hitboxSize: { width: 22, height: 22 },
         flashTint: 0xff0000,
         flashDuration: 120,
-        spawnWeight: 6,
-    }
+        rangedAttack: {
+            preferredRange: 200,
+            keepDistanceRatio: 0.72,
+            projectileSpeed: 230,
+            projectileRadius: 5,
+            projectileLifetimeMs: 1400,
+            projectileColor: 0xff7cba,
+            projectileGlowColor: 0xffd5ee
+        }
+    })
     // Add more enemy types
 };

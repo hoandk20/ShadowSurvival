@@ -15,6 +15,7 @@ export default class PauseMenuScene extends Phaser.Scene {
 
     create() {
         this.mode = 'pause';
+        this.isClosing = false;
         this.render();
         this.input.keyboard.on('keydown-ESC', this.handleEsc, this);
         this.scale.on('resize', this.render, this);
@@ -37,6 +38,7 @@ export default class PauseMenuScene extends Phaser.Scene {
     }
 
     render() {
+        if (this.isClosing) return;
         this.children.removeAll(true);
         const width = this.scale.width;
         const height = this.scale.height;
@@ -96,10 +98,13 @@ export default class PauseMenuScene extends Phaser.Scene {
     }
 
     quitToMenu() {
+        if (this.isClosing) return;
+        this.isClosing = true;
+        this.input.keyboard.off('keydown-ESC', this.handleEsc, this);
+        this.scale.off('resize', this.render, this);
+
         const mainScene = this.scene.get('MainScene');
-        mainScene?.shutdown?.();
-        this.scene.stop('HudScene');
-        this.scene.stop('MainScene');
-        this.scene.start('MainMenuScene');
+        this.scene.resume('MainScene');
+        mainScene?.quitToMainMenu?.();
     }
 }
