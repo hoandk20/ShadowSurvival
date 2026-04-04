@@ -36,7 +36,7 @@ export const CHARACTER_CONFIG = {
         },
         statsBonus: {
             hp: 20,
-            armor: 2,
+            armor: 3,
             moveSpeed: -5,
             dodge: 0.2
         },

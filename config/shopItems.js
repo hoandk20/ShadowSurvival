@@ -53,6 +53,24 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
     createShopItem({ id: 'quick_gloves', name: 'Quick Gloves', type: 'stat', cost: 45, assetPath: 'assets/shopitem/quick_gloves.png', modifiers: { attackSpeed: 0.18, moveSpeed: -5 } }),
     createShopItem({ id: 'battle_focus', name: 'Battle Focus', type: 'stat', cost: 51, assetPath: 'assets/shopitem/battle_focus.png', modifiers: { damageMultiplier: 0.1, critChance: 0.08, armor: -5 } }),
     createShopItem({ id: 'steel_armor', name: 'Steel Armor', type: 'stat', cost: 42, assetPath: 'assets/shopitem/steel_armor.png', modifiers: { armor: 3, hp: -10 } }),
+    createShopItem({
+        id: 'ironarmo',
+        name: 'Iron Armo',
+        type: 'stat',
+        cost: 50,
+        assetPath: 'assets/shopitem/ironarmo.png',
+        shortText: '+4 armor, but heavy plating reduces move speed by 7.',
+        modifiers: { armor: 4, moveSpeed: -7 }
+    }),
+    createShopItem({
+        id: 'icearmo',
+        name: 'Ice Armo',
+        type: 'stat',
+        cost: 100,
+        assetPath: 'assets/shopitem/icearmo.png',
+        shortText: '+8 armor, but the frozen shell reduces attack speed by 20%.',
+        modifiers: { armor: 8, attackSpeed: -0.2 }
+    }),
     createShopItem({ id: 'vital_ring', name: 'Vital Ring', type: 'stat', cost: 42, assetPath: 'assets/shopitem/vital_ring.png', modifiers: { hp: 30, armor: -1 } }),
     createShopItem({ id: 'regeneration_charm', name: 'Regeneration Charm', type: 'stat', cost: 42, assetPath: 'assets/shopitem/regeneration_charm.png', modifiers: { healthRegenPerSecond: 1, hp: -10 } }),
     createShopItem({ id: 'blood_pendant', name: 'Blood Pendant', type: 'stat', cost: 45, assetPath: 'assets/shopitem/blood_pendant.png', modifiers: { lifesteal: 0.05, attackSpeed: -0.1 } }),
@@ -134,7 +152,8 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
         type: 'effect',
         cost: 55,
         assetPath: 'assets/shopitem/venom_trail.png',
-        modifiers: { hp: -20 },
+        shortText: '-20 HP, +25% effect damage, leaves a poison trail behind the player.',
+        modifiers: { hp: -20, effectDamageMultiplier: 0.25 },
         effectBonuses: { poison: { spawnTrail: true } }
     }),
     createShopItem({
@@ -143,7 +162,7 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
         type: 'effect',
         cost: 100,
         assetPath: 'assets/shopitem/firecoat.png',
-        shortText: '+70 HP. Every 1s burns nearby enemies in a radius of 70 for damage equal to 20% of the owner max HP.',
+        shortText: '+70 HP. Every 1s releases a fire wave in radius 70, dealing damage equal to 20% of the owner max HP and applying burn.',
         modifiers: { hp: 70 },
         special: {
             firecoatAura: {

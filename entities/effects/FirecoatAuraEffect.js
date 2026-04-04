@@ -91,6 +91,17 @@ export default class FirecoatAuraEffect {
                     attackTags: ['fire', 'burn', 'aura']
                 }
             );
+            enemy.applyStatusEffect?.('burn', {
+                ownerPlayerId: this.owner.playerId,
+                source: {
+                    owner: this.owner,
+                    ownerPlayerId: this.owner.playerId,
+                    playerId: this.owner.playerId,
+                    sourceType: 'firecoat'
+                },
+                hitDamageSnapshot: damage,
+                tags: ['fire', 'burn', 'aura']
+            });
         });
     }
 

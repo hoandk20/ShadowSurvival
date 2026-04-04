@@ -267,6 +267,11 @@ Current runtime shop notes:
 
 ### Stat Items
 
+New armor item notes:
+
+- `Iron Armo`: a cheap armor pickup that adds defense but slows movement
+- `Ice Armo`: a premium armor pickup that adds heavy defense but slows attack speed
+
 | Item | Cost | Current modifiers |
 | --- | ---: | --- |
 | `Iron Sword` | `43` | `damageMultiplier +0.1`, `skillRange -5` |
@@ -275,6 +280,8 @@ Current runtime shop notes:
 | `Quick Gloves` | `45` | `attackSpeed +0.18`, `moveSpeed -5` |
 | `Battle Focus` | `51` | `damageMultiplier +0.1`, `critChance +0.08`, `armor -5` |
 | `Steel Armor` | `42` | `armor +3`, `hp -10` |
+| `Iron Armo` | `50` | `armor +4`, `moveSpeed -7` |
+| `Ice Armo` | `100` | `armor +8`, `attackSpeed -0.2` |
 | `Vital Ring` | `42` | `hp +30`, `armor -1` |
 | `Regeneration Charm` | `42` | `healthRegenPerSecond +1`, `hp -10` |
 | `Blood Pendant` | `45` | `lifesteal +0.05`, `attackSpeed -0.1` |
@@ -311,6 +318,10 @@ Current runtime shop notes:
 
 ### Effect Items
 
+New effect item note:
+
+- `Fire Coat`: grants bonus HP and emits a periodic fire aura that damages and burns nearby enemies
+
 | Item | Cost | Current modifiers / bonuses |
 | --- | ---: | --- |
 | `Toxic Catalyst` | `56` | `effectChance +0.2`, `effectDamageMultiplier +0.15`, `dodge -7%` |
@@ -319,6 +330,7 @@ Current runtime shop notes:
 | `Flame` | `56` | `burn.explodeOnMaxStacks = true`, only rolls if `burn` is active |
 | `Frozen Edge` | `56` | `freeze.bonusCritDamageToFrozen +0.35`, only rolls if `freeze` is active |
 | `Venom Trail` | `55` | `hp -20`, `poison.spawnTrail = true`, leaves a poison trail even without `Poison Core` |
+| `Fire Coat` | `100` | `hp +70`, every `1s` pulses fire in `radius 70`, deals damage equal to `20%` of owner max HP, and applies `burn` on each pulse |
 | `Elemental Overload` | `58` | `effectChance +0.12`, `effectDamageMultiplier +0.12`, `damageMultiplier -0.12` |
 | `Shockwave Core` | `50` | `shock.chainDamageBonus +0.15`, only rolls if `shock` is active |
 
