@@ -507,35 +507,51 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     supportsFullscreen() {
-        const canvas = this.game?.canvas;
+        const fullscreenTarget = document.getElementById('game-container') ?? document.documentElement ?? this.game?.canvas;
         const documentSupportsFullscreen = Boolean(
             document.fullscreenEnabled
             || document.webkitFullscreenEnabled
             || document.msFullscreenEnabled
         );
-        return Boolean(canvas && documentSupportsFullscreen);
+        return Boolean(fullscreenTarget && documentSupportsFullscreen);
     }
 
     toggleFullscreen() {
+        const fullscreenTarget = document.getElementById('game-container') ?? document.documentElement ?? this.game?.canvas;
         const canvas = this.game?.canvas;
-        if (!canvas) return;
+        if (!fullscreenTarget && !canvas) return;
         if (this.scale.isFullscreen) {
             this.scale.stopFullscreen();
             return;
         }
         if (this.supportsFullscreen()) {
-            this.scale.startFullscreen();
+            const target = fullscreenTarget ?? canvas;
+            if (target && typeof this.scale.startFullscreen === 'function') {
+                this.scale.startFullscreen(target);
+                return;
+            }
+        }
+        if (fullscreenTarget && typeof fullscreenTarget.requestFullscreen === 'function') {
+            fullscreenTarget.requestFullscreen();
             return;
         }
-        if (typeof canvas.requestFullscreen === 'function') {
+        if (fullscreenTarget && typeof fullscreenTarget.webkitRequestFullscreen === 'function') {
+            fullscreenTarget.webkitRequestFullscreen();
+            return;
+        }
+        if (fullscreenTarget && typeof fullscreenTarget.msRequestFullscreen === 'function') {
+            fullscreenTarget.msRequestFullscreen();
+            return;
+        }
+        if (canvas && typeof canvas.requestFullscreen === 'function') {
             canvas.requestFullscreen();
             return;
         }
-        if (typeof canvas.webkitRequestFullscreen === 'function') {
+        if (canvas && typeof canvas.webkitRequestFullscreen === 'function') {
             canvas.webkitRequestFullscreen();
             return;
         }
-        if (typeof canvas.msRequestFullscreen === 'function') {
+        if (canvas && typeof canvas.msRequestFullscreen === 'function') {
             canvas.msRequestFullscreen();
         }
     }
