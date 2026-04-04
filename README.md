@@ -69,6 +69,7 @@ Source: [config/stats.js](./config/stats.js)
 | HP Regen / sec | `healthRegenPerSecond` | 0 |
 | Lifesteal | `lifesteal` | 0 |
 | Shield | `shield` | 0 |
+| Dodge | `dodge` | 0 |
 
 Pickup note:
 
@@ -106,8 +107,8 @@ Source: [config/stats.js](./config/stats.js)
 | Stat | Key | Current base |
 | --- | --- | ---: |
 | HP | `maxHealth` | 10 |
-| Damage | `damage` | 10 |
-| Move Speed | `moveSpeed` | 35 |
+| Damage | `damage` | 15 |
+| Move Speed | `moveSpeed` | 60 |
 | Armor | `armor` | 2 |
 | Effect Resist | `effectResist` | 0 |
 | Attack Cooldown | `attackCooldown` | 500 |
@@ -125,7 +126,8 @@ Source: [config/characters/characters.js](./config/characters/characters.js)
 
 Current character passive note:
 
-- `Lumina`: `skillRange +80`
+- `Lumina`: `skillRange +40`
+- `Knight`: `dodge +20%`
 
 | Character | Default skill | Style | HP | Armor | Move Speed | Crit Chance |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
@@ -273,7 +275,7 @@ Current runtime shop notes:
 | `Battle Focus` | `51` | `damageMultiplier +0.1`, `critChance +0.08`, `armor -10` |
 | `Steel Armor` | `42` | `armor +3`, `hp -10` |
 | `Vital Ring` | `42` | `hp +30`, `armor -1` |
-| `Regeneration Charm` | `42` | `healthRegenPerSecond +2`, `hp -10` |
+| `Regeneration Charm` | `42` | `healthRegenPerSecond +1`, `hp -10` |
 | `Blood Pendant` | `45` | `lifesteal +0.05`, `attackSpeed -0.1` |
 | `Guardian Core` | `60` | `shield +25`, `xpGainMultiplier +0.2`, `armor -1` |
 | `Swift Boots` | `40` | `moveSpeed +15`, `attackSpeed -0.05` |
@@ -289,14 +291,14 @@ Current runtime shop notes:
 | Item | Cost | Current modifiers |
 | --- | ---: | --- |
 | `Glass Cannon` | `40` | `damageMultiplier +0.2`, `armor -10` |
-| `Berserker Blood` | `40` | `attackSpeed +0.15`, `hp -20` |
+| `Berserker Blood` | `40` | `dodge +15%`, `hp -20` |
 | `Sniper Scope` | `40` | `critChance +0.15`, `attackSpeed -0.25` |
 | `Heavy Payload` | `40` | `projectileCount +1`, `damageMultiplier +0.1`, `attackSpeed -0.15` |
 | `Overcharged Reactor` | `39` | `skillRange +10`, `attackSpeed -0.15` |
 | `Unstable Shield` | `33` | `shield +30`, `armor -2` |
 | `Speed Injector` | `33` | `moveSpeed +20`, `damageMultiplier -0.15` |
 | `Overgrowth Engine` | `33` | `areaSizeMultiplier +0.2`, `attackSpeed -0.1` |
-| `Time Distorter` | `38` | `attackSpeed +0.2` |
+| `Time Distorter` | `38` | `armor -2`, `dodge +10%` |
 | `Abyssal Catalyst` | `33` | `damageMultiplier +0.35`, `effectDamageMultiplier +0.25`, `healthRegenPerSecond -4` |
 | `Singularity Field` | `32` | `areaSizeMultiplier +0.5`, `knockbackMultiplier +0.5`, `damageMultiplier -0.15` |
 | `Phantom Stride` | `30` | `moveSpeed +30`, `pickupRangeMultiplier +0.4`, `armor -4` |
@@ -310,12 +312,12 @@ Current runtime shop notes:
 
 | Item | Cost | Current modifiers / bonuses |
 | --- | ---: | --- |
-| `Toxic Catalyst` | `56` | `effectChance +0.2`, `effectDamageMultiplier +0.15` |
+| `Toxic Catalyst` | `56` | `effectChance +0.2`, `effectDamageMultiplier +0.15`, `dodge -7%` |
 | `Lingering Curse` | `73` | `attackSpeed +0.2`, `effectDurationMultiplier +0.25` |
 | `Chain Amplifier` | `59` | `shock.chainCount +1`, only rolls if `shock` is active |
 | `Flame` | `56` | `burn.explodeOnMaxStacks = true`, only rolls if `burn` is active |
 | `Frozen Edge` | `56` | `freeze.bonusCritDamageToFrozen +0.35`, only rolls if `freeze` is active |
-| `Venom Trail` | `55` | `poison.spawnTrail = true` |
+| `Venom Trail` | `55` | `hp -20`, `poison.spawnTrail = true`, leaves a poison trail even without `Poison Core` |
 | `Elemental Overload` | `58` | `effectChance +0.12`, `effectDamageMultiplier +0.12`, `damageMultiplier -0.12` |
 | `Shockwave Core` | `50` | `shock.chainDamageBonus +0.15`, only rolls if `shock` is active |
 
@@ -350,12 +352,12 @@ Source: [config/statusEffects.js](./config/statusEffects.js)
 
 | Effect | Current default stats |
 | --- | --- |
-| `burn` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `maxStacks: 6` |
+| `burn` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `reapplyDelayMs: 400`, `maxStacks: 6` |
 | `shock` | `durationMs: 2000`, `slowDurationMs: 2000`, `slowMultiplier: 0.7`, `chainCount: 3`, `chainRadius: 120`, `chainDamageRatios: [0.75, 0.5, 0.25]`, `chainStepDelayMs: 90`, `maxStacks: 4` |
 | `freeze` | `durationMs: 1500`, `mode: 'stun'`, `slowMultiplier: 0`, `maxStacks: 1` |
-| `poison` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `trailIntervalMs: 700`, `trailDamage: 4`, `antiHealMultiplier: 0.35`, `maxStacks: 6` |
+| `poison` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `trailIntervalMs: 700`, `trailDamage: 4`, `antiHealMultiplier: 0.35`, `reapplyDelayMs: 400`, `maxStacks: 6` |
 | `shield` | `durationMs: 0`, `capacity: 50`, `refillIntervalMs: 10000`, `maxStacks: 1` |
-| `bleed` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `burstDamage: 10`, `maxStacks: 10` |
+| `bleed` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `burstDamage: 10`, `reapplyDelayMs: 400`, `maxStacks: 10` |
 | `mark` | `durationMs: 5000`, `damageIncreasePerStack: 0.25`, `maxStacks: 1` |
 | `explosion` | `durationMs: 0`, `radius: 45`, `damageRatio: 0.5`, `maxStacks: 1` |
 
@@ -393,7 +395,7 @@ Current supporter mechanics:
 | --- | --- | --- | --- | --- |
 | `blackcat` | orb | range `140`, cooldown `1350` | damage `25`, speed `300` | `goldGainMultiplier +0.15`, `critChance +0.05` |
 | `blood_wolf` | claw slash | range `20`, cooldown `900`, attack area `100` | damage `30` | `lifesteal +0.1`, melee characters gain `attackSpeed +0.3` |
-| `fairy` | heal aura | interval `15000` | heal `35` | `healthRegenPerSecond +2`, `maxHealthPercent +0.1` |
+| `fairy` | heal aura | interval `15000` | heal `35` | `healthRegenPerSecond +1`, `maxHealthPercent +0.1` |
 | `bluebird` | orb | range `150`, cooldown `1250` | damage `26`, speed `340` | `projectileSpeedPercent +0.2`, `armorPierce +0.2` |
 | `eye_monster` | orb | range `130`, cooldown `1500` | damage `28`, speed `260` | `skillRange +30`, `critMultiplier +0.1`, `mark on hit 100%` |
 | `dragon_ice` | orb | range `145`, cooldown `1300` | damage `29`, speed `320` | `freeze on hit 100%`, `effectDurationMultiplier +0.3` |
@@ -462,6 +464,10 @@ Current runtime flow:
 - before the shop opens, the game now rolls `4` stat cards and the player picks `1`
 - pre-shop card reroll costs `10` gold and allows up to `3` rerolls
 - pre-shop card rarity unlocks are: before wave `5` only `normal`, from wave `5` `epic`, from wave `10` `legendary`
+- pre-shop card rarity weights are currently:
+  - before wave `5`: `Normal 100%`
+  - wave `5-9`: `Normal 66.67%`, `Epic 33.33%`
+  - wave `10+`: `Normal 60%`, `Epic 30%`, `Legendary 10%`
 - if the player still has no supporter, clearing wave `3` opens a supporter selection popup before the shop
 - the supporter selection popup at wave `3` shows `4` options and supports rerolling up to `3` times for `10` gold each
 - after the supporter popup at wave `3`, the pre-shop card choice still appears before the shop
@@ -478,7 +484,7 @@ Source: [config/preShopCards.js](./config/preShopCards.js)
 
 - each pre-shop card roll shows `4` unique stat types
 - the same stat type cannot appear twice in the same roll, even across rarities
-- rarity order is weighted as `normal > epic > legendary`
+- rarity order is weighted as `normal > epic > legendary`, currently `60 / 30 / 10` after wave `10`
 - rarity colors are `gray`, `green`, and `orange`
 
 | Card | Normal | Epic | Legendary |
@@ -492,6 +498,7 @@ Source: [config/preShopCards.js](./config/preShopCards.js)
 | Move Speed | `+3%` | `+7%` | `+10%` |
 | Regen | `+0.3` | `+0.5` | `+0.7` |
 | Lifesteal | `+1%` | `+2%` | `+3%` |
+| Dodge | `+3%` | `+5%` | `+7%` |
 
 Debug tooling currently supports:
 

@@ -191,7 +191,7 @@ export default class KnightSlashEffect {
         const facingAngle = Math.atan2(direction.y, direction.x);
         const originX = fromPoint.x + direction.x * config.forwardOffset;
         const originY = fromPoint.y + direction.y * (config.forwardOffset * 0.55);
-        const depth = (target?.depth ?? fromPoint?.depth ?? 20) + (config.depthOffset ?? 10);
+        const depth = options.depth ?? ((target?.depth ?? fromPoint?.depth ?? 20) + (config.depthOffset ?? 10));
 
         const container = this.scene.add.container(originX, originY);
         container.setDepth(depth);

@@ -940,7 +940,7 @@ const RAW_SKILL_CONFIG = {
         visibleDuringEffect: false,
         damage: 24,
         duration: 1000,
-        cooldown: 1100,
+        cooldown: 1700,
         hitboxWidth: 44,
         hitboxHeight: 44,
         meleeHitEffect: {

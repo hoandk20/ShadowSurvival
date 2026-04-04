@@ -3,7 +3,8 @@ export const STATUS_EFFECT_CONFIG = {
         defaultStats: {
             durationMs: 4000,
             damageRatioPerTick: 0.3,
-        minDamagePerTick: 5,
+            minDamagePerTick: 5,
+            reapplyDelayMs: 400,
             maxStacks: 6
         },
         highlightTint: 0xff7a2f,
@@ -46,10 +47,11 @@ export const STATUS_EFFECT_CONFIG = {
         defaultStats: {
             durationMs: 4000,
             damageRatioPerTick: 0.3,
-        minDamagePerTick: 5,
+            minDamagePerTick: 5,
             trailIntervalMs: 700,
             trailDamage: 4,
             antiHealMultiplier: 0.35,
+            reapplyDelayMs: 400,
             maxStacks: 6
         },
         highlightTint: 0x7dff6a,
@@ -75,8 +77,9 @@ export const STATUS_EFFECT_CONFIG = {
         defaultStats: {
             durationMs: 4000,
             damageRatioPerTick: 0.3,
-        minDamagePerTick: 5,
+            minDamagePerTick: 5,
             burstDamage: 10,
+            reapplyDelayMs: 400,
             maxStacks: 10
         },
         highlightTint: 0xff4f6d,

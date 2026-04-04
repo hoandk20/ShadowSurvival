@@ -30,6 +30,7 @@ const MAP_THEME_COLORS = {
     inside_church: 0xb9b0a3,
     maprock_field: 0x8fa7c7
 };
+const PASSIVE_INFO_PANEL_MAX_WIDTH = 220;
 
 const formatCharacterStatLine = (label, totalValue) => `${label}: ${totalValue ?? 0}`;
 
@@ -229,6 +230,15 @@ export default class MainMenuScene extends Phaser.Scene {
             fontSize: isCompact ? '16px' : '18px',
             color: '#fff0c5'
         }));
+        const passiveInfoBadge = this.createPassiveInfoBadge(
+            previewWidth / 2 - 24,
+            -previewHeight / 2 + 24,
+            selectedCharacter.passiveDescription,
+            { panelWidth: Math.min(PASSIVE_INFO_PANEL_MAX_WIDTH, previewWidth - 28) }
+        );
+        if (passiveInfoBadge) {
+            previewPanel.add(passiveInfoBadge);
+        }
         previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, isPortrait ? -52 : -72, isPortrait ? 70 : 88));
         previewPanel.add(this.add.text(0, compactPortrait ? -14 : isPortrait ? -8 : -18, selectedCharacter.description ?? '', {
             fontFamily: 'monospace',
@@ -481,7 +491,76 @@ export default class MainMenuScene extends Phaser.Scene {
             this.selectedCharacterKey = key;
             this.render();
         });
-        container.add([frame, sprite, label, hitArea]);
+        const passiveInfoBadge = this.createPassiveInfoBadge(size / 2 - 12, -size / 2 + 12, config.passiveDescription, {
+            panelWidth: Math.min(170, Math.max(110, size * 1.7)),
+            compact: size <= 72
+        });
+        const children = [frame, sprite, label, hitArea];
+        if (passiveInfoBadge) {
+            children.push(passiveInfoBadge);
+        }
+        container.add(children);
+        return container;
+    }
+
+    createPassiveInfoBadge(x, y, passiveText, options = {}) {
+        const normalizedPassiveText = typeof passiveText === 'string' ? passiveText.trim() : '';
+        if (!normalizedPassiveText) {
+            return null;
+        }
+
+        const compact = options.compact === true;
+        const badgeSize = compact ? 16 : 18;
+        const panelWidth = Math.max(110, options.panelWidth ?? PASSIVE_INFO_PANEL_MAX_WIDTH);
+        const tooltipPadding = compact ? 8 : 10;
+        const tooltipTextStyle = {
+            fontFamily: 'monospace',
+            fontSize: compact ? '9px' : '10px',
+            color: '#fff3cf',
+            align: 'left',
+            stroke: '#000000',
+            strokeThickness: 2,
+            wordWrap: { width: panelWidth - tooltipPadding * 2, useAdvancedWrap: true }
+        };
+
+        const container = this.add.container(x, y);
+        const badge = this.add.graphics();
+        badge.fillStyle(0x101820, 0.95);
+        badge.fillRoundedRect(-badgeSize / 2, -badgeSize / 2, badgeSize, badgeSize, 4);
+        badge.lineStyle(2, UI_COLORS.goldBright, 1);
+        badge.strokeRoundedRect(-badgeSize / 2, -badgeSize / 2, badgeSize, badgeSize, 4);
+        const badgeText = createPixelText(this, 0, 1, 'i', {
+            fontSize: compact ? '10px' : '11px',
+            color: '#fff0c5',
+            strokeThickness: 2
+        });
+        const tooltipText = this.add.text(0, 0, `Passive\n${normalizedPassiveText}`, tooltipTextStyle)
+            .setOrigin(0.5, 0);
+        const tooltipHeight = Math.max(44, tooltipText.height + tooltipPadding * 2 + 8);
+        const tooltip = this.add.container(0, -badgeSize / 2 - 10);
+        const tooltipBackground = this.add.graphics();
+        tooltipBackground.fillStyle(0x140f15, 0.96);
+        tooltipBackground.fillRoundedRect(-panelWidth / 2, -tooltipHeight, panelWidth, tooltipHeight, 8);
+        tooltipBackground.lineStyle(2, UI_COLORS.gold, 1);
+        tooltipBackground.strokeRoundedRect(-panelWidth / 2, -tooltipHeight, panelWidth, tooltipHeight, 8);
+        tooltipText.setPosition(0, -tooltipHeight + tooltipPadding);
+        tooltip.add([tooltipBackground, tooltipText]);
+        tooltip.setVisible(false);
+
+        const hitArea = this.add.rectangle(0, 0, badgeSize + 6, badgeSize + 6, 0xffffff, 0.001)
+            .setInteractive({ useHandCursor: true });
+        hitArea.on('pointerover', () => {
+            tooltip.setVisible(true);
+        });
+        hitArea.on('pointerout', () => {
+            tooltip.setVisible(false);
+        });
+        hitArea.on('pointerdown', (pointer) => {
+            pointer.event?.stopPropagation?.();
+            tooltip.setVisible(!tooltip.visible);
+        });
+
+        container.add([badge, badgeText, tooltip, hitArea]);
         return container;
     }
 

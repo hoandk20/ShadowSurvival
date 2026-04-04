@@ -20,6 +20,7 @@ const SHOP_STAT_HINTS = {
     regen: 'Regen restores health over time each second.',
     lifesteal: 'Lifesteal restores a portion of health based on the damage you deal.',
     shield: 'Shield is extra protection that is consumed before HP.',
+    dodge: 'Dodge is the chance to avoid a hit completely and take no damage from that hit.',
     pickup: 'Pickup shows the current loot collection radius around your character.',
     gold: 'Gold increases how much gold you gain during the run.',
     xp: 'XP increases how much experience you gain, helping you level up faster.'
@@ -248,8 +249,8 @@ export default class HudScene extends Phaser.Scene {
         const kills = runState?.killCount ?? 0;
         const showKillCount = player.hasSkill?.('flame') || player.hasSkill?.('blueflame');
         const waveDurationSeconds = Math.max(0, Math.round(this.mainScene?.currentWaveDurationSeconds ?? 0));
-        const waveElapsedSeconds = Math.floor((this.mainScene?.currentWaveElapsedMs ?? 0) / 1000);
-        const waveRemainingSeconds = Math.max(0, waveDurationSeconds - waveElapsedSeconds);
+        const waveRemainingMs = Math.max(0, this.mainScene?.getCurrentWaveRemainingMs?.() ?? 0);
+        const waveRemainingSeconds = waveRemainingMs <= 0 ? 0 : Math.ceil(waveRemainingMs / 1000);
         const waveRemainingMinutesText = String(Math.floor(waveRemainingSeconds / 60)).padStart(2, '0');
         const waveRemainingSecondsText = String(waveRemainingSeconds % 60).padStart(2, '0');
 
@@ -519,18 +520,36 @@ export default class HudScene extends Phaser.Scene {
         const radius = compact ? 28 : 34;
         const thumbRadius = compact ? 11 : 13;
 
-        this.touchJoystick.setVisible(true);
+        this.touchJoystick.setVisible(false);
         this.touchJoystick.setPosition(marginX, height - marginY);
         this.touchJoystickBase.setRadius(radius);
         this.touchJoystickThumb.setRadius(thumbRadius);
+    }
+
+    shouldShowTouchJoystick() {
+        if (!this.touchJoystick || !this.mainScene?.touchControlsEnabled) return false;
+        if (!this.mainScene?.touchMoveState?.active) return false;
+        if (this.mainScene?.isShopOpen || this.mainScene?.isChoosingCard || this.mainScene?.isChoosingSupporter) return false;
+        if (this.mainScene?.isGameOver || this.mainScene?.isRunComplete) return false;
+        if (this.scene.isActive('PauseMenuScene')) return false;
+        if (this.shopOverlay?.active || this.levelUpOverlay?.active || this.supporterChoiceOverlay?.active || this.preShopCardOverlay?.active) {
+            return false;
+        }
+        return true;
     }
 
     updateTouchJoystick() {
         if (!this.touchJoystick || !this.mainScene?.touchControlsEnabled) return;
         const touchState = this.mainScene.touchMoveState;
         const vector = this.mainScene.getTouchMoveVector?.() ?? { x: 0, y: 0, magnitude: 0, active: false };
-        this.touchJoystick.setVisible(true);
-        this.touchJoystick.setAlpha(touchState?.active ? 1 : 0.7);
+        const shouldShow = this.shouldShowTouchJoystick();
+        this.touchJoystick.setVisible(shouldShow);
+        if (!shouldShow) {
+            this.touchJoystickThumb.setPosition(0, 0);
+            this.touchJoystick.setAlpha(1);
+            return;
+        }
+        this.touchJoystick.setAlpha(1);
 
         if (!touchState?.active) {
             this.touchJoystickThumb.setPosition(0, 0);
@@ -850,6 +869,8 @@ export default class HudScene extends Phaser.Scene {
                 return `${prefix}${Math.round(value * 100)}% lifesteal`;
             case 'shield':
                 return `${prefix}${value} shield`;
+            case 'dodge':
+                return `${prefix}${Math.round(value * 100)}% dodge`;
             case 'moveSpeed':
                 return `${prefix}${value} speed`;
             case 'areaSizeMultiplier':
@@ -954,6 +975,7 @@ export default class HudScene extends Phaser.Scene {
         const regen = Number(player.healthRegenPerSecond ?? 0);
         const lifesteal = Math.round((player.lifesteal ?? 0) * 100);
         const shield = Math.round(player.getTotalShield?.() ?? 0);
+        const dodge = Math.round(Phaser.Math.Clamp(player.dodge ?? 0, 0, 1) * 100);
         const pickupRadius = Math.round((LOOT_CONFIG.magnetRadius ?? 0) * (player.lootMagnetRadiusMultiplier ?? 1));
         const goldGain = Math.round((player.goldGainMultiplier ?? 1) * 100);
         const xpGain = Math.round((player.xpGainMultiplier ?? 1) * 100);
@@ -977,6 +999,7 @@ export default class HudScene extends Phaser.Scene {
             { key: 'regen', label: `Regen ${regen}/s`, hint: SHOP_STAT_HINTS.regen },
             { key: 'lifesteal', label: `Lifesteal ${lifesteal}%`, hint: SHOP_STAT_HINTS.lifesteal },
             { key: 'shield', label: `Shield ${shield}`, hint: SHOP_STAT_HINTS.shield },
+            { key: 'dodge', label: `Dodge ${dodge}%`, hint: SHOP_STAT_HINTS.dodge },
             { key: 'pickup', label: `Pickup ${pickupRadius}`, hint: SHOP_STAT_HINTS.pickup },
             { key: 'gold', label: `Gold ${goldGain}%`, hint: SHOP_STAT_HINTS.gold },
             { key: 'xp', label: `XP ${xpGain}%`, hint: SHOP_STAT_HINTS.xp }
@@ -985,8 +1008,8 @@ export default class HudScene extends Phaser.Scene {
 
     getResponsiveShopGridColumns(availableWidth, isMobileShopLayout = false) {
         const minColumns = 1;
-        const maxColumns = isMobileShopLayout ? 2 : 5;
-        const itemCardWidth = 162;
+        const maxColumns = isMobileShopLayout ? 2 : 4;
+        const itemCardWidth = 188;
         const minGap = isMobileShopLayout ? 10 : 12;
         const columns = Math.floor((Math.max(0, availableWidth) + minGap) / (itemCardWidth + minGap));
         return Phaser.Math.Clamp(columns, minColumns, maxColumns);
@@ -1034,6 +1057,7 @@ export default class HudScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         const isMobileShopLayout = width < 600;
+        const isMobileLandscape = isMobileShopLayout && width > height;
         const safeX = Math.max(10, Math.floor(width * 0.02));
         const safeY = Math.max(10, Math.floor(height * 0.02));
         const panelWidth = Math.min(Math.max(Math.floor(width * 0.96), 400), width - safeX * 2);
@@ -1047,16 +1071,16 @@ export default class HudScene extends Phaser.Scene {
             .setDepth(2000)
             .setInteractive();
         const container = this.add.container(width / 2, height / 2).setDepth(2002).setScrollFactor(0);
-        const panel = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x18110c, 0.98)
+        const panel = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x11171b, 0.97)
             .setOrigin(0.5)
             .setStrokeStyle(3, 0x000000, 1);
-        const panelInner = this.add.rectangle(0, 0, panelWidth - 12, panelHeight - 12, 0x2d1f16, 0.98)
+        const panelInner = this.add.rectangle(0, 0, panelWidth - 12, panelHeight - 12, 0x1b252b, 0.98)
             .setOrigin(0.5)
-            .setStrokeStyle(2, 0xc39a5a, 1);
-        const headerBar = this.add.rectangle(0, -panelHeight / 2 + 26, panelWidth - 28, 30, 0x6b4a22)
+            .setStrokeStyle(2, 0x7e99a8, 1);
+        const headerBar = this.add.rectangle(0, -panelHeight / 2 + 26, panelWidth - 28, 30, 0x25343d)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x000000, 0.9);
-        const footerBar = this.add.rectangle(0, panelHeight / 2 - 22, panelWidth - 28, 24, 0x3b2818, 1)
+        const footerBar = this.add.rectangle(0, panelHeight / 2 - 22, panelWidth - 28, 24, 0x213039, 1)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x000000, 0.9);
         const statsPopupContainer = this.add.container(width / 2, height / 2).setDepth(2004).setScrollFactor(0);
@@ -1120,17 +1144,24 @@ export default class HudScene extends Phaser.Scene {
         statsHintPanel.on('pointerdown', swallowPopupClick);
         statsHintText.on('pointerdown', swallowPopupClick);
         statsLineTexts.forEach((line) => line.on('pointerdown', swallowPopupClick));
-        const title = this.add.text(0, -panelHeight / 2 + 26, 'SHOP', {
-            fontSize: width < 600 ? '18px' : '22px',
+        const title = this.add.text(0, -panelHeight / 2 + 22, 'CHOOSE AN ITEM', {
+            fontSize: width < 600 ? '16px' : '20px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#ffe9a6',
+            color: '#e7f4ff',
             stroke: '#000000',
             strokeThickness: 4
         }).setOrigin(0.5);
-        const goldPanel = this.add.rectangle(panelWidth / 2 - 92, -panelHeight / 2 + 26, 118, 28, 0x1f160f, 1)
+        const subtitle = this.add.text(0, -panelHeight / 2 + 48, 'Buy 1 or more upgrades before the next wave', {
+            fontSize: isMobileShopLayout ? '11px' : '13px',
+            fontFamily: 'monospace',
+            color: '#b7d0db',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        const goldPanel = this.add.rectangle(panelWidth / 2 - 92, -panelHeight / 2 + 26, 118, 28, 0x162026, 1)
             .setOrigin(0.5)
-            .setStrokeStyle(2, 0xd8b15a, 1);
+            .setStrokeStyle(2, 0x8cc4dc, 1);
         const goldIcon = this.add.image(panelWidth / 2 - 138, -panelHeight / 2 + 26, 'item_gold_coin')
             .setOrigin(0.5);
         goldIcon.setDisplaySize(18, 18);
@@ -1138,7 +1169,7 @@ export default class HudScene extends Phaser.Scene {
             fontSize: '18px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#ffe066',
+            color: '#d9f6ff',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0, 0.5);
@@ -1154,14 +1185,14 @@ export default class HudScene extends Phaser.Scene {
             fontSize: width < 600 ? '10px' : '11px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#f3d59d',
+            color: '#b7d0db',
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0.5);
-        const purchasedFrame = this.add.rectangle(0, panelHeight / 2 - 62, panelWidth - 70, 34, 0x1b130d, 1)
+        const purchasedFrame = this.add.rectangle(0, panelHeight / 2 - 62, panelWidth - 70, 34, 0x162026, 1)
             .setOrigin(0.5)
-            .setStrokeStyle(2, 0xc39a5a, 1);
-        const purchasedFrameInner = this.add.rectangle(0, panelHeight / 2 - 62, panelWidth - 76, 28, 0x2a1c13, 1)
+            .setStrokeStyle(2, 0x7e99a8, 1);
+        const purchasedFrameInner = this.add.rectangle(0, panelHeight / 2 - 62, panelWidth - 76, 28, 0x213039, 1)
             .setOrigin(0.5)
             .setStrokeStyle(1, 0x000000, 0.9);
         const purchasedStrip = this.add.container(0, panelHeight / 2 - 50);
@@ -1172,17 +1203,17 @@ export default class HudScene extends Phaser.Scene {
         const emptySlots = slotPositions.map((x) => {
             const slot = this.add.container(0, 0);
             const shadow = this.add.rectangle(2, 3, 82, 82, 0x000000, 0.45).setOrigin(0.5);
-            const bg = this.add.rectangle(0, 0, 82, 82, 0x22170f, 1)
+            const bg = this.add.rectangle(0, 0, 82, 82, 0x162026, 1)
                 .setOrigin(0.5)
                 .setStrokeStyle(2, 0x000000, 1);
-            const inner = this.add.rectangle(0, 0, 72, 72, 0x3a2818, 1)
+            const inner = this.add.rectangle(0, 0, 72, 72, 0x213039, 1)
                 .setOrigin(0.5)
-                .setStrokeStyle(2, 0x8e6a37, 1);
+                .setStrokeStyle(2, 0x556f80, 1);
             const plus = this.add.text(0, -6, '+', {
                 fontSize: '24px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
-                color: '#e5cda2',
+                color: '#d9f6ff',
                 stroke: '#000000',
                 strokeThickness: 3
             }).setOrigin(0.5);
@@ -1190,7 +1221,7 @@ export default class HudScene extends Phaser.Scene {
                 fontSize: '10px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
-                color: '#cbb28b',
+                color: '#9db1bb',
                 stroke: '#000000',
                 strokeThickness: 2
             }).setOrigin(0.5);
@@ -1199,92 +1230,113 @@ export default class HudScene extends Phaser.Scene {
         });
         const itemSlots = slotPositions.map((x) => {
             const slot = this.add.container(0, 0);
-            const shadow = this.add.rectangle(2, 3, 162, 184, 0x000000, 0.45).setOrigin(0.5);
-            const bg = this.add.rectangle(0, 0, 162, 184, 0x22170f, 1)
+            const shadow = this.add.rectangle(4, 6, 188, 190, 0x000000, 0.24).setOrigin(0.5);
+            const bg = this.add.rectangle(0, 0, 188, 190, 0x162026, 0.98)
                 .setOrigin(0.5)
                 .setStrokeStyle(2, 0x000000, 1);
-            const inner = this.add.rectangle(0, 0, 148, 170, 0x3a2818, 1)
+            const inner = this.add.rectangle(0, 0, 180, 182, 0x213039, 0.98)
                 .setOrigin(0.5)
-                .setStrokeStyle(2, 0x8e6a37, 1);
-            const hitArea = this.add.rectangle(0, 0, 162, 184, 0xffffff, 0.001)
+                .setStrokeStyle(3, 0x7e99a8, 1);
+            const hitArea = this.add.rectangle(0, 0, 188, 190, 0xffffff, 0.001)
                 .setOrigin(0.5)
                 .setInteractive({ useHandCursor: true });
-            const iconPlaceholder = this.add.rectangle(0, -60, 14, 14, 0x4a3420, 1)
+            const rarityBar = this.add.rectangle(0, -77, 164, 24, 0x7e99a8, 1)
+                .setOrigin(0.5);
+            const rarityText = this.add.text(0, -77, 'SHOP ITEM', {
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                fontStyle: 'bold',
+                color: '#0b0d0f',
+                stroke: '#ffffff',
+                strokeThickness: 1
+            }).setOrigin(0.5);
+            const iconPlaceholder = this.add.rectangle(0, -38, 18, 18, 0x25343d, 1)
                 .setOrigin(0.5)
-                .setStrokeStyle(2, 0xc39a5a, 1);
+                .setStrokeStyle(2, 0x8cc4dc, 1);
             const iconImage = this.add.image(0, -60, '__missing_texture__')
                 .setOrigin(0.5)
-                .setDisplaySize(12, 12)
+                .setDisplaySize(16, 16)
                 .setVisible(false);
+            iconImage.setPosition(0, -38);
             const iconText = this.add.text(0, -60, '?', {
                 fontSize: '9px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
-                color: '#ffe7ab',
+                color: '#d9f6ff',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5).setPosition(0, -38);
+            const nameText = this.add.text(0, -4, '', {
+                fontSize: width < 600 ? '14px' : '16px',
+                fontFamily: 'monospace',
+                fontStyle: 'bold',
+                color: '#f2f7fa',
+                align: 'center',
+                wordWrap: { width: 152 },
                 stroke: '#000000',
                 strokeThickness: 3
             }).setOrigin(0.5);
-            const nameText = this.add.text(0, -28, '', {
-                fontSize: width < 600 ? '11px' : '12px',
-                fontFamily: 'monospace',
-                fontStyle: 'bold',
-                color: '#fff2cc',
-                align: 'center',
-                wordWrap: { width: 136 },
-                stroke: '#000000',
-                strokeThickness: 2
-            }).setOrigin(0.5);
-            const statLineTexts = [10, 32, 54, 76].map((lineY) => this.add.text(0, lineY, '', {
+            const statLineTexts = [34, 54, 74, 94].map((lineY) => this.add.text(0, lineY, '', {
                 fontSize: width < 600 ? '10px' : '11px',
                 fontFamily: 'monospace',
-                color: '#e3d6bf',
+                color: '#c8d6dc',
                 align: 'center',
-                wordWrap: { width: 136 },
+                wordWrap: { width: 154 },
                 stroke: '#000000',
                 strokeThickness: 2
             }).setOrigin(0.5));
-            const pricePanel = this.add.rectangle(0, 116, 62, 20, 0x1f160f, 1)
+            const pricePanel = this.add.rectangle(0, 122, 76, 22, 0x25343d, 1)
                 .setOrigin(0.5)
-                .setStrokeStyle(1, 0xd8b15a, 1);
+                .setStrokeStyle(1, 0x8cc4dc, 1);
             const priceText = this.add.text(0, 116, '', {
                 fontSize: '11px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
-                color: '#ffe066',
+                color: '#d9f6ff',
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(0.5).setPosition(0, 122);
+            const selectText = this.add.text(0, 150, '', {
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                fontStyle: 'bold',
+                color: '#9db1bb',
                 stroke: '#000000',
                 strokeThickness: 2
             }).setOrigin(0.5);
-            const lockButtonBg = this.add.rectangle(0, 144, 30, 18, 0x463222, 1)
+            const lockButtonBg = this.add.rectangle(-54, 150, 34, 20, 0x25343d, 1)
                 .setOrigin(0.5)
-                .setStrokeStyle(1, 0xc39a5a, 1)
+                .setStrokeStyle(1, 0x8cc4dc, 1)
                 .setInteractive({ useHandCursor: true });
-            const lockButtonText = this.add.text(0, 144, '🔓', {
+            const lockButtonText = this.add.text(-54, 150, '🔓', {
                 fontSize: '11px',
                 fontFamily: 'Arial',
                 fontStyle: 'bold',
-                color: '#fff7dd',
+                color: '#d9f6ff',
                 stroke: '#000000',
                 strokeThickness: 2
             }).setOrigin(0.5);
-            const infoButtonBg = this.add.circle(62, -76, 10, 0x4b3522, 1)
-                .setStrokeStyle(2, 0xc39a5a, 1)
+            const infoButtonBg = this.add.circle(68, -76, 10, 0x25343d, 1)
+                .setStrokeStyle(2, 0x8cc4dc, 1)
                 .setInteractive({ useHandCursor: true });
-            const infoButtonText = this.add.text(62, -76, 'i', {
+            const infoButtonText = this.add.text(68, -76, 'i', {
                 fontSize: '11px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
-                color: '#fff0c7',
+                color: '#d9f6ff',
                 stroke: '#000000',
                 strokeThickness: 2
             }).setOrigin(0.5);
-            hitArea.on('pointerover', () => slot.setScale(1.02));
+            hitArea.on('pointerover', () => slot.setScale(1.03));
             hitArea.on('pointerout', () => slot.setScale(1));
-            slot.add([shadow, bg, inner, iconPlaceholder, iconImage, iconText, nameText, ...statLineTexts, pricePanel, priceText, hitArea, lockButtonBg, lockButtonText, infoButtonBg, infoButtonText]);
+            slot.add([shadow, bg, inner, rarityBar, rarityText, iconPlaceholder, iconImage, iconText, nameText, ...statLineTexts, pricePanel, priceText, selectText, hitArea, lockButtonBg, lockButtonText, infoButtonBg, infoButtonText]);
             slot.setVisible(false);
             return {
                 container: slot,
                 bg,
                 inner,
+                rarityBar,
+                rarityText,
                 hitArea,
                 iconImage,
                 iconText,
@@ -1292,6 +1344,7 @@ export default class HudScene extends Phaser.Scene {
                 statLineTexts,
                 pricePanel,
                 priceText,
+                selectText,
                 lockButtonBg,
                 lockButtonText,
                 infoButtonBg,
@@ -1311,36 +1364,36 @@ export default class HudScene extends Phaser.Scene {
             fontSize: '15px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#fff7dd',
+            color: '#d9f6ff',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
         const rerollButton = this.add.container(panelWidth / 2 - 61, -panelHeight / 2 + 106);
         const rerollButtonShadow = this.add.rectangle(3, 3, 56, 48, 0x000000, 0.45).setOrigin(0.5);
-        const rerollButtonBg = this.add.rectangle(0, 0, 56, 48, 0x7d5a24, 1)
+        const rerollButtonBg = this.add.rectangle(0, 0, 56, 48, 0x25343d, 1)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x000000, 1)
             .setInteractive({ useHandCursor: true });
-        const rerollButtonInner = this.add.rectangle(0, 0, 40, 32, 0xb8893c, 1)
+        const rerollButtonInner = this.add.rectangle(0, 0, 40, 32, 0x30454f, 1)
             .setOrigin(0.5)
-            .setStrokeStyle(2, 0x5a3e18, 1);
+            .setStrokeStyle(2, 0x7e99a8, 1);
         const rerollButtonText = this.add.text(0, -1, '↻', {
             fontSize: '30px',
             fontFamily: 'Arial',
             fontStyle: 'bold',
-            color: '#fff7dd',
+            color: '#d9f6ff',
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0.5);
-        const statsToggleButton = this.add.rectangle(-panelWidth / 2 + 74, -panelHeight / 2 + 26, 120, 24, 0x3b2818, 1)
+        const statsToggleButton = this.add.rectangle(-panelWidth / 2 + 74, -panelHeight / 2 + 26, 120, 24, 0x25343d, 1)
             .setOrigin(0.5)
-            .setStrokeStyle(2, 0xc39a5a, 1)
+            .setStrokeStyle(2, 0x7e99a8, 1)
             .setInteractive({ useHandCursor: true });
         const statsToggleButtonText = this.add.text(-panelWidth / 2 + 74, -panelHeight / 2 + 26, 'SHOW STATS', {
             fontSize: width < 600 ? '10px' : '11px',
             fontFamily: 'monospace',
             fontStyle: 'bold',
-            color: '#f7d89c',
+            color: '#d9f6ff',
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0.5);
@@ -1378,6 +1431,7 @@ export default class HudScene extends Phaser.Scene {
             statsToggleButton,
             statsToggleButtonText,
             title,
+            subtitle,
             goldPanel,
             goldIcon,
             goldText,
@@ -1408,6 +1462,7 @@ export default class HudScene extends Phaser.Scene {
         this.shopHeaderBar = headerBar;
         this.shopFooterBar = footerBar;
         this.shopTitle = title;
+        this.shopSubtitle = subtitle;
         this.shopGoldIcon = goldIcon;
         this.shopGoldText = goldText;
         this.shopGoldPanel = goldPanel;
@@ -1579,28 +1634,41 @@ export default class HudScene extends Phaser.Scene {
             const canAfford = gold >= (item.cost ?? 0);
             const isLocked = item.locked === true;
             const outerStrokeColor = isLocked
-                ? 0xf0c96a
-                : (canAfford ? 0x000000 : 0x3a2920);
+                ? 0xd9c06b
+                : 0x000000;
             const innerStrokeColor = isLocked
                 ? 0xffdf8a
-                : (canAfford ? 0x8e6a37 : 0x6a4d2a);
+                : (canAfford ? 0x7e99a8 : 0x55646d);
             slot.bg?.setStrokeStyle(2, outerStrokeColor, 1);
             slot.inner?.setStrokeStyle(2, innerStrokeColor, 1);
-            slot.bg?.setFillStyle(isLocked ? 0x2f2010 : 0x22170f, 1);
-            slot.inner?.setFillStyle(isLocked ? 0x53381f : 0x3a2818, 1);
+            slot.bg?.setFillStyle(isLocked ? 0x1b252b : 0x162026, 1);
+            slot.inner?.setFillStyle(isLocked ? 0x273740 : 0x213039, 1);
             slot.container?.setAlpha(isLocked ? 1 : 0.96);
-            slot.priceText?.setColor(canAfford ? '#ffe066' : '#ff6b6b');
-            slot.pricePanel?.setStrokeStyle(1, canAfford ? 0xd8b15a : 0xb14a4a, 1);
+            slot.priceText?.setColor(canAfford ? '#d9f6ff' : '#ff8a8a');
+            slot.pricePanel?.setStrokeStyle(1, canAfford ? 0x8cc4dc : 0xb14a4a, 1);
             slot.lockButtonText?.setText(isLocked ? '🔒' : '🔓');
-            slot.lockButtonText?.setColor(isLocked ? '#ffe7ab' : '#d7d7d7');
-            slot.lockButtonBg?.setFillStyle(isLocked ? 0x7a5a22 : 0x463222, 1);
-            slot.lockButtonBg?.setStrokeStyle(1, isLocked ? 0xe0b55a : 0xc39a5a, 1);
+            slot.lockButtonText?.setColor(isLocked ? '#ffe7ab' : '#d9f6ff');
+            slot.lockButtonBg?.setFillStyle(isLocked ? 0x4a5f28 : 0x25343d, 1);
+            slot.lockButtonBg?.setStrokeStyle(1, isLocked ? 0xe0b55a : 0x8cc4dc, 1);
+            slot.rarityBar?.setFillStyle(isLocked ? 0xb99948 : 0x7e99a8, 1);
+            slot.selectText?.setText(canAfford ? '' : 'NOT ENOUGH GOLD');
+            slot.selectText?.setColor(canAfford ? '#9db1bb' : '#ff8a8a');
             slot.hitArea?.removeAllListeners?.();
             slot.hitArea?.disableInteractive();
             if (canAfford) {
                 slot.hitArea?.setInteractive({ useHandCursor: true });
-                slot.hitArea?.on('pointerover', () => slot.container.setScale(1.02));
-                slot.hitArea?.on('pointerout', () => slot.container.setScale(1));
+                slot.hitArea?.on('pointerover', () => {
+                    slot.container.setScale((slot.container.scaleX ?? 1) * 1.03);
+                    slot.bg?.setFillStyle(0x1f2c34, 0.98);
+                    slot.inner?.setStrokeStyle(3, 0x92b7ca, 1);
+                    slot.selectText?.setColor('#ffffff');
+                });
+                slot.hitArea?.on('pointerout', () => {
+                    slot.container.setScale(slot.container.getData('shopBaseScale') ?? 1);
+                    slot.bg?.setFillStyle(isLocked ? 0x1b252b : 0x162026, 1);
+                    slot.inner?.setStrokeStyle(3, innerStrokeColor, 1);
+                    slot.selectText?.setColor('#9db1bb');
+                });
                 slot.hitArea?.on('pointerdown', () => {
                     const nextState = this.shopPurchaseCallback?.(item);
                     if (nextState) {
@@ -1609,7 +1677,7 @@ export default class HudScene extends Phaser.Scene {
                     }
                 });
             } else {
-                slot.container.setScale(1);
+                slot.container.setScale(slot.container.getData('shopBaseScale') ?? 1);
             }
             slot.lockButtonBg?.removeAllListeners?.();
             slot.lockButtonBg?.disableInteractive();
@@ -1726,10 +1794,10 @@ export default class HudScene extends Phaser.Scene {
         const gridAreaPadding = compact ? 16 : 20;
         const gridAvailableWidth = Math.max(120, panelWidth - 54);
         const columns = this.getResponsiveShopGridColumns(gridAvailableWidth, isMobileShopLayout);
-        const itemCardWidth = 162;
-        const slotSpacing = columns <= 1
-            ? 0
-            : Math.max(itemCardWidth + (compact ? 10 : 12), Math.floor((gridAvailableWidth - itemCardWidth) / (columns - 1)));
+        const baseCardWidth = 188;
+        const baseCardHeight = 190;
+        const baseGapX = compact ? 12 : 16;
+        const baseGapY = compact ? 16 : 18;
 
         this.shopOverlay.setSize(width, height);
         this.shopContainer.setPosition(width / 2, height / 2);
@@ -1740,7 +1808,8 @@ export default class HudScene extends Phaser.Scene {
         this.shopFooterBar?.setDisplaySize(panelWidth - 28, 24);
         this.shopHeaderBar?.setPosition(0, -panelHeight / 2 + 26);
         this.shopFooterBar?.setPosition(0, panelHeight / 2 - 22);
-        this.shopTitle?.setPosition(0, -panelHeight / 2 + 26);
+        this.shopTitle?.setPosition(0, -panelHeight / 2 + 22);
+        this.shopSubtitle?.setPosition(0, -panelHeight / 2 + 48);
         this.shopStatsPopupOverlay?.setSize(panelWidth - 40, panelHeight - 40);
         this.shopStatsPopupOverlay?.setVisible(this.shopStatsVisible);
         this.shopStatsToggleButton?.setPosition(-panelWidth / 2 + 74, -panelHeight / 2 + 26);
@@ -1777,7 +1846,6 @@ export default class HudScene extends Phaser.Scene {
         const gridRight = (panelWidth / 2) - gridAreaPadding;
         const gridCenterX = (gridLeft + gridRight) / 2;
         this.shopSectionLabel?.setPosition(gridCenterX, -panelHeight / 2 + 110);
-        const rowSpacing = compact ? 126 : 260;
         const visibleItemTargets = (this.shopItemSlots ?? [])
             .map((slot) => slot?.container)
             .filter((target) => target && target.getData('shopVisible') !== false);
@@ -1786,12 +1854,34 @@ export default class HudScene extends Phaser.Scene {
         const activeTargets = visibleItemTargets.length ? visibleItemTargets : visibleEmptyTargets;
         const totalSlots = Math.max(1, activeTargets.length);
         const rows = Math.max(1, Math.ceil(totalSlots / columns));
-        const bodyCenterY = rows > 1 ? 26 : (compact ? 10 : 6);
-        const gridStartY = bodyCenterY - ((rows - 1) * rowSpacing) / 2;
-        const contentHeight = Math.max(rowSpacing, (rows - 1) * rowSpacing + 184);
         const viewportTop = -panelHeight / 2 + 126;
         const purchasedStripVisible = (this.shopPurchasedItems?.length ?? 0) > 0;
         const viewportBottom = purchasedStripVisible ? panelHeight / 2 - 116 : panelHeight / 2 - 62;
+        const gridViewportWidth = Math.max(1, gridRight - gridLeft);
+        const gridViewportHeight = Math.max(1, viewportBottom - viewportTop);
+        const widthScale = Math.max(
+            0.55,
+            Math.min(
+                1,
+                (gridViewportWidth - Math.max(0, columns - 1) * baseGapX) / Math.max(1, columns * baseCardWidth)
+            )
+        );
+        const heightScale = Math.max(
+            0.55,
+            Math.min(
+                1,
+                (gridViewportHeight - 12 - Math.max(0, rows - 1) * baseGapY) / Math.max(1, rows * baseCardHeight)
+            )
+        );
+        const targetScale = Math.min(widthScale, heightScale, 1);
+        const itemCardWidth = baseCardWidth * targetScale;
+        const itemCardHeight = baseCardHeight * targetScale;
+        const gapX = baseGapX * Math.max(0.85, targetScale);
+        const gapY = baseGapY * Math.max(0.85, targetScale);
+        const slotSpacing = itemCardWidth + gapX;
+        const rowSpacing = itemCardHeight + gapY;
+        const gridStartY = viewportTop + (itemCardHeight / 2) + (compact ? 8 : 12);
+        const contentHeight = Math.max(itemCardHeight, (rows - 1) * rowSpacing + itemCardHeight + (compact ? 8 : 12));
         const viewportHeight = Math.max(1, viewportBottom - viewportTop);
         this.shopScrollMaxOffset = Math.max(0, contentHeight - viewportHeight);
         this.shopScrollOffset = Phaser.Math.Clamp(this.shopScrollOffset ?? 0, 0, this.shopScrollMaxOffset);
@@ -1808,16 +1898,17 @@ export default class HudScene extends Phaser.Scene {
             const rowCount = row === rows - 1
                 ? Math.max(1, totalSlots - row * columns)
                 : columns;
-            const rowWidth = rowCount <= 1 ? itemCardWidth : itemCardWidth + (rowCount - 1) * slotSpacing;
+            const rowWidth = rowCount <= 1 ? itemCardWidth : rowCount * itemCardWidth + (rowCount - 1) * gapX;
             const rowOffsetX = gridCenterX - rowWidth / 2 + itemCardWidth / 2;
             const x = rowOffsetX + col * slotSpacing;
             const y = gridStartY + row * rowSpacing - (this.shopScrollOffset ?? 0);
             target.setPosition(x, y);
-            target.setScale(compact ? 0.9 : 1);
+            target.setScale(targetScale);
+            target.setData('shopBaseScale', targetScale);
             const targetHalfHeight = target.getBounds?.()?.height
                 ? target.getBounds().height / 2
                 : 92;
-            const isVisible = (y - targetHalfHeight) >= viewportTop && (y + targetHalfHeight) <= viewportBottom;
+            const isVisible = (y + targetHalfHeight) >= viewportTop && (y - targetHalfHeight) <= viewportBottom;
             target.setVisible(target.getData('shopVisible') !== false && isVisible);
         };
         this.shopEmptySlots?.forEach((slot) => {
@@ -1831,7 +1922,7 @@ export default class HudScene extends Phaser.Scene {
             }
         });
         activeTargets.forEach((target, index) => layoutGridSlot(target, index));
-        this.shopBodyText?.setPosition(gridCenterX, bodyCenterY + (rows > 1 ? 12 : 60));
+        this.shopBodyText?.setPosition(gridCenterX, viewportTop + 70);
         if (this.shopPurchasedLabel) {
             this.shopPurchasedLabel.setPosition(0, panelHeight / 2 - 98);
         }
@@ -2389,7 +2480,7 @@ export default class HudScene extends Phaser.Scene {
                 align: 'center',
                 wordWrap: { width: cardWidth - 24 }
             }).setOrigin(0.5);
-            const desc = this.add.text(0, 62, cardConfig.description ?? '', {
+            const desc = this.add.text(0, 62, '', {
                 fontSize: '11px',
                 fontFamily: 'monospace',
                 color: '#c8d6dc',
@@ -2398,7 +2489,7 @@ export default class HudScene extends Phaser.Scene {
                 align: 'center',
                 wordWrap: { width: cardWidth - 24 }
             }).setOrigin(0.5);
-            const selectText = this.add.text(0, cardHeight / 2 - 18, 'CLICK TO CLAIM', {
+            const selectText = this.add.text(0, cardHeight / 2 - 18, '', {
                 fontSize: '10px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
@@ -2413,13 +2504,11 @@ export default class HudScene extends Phaser.Scene {
                 card.setScale(1.03);
                 bg.setFillStyle(0x1f2c34, 0.98);
                 frame.setStrokeStyle(3, rarityAccentColor, 1);
-                selectText.setColor('#ffffff');
             });
             hit.on('pointerout', () => {
                 card.setScale(1);
                 bg.setFillStyle(0x162026, 0.98);
                 frame.setStrokeStyle(3, rarityColor, 1);
-                selectText.setColor('#9db1bb');
             });
             hit.on('pointerdown', () => {
                 this.preShopCardSelectCallback?.(cardConfig);

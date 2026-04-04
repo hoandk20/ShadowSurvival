@@ -36,22 +36,22 @@ export const STAGE_SCENARIOS = {
             {
                 durationSeconds: 45,
                 enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 50 } }
+                    { enemyType: 'worm', count: 999, isBoss: false, statsOverride: { maxHealth: 50 } }
                 ]
             },
             {
                 durationSeconds: 999,
                 enemies: [
-                    { enemyType: 'worm', count: 35, statsOverride: { maxHealth: 60 } },
-                    { enemyType: 'kitsume', count: 3, statsOverride: { maxHealth: 2000, damage: 50 } }
+                    { enemyType: 'worm', count: 35, isBoss: false, statsOverride: { maxHealth: 60 } },
+                    { enemyType: 'kitsume', count: 3, isBoss: true, statsOverride: { maxHealth: 2000, damage: 50 } }
                 ]
             },
             {
                 durationSeconds: 45,
                 enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 }
+                    { enemyType: 'worm', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
+                    { enemyType: 'bat', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
+                    { enemyType: 'eyes', count: 10, isBoss: false }
                 ]
             },
             {

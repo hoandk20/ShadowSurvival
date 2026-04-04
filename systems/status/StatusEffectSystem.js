@@ -2,6 +2,7 @@ import { getStatusEffectConfig, getStatusEffectDefaultOptions } from '../../conf
 import StatusSynergyResolver from './StatusSynergyResolver.js';
 
 const DEFAULT_STACKING_MODE = 'refresh';
+const VENOM_TRAIL_POISON_REAPPLY_MS = 1000;
 
 class StatusEffect {
     static effectKey = 'base';
@@ -39,6 +40,7 @@ class StatusEffect {
         ]));
         this.tickIntervalMs = Math.max(0, options.tickIntervalMs ?? this.definition.tickIntervalMs ?? 0);
         this.priority = Number.isFinite(options.priority) ? options.priority : (this.definition.priority ?? 0);
+        this.reapplyDelayMs = Math.max(0, options.reapplyDelayMs ?? this.definition.reapplyDelayMs ?? 0);
         this.elapsedSinceTickMs = 0;
         this.expired = false;
         this.state = {};
@@ -595,6 +597,7 @@ class StatusEffectComponent {
         this.entity = entity;
         this.entityType = options.entityType ?? 'neutral';
         this.activeEffects = [];
+        this.lastEffectApplyTimes = new Map();
         this.statusSpeedMultiplier = 1;
         this.statusIsStunned = false;
         this.lastMoveSample = new Phaser.Math.Vector2(entity.x ?? 0, entity.y ?? 0);
@@ -611,6 +614,8 @@ class StatusEffectComponent {
     applyEffect(effectKey, options = {}) {
         const effect = this.system.createEffect(this, effectKey, options);
         if (!effect) return null;
+        const stackingKey = `${effect.key}::${effect.getStackingKey()}`;
+        const timeNow = this.scene?.time?.now ?? 0;
 
         if (effect.stackingMode !== 'independent') {
             const existing = this.activeEffects.find((entry) => (
@@ -619,11 +624,20 @@ class StatusEffectComponent {
                 && entry.getStackingKey() === effect.getStackingKey()
             ));
             if (existing?.refreshFromOptions?.(options)) {
+                this.lastEffectApplyTimes.set(stackingKey, timeNow);
                 return existing;
             }
         }
 
+        if (effect.stackingMode === 'independent' && effect.reapplyDelayMs > 0) {
+            const lastAppliedAtMs = this.lastEffectApplyTimes.get(stackingKey) ?? -Infinity;
+            if ((timeNow - lastAppliedAtMs) < effect.reapplyDelayMs) {
+                return this.getPrimaryEffect(effect.key);
+            }
+        }
+
         this.activeEffects.push(effect);
+        this.lastEffectApplyTimes.set(stackingKey, timeNow);
         effect.onApply({ entity: this.entity, options });
         this.applyStateContributions();
         return effect;
@@ -830,6 +844,116 @@ export default class StatusEffectSystem {
         this.components = new WeakMap();
         this.synergyResolver = new StatusSynergyResolver(this);
         this.synergyHandler = new StatusSynergyHandler(this);
+        this.activeTrailClouds = [];
+        this.trailPoisonApplyTimes = new WeakMap();
+
+        this.handleSceneUpdate = this.handleSceneUpdate.bind(this);
+        this.handleSceneShutdown = this.handleSceneShutdown.bind(this);
+        this.scene?.events?.on?.(Phaser.Scenes.Events.UPDATE, this.handleSceneUpdate);
+        this.scene?.events?.once?.(Phaser.Scenes.Events.SHUTDOWN, this.handleSceneShutdown);
+    }
+
+    handleSceneUpdate(_time, delta = 0) {
+        this.updateTrailClouds(delta);
+    }
+
+    handleSceneShutdown() {
+        this.scene?.events?.off?.(Phaser.Scenes.Events.UPDATE, this.handleSceneUpdate);
+        this.activeTrailClouds.forEach((cloud) => this.destroyTrailCloud(cloud));
+        this.activeTrailClouds.length = 0;
+    }
+
+    destroyTrailCloud(cloud) {
+        if (!cloud) return;
+        cloud.mistLayers?.forEach((shape) => shape?.destroy?.());
+    }
+
+    updateTrailCloudVisual(cloud) {
+        const lifeRatio = Phaser.Math.Clamp(cloud.remainingMs / Math.max(1, cloud.durationMs), 0, 1);
+        const elapsedRatio = Phaser.Math.Clamp(cloud.elapsedMs / Math.max(1, cloud.durationMs), 0, 1);
+        const pulse = 0.5 + (Math.sin(cloud.pulsePhase) * 0.5);
+        const fadeMultiplier = lifeRatio < 0.15 ? (lifeRatio / 0.15) : 1;
+
+        cloud.mistLayers.forEach((layer, index) => {
+            if (!layer?.active) return;
+            const baseAlpha = cloud.baseAlphas[index] ?? 0.18;
+            const pulseAlpha = cloud.pulseAlphas[index] ?? 0.05;
+            const driftX = cloud.driftX[index] ?? 0;
+            const driftY = cloud.driftY[index] ?? 0;
+            const scaleX = 1 + ((cloud.scaleXAmplitude[index] ?? 0.04) * pulse);
+            const scaleY = 1 + ((cloud.scaleYAmplitude[index] ?? 0.02) * pulse);
+            layer.x = cloud.centerX + (driftX * elapsedRatio);
+            layer.y = cloud.centerY + (driftY * elapsedRatio);
+            layer.alpha = Math.max(0, (baseAlpha + (pulseAlpha * pulse)) * fadeMultiplier);
+            layer.scaleX = scaleX;
+            layer.scaleY = scaleY;
+        });
+    }
+
+    updateTrailCloudDamage(cloud) {
+        const radiusSq = cloud.radius * cloud.radius;
+        const timeNow = this.scene?.time?.now ?? Date.now();
+        const enemyChildren = this.scene?.enemies?.getChildren?.() ?? [];
+        enemyChildren.forEach((target) => {
+            if (!target?.active || target?.isDead) return;
+            const dx = target.x - cloud.centerX;
+            const dy = target.y - cloud.centerY;
+            if ((dx * dx) + (dy * dy) > radiusSq) return;
+            const lastTrailPoisonAt = this.trailPoisonApplyTimes.get(target) ?? -Infinity;
+            if ((timeNow - lastTrailPoisonAt) >= VENOM_TRAIL_POISON_REAPPLY_MS) {
+                const hitDamageSnapshot = this.resolveOwnerDamageSnapshot(
+                    cloud.ownerPlayerId,
+                    cloud.source,
+                    cloud.damage
+                );
+                this.applyEffect(target, 'poison', {
+                    ownerPlayerId: cloud.ownerPlayerId,
+                    source: cloud.source,
+                    durationMs: cloud.poisonDurationMs,
+                        hitDamageSnapshot: Math.max(1, hitDamageSnapshot),
+                        tags: ['poison', 'cloud']
+                });
+                this.trailPoisonApplyTimes.set(target, timeNow);
+            }
+            if (cloud.damage <= 0) return;
+            this.applyOwnedDamage(target, cloud.damage, {
+                ownerPlayerId: cloud.ownerPlayerId,
+                source: cloud.source,
+                tags: cloud.tags,
+                showDamageText: cloud.showDamageText,
+                damageTextColor: '#7dff8d',
+                damageTextFontSize: '7px'
+            });
+        });
+    }
+
+    updateTrailClouds(delta = 0) {
+        if (!this.activeTrailClouds.length) return;
+        const frameDelta = Math.max(0, Number.isFinite(delta) ? delta : 0);
+        for (let index = this.activeTrailClouds.length - 1; index >= 0; index -= 1) {
+            const cloud = this.activeTrailClouds[index];
+            if (!cloud || !cloud.mistLayers?.some?.((shape) => shape?.active)) {
+                this.destroyTrailCloud(cloud);
+                this.activeTrailClouds.splice(index, 1);
+                continue;
+            }
+
+            cloud.elapsedMs += frameDelta;
+            cloud.remainingMs -= frameDelta;
+            cloud.tickAccumulatorMs += frameDelta;
+            cloud.pulsePhase += (frameDelta / cloud.pulseDurationMs) * Math.PI * 2;
+
+            while (cloud.tickAccumulatorMs >= cloud.tickIntervalMs) {
+                cloud.tickAccumulatorMs -= cloud.tickIntervalMs;
+                this.updateTrailCloudDamage(cloud);
+            }
+
+            this.updateTrailCloudVisual(cloud);
+
+            if (cloud.remainingMs > 0) continue;
+            this.destroyTrailCloud(cloud);
+            this.activeTrailClouds.splice(index, 1);
+        }
     }
 
     registerEffect(effectKey, EffectClass) {
@@ -1018,6 +1142,20 @@ export default class StatusEffectSystem {
             }
         }
         return nextOptions;
+    }
+
+    resolveOwnerDamageSnapshot(ownerPlayerId = null, source = null, fallbackDamage = 0) {
+        const ownerPlayer = source?.owner
+            ?? (ownerPlayerId ? this.scene?.getPlayerById?.(ownerPlayerId) : null)
+            ?? null;
+        const sourceSkillKey = source?.skillType
+            ?? source?.ownerSkillKey
+            ?? source?.skillKey
+            ?? null;
+        if (ownerPlayer?.getStatusEffectDamageSnapshot) {
+            return Math.max(0, ownerPlayer.getStatusEffectDamageSnapshot(sourceSkillKey));
+        }
+        return Math.max(0, fallbackDamage ?? 0);
     }
 
     applyConfiguredEffects(statusEntries = [], event = {}) {
@@ -1318,57 +1456,100 @@ export default class StatusEffectSystem {
         const radius = Math.max(12, (options.radius ?? 84) * 0.5);
         const tickIntervalMs = Math.max(100, options.tickIntervalMs ?? 500);
         const durationMs = Math.max(tickIntervalMs, options.durationMs ?? 3000);
-        const damage = Math.max(1, Math.round(options.damage ?? 1));
+        const damage = Math.max(0, Math.round(options.damage ?? 1));
         const poisonDurationMs = Math.max(500, options.poisonDurationMs ?? 3000);
         const showDamageText = Boolean(options.showDamageText);
-        const centerX = entity.x;
-        const centerY = entity.y;
+        const visualProfile = options.visualProfile ?? 'default';
+        const isTrailProfile = visualProfile === 'trail';
+        const centerX = Number.isFinite(options.x) ? options.x : entity.x;
+        const centerY = Number.isFinite(options.y) ? options.y : entity.y;
         const depth = (entity.depth ?? 20) + 1;
         const affectedTargets = new WeakSet();
 
-        const mistLayers = [
-            this.scene.add.ellipse(centerX, centerY, radius * 2.2, radius * 1.35, 0x4dff78, 0.22),
-            this.scene.add.ellipse(centerX - radius * 0.14, centerY + radius * 0.06, radius * 1.7, radius * 1.02, 0xc8ffd2, 0.16)
-        ];
+        const mistLayers = isTrailProfile
+            ? [
+                this.scene.add.ellipse(centerX, centerY + 2, radius * 1.3, radius * 0.6, 0x17684a, 0.18),
+                this.scene.add.ellipse(centerX + radius * 0.12, centerY, radius * 0.92, radius * 0.42, 0x2aa36f, 0.22)
+            ]
+            : [
+                this.scene.add.circle(centerX, centerY + 2, radius * 0.64, 0x49d96a, 0.09),
+                this.scene.add.circle(centerX - radius * 0.3, centerY + radius * 0.1, radius * 0.6, 0xaaffc1, 0.14),
+                this.scene.add.circle(centerX + radius * 0.28, centerY - radius * 0.08, radius * 0.58, 0x7ef0a2, 0.15),
+                this.scene.add.circle(centerX, centerY - radius * 0.04, radius * 0.28, 0xdfffe8, 0.035)
+            ];
         mistLayers.forEach((layer, index) => {
             layer.setDepth(depth + index);
-            layer.setAngle(index === 0 ? -8 : 10);
         });
-        mistLayers[0].setStrokeStyle(2, 0xb7ffbf, 0.18);
+
+        if (isTrailProfile) {
+            const trailCloud = {
+                centerX,
+                centerY,
+                radius,
+                durationMs,
+                remainingMs: durationMs,
+                elapsedMs: 0,
+                tickIntervalMs,
+                tickAccumulatorMs: 0,
+                poisonDurationMs,
+                damage,
+                showDamageText,
+                ownerPlayerId: options.ownerPlayerId ?? null,
+                source: options.source ?? null,
+                tags: options.tags ?? ['poison', 'cloud'],
+                affectedTargets,
+                mistLayers,
+                pulsePhase: Phaser.Math.FloatBetween(0, Math.PI * 2),
+                pulseDurationMs: 1150,
+                baseAlphas: [0.18, 0.24],
+                pulseAlphas: [0.05, 0.06],
+                driftX: [0, radius * 0.05],
+                driftY: [0.75, -0.25],
+                scaleXAmplitude: [0.06, 0.08],
+                scaleYAmplitude: [0.02, 0.03]
+            };
+            this.updateTrailCloudVisual(trailCloud);
+            this.activeTrailClouds.push(trailCloud);
+            return;
+        }
 
         const pulseTween = this.scene.tweens.add({
             targets: mistLayers,
-            alpha: { from: 0.14, to: 0.3 },
-            scaleX: { from: 0.95, to: 1.08 },
-            scaleY: { from: 0.92, to: 1.1 },
-            duration: 680,
+            alpha: { from: 0.08, to: 0.18 },
+            scaleX: { from: 0.98, to: 1.1 },
+            scaleY: { from: 0.98, to: 1.12 },
+            y: `-=${Math.max(1, Math.round(radius * 0.08))}`,
+            duration: 960,
             yoyo: true,
             repeat: -1
         });
 
         const puffEvent = this.scene.time.addEvent({
-            delay: 360,
-            repeat: Math.max(0, Math.floor(durationMs / 360)),
+            delay: 120,
+            repeat: Math.max(0, Math.floor(durationMs / 120)),
             callback: () => {
-                const puffX = centerX + Phaser.Math.Between(-Math.round(radius * 0.9), Math.round(radius * 0.9));
-                const puffY = centerY + Phaser.Math.Between(-Math.round(radius * 0.5), Math.round(radius * 0.5));
-                const puff = this.scene.add.ellipse(
+                const puffX = centerX + Phaser.Math.Between(-Math.round(radius * 0.7), Math.round(radius * 0.7));
+                const puffY = centerY + Phaser.Math.Between(-Math.round(radius * 0.25), Math.round(radius * 0.4));
+                const puffRadius = Phaser.Math.Between(
+                    Math.max(5, Math.round(radius * 0.12)),
+                    Math.max(8, Math.round(radius * 0.2))
+                );
+                const puff = this.scene.add.circle(
                     puffX,
                     puffY,
-                    Phaser.Math.Between(7, 11),
-                    Phaser.Math.Between(4, 8),
-                    0xd9ffe0,
-                    0.22
+                    puffRadius,
+                    Phaser.Math.RND.pick([0xcffff0, 0xaaffc1, 0x6fe88f]),
+                    0.16
                 );
                 puff.setDepth(depth + 3);
                 this.scene.tweens.add({
                     targets: puff,
-                    x: puffX + Phaser.Math.Between(-4, 4),
-                    y: puffY - Phaser.Math.Between(5, 10),
+                    x: puffX + Phaser.Math.Between(-5, 5),
+                    y: puffY - Phaser.Math.Between(8, 14),
                     alpha: 0,
-                    scaleX: 1.35,
-                    scaleY: 1.3,
-                    duration: 420,
+                    scaleX: Phaser.Math.FloatBetween(1.2, 1.45),
+                    scaleY: Phaser.Math.FloatBetween(1.2, 1.45),
+                    duration: Phaser.Math.Between(700, 900),
                     onComplete: () => puff.destroy()
                 });
             }
@@ -1386,15 +1567,21 @@ export default class StatusEffectSystem {
                     const dy = target.y - centerY;
                     if ((dx * dx) + (dy * dy) > radiusSq) return;
                     if (!affectedTargets.has(target)) {
+                        const hitDamageSnapshot = this.resolveOwnerDamageSnapshot(
+                            options.ownerPlayerId ?? null,
+                            options.source ?? null,
+                            damage
+                        );
                         this.applyEffect(target, 'poison', {
                             ownerPlayerId: options.ownerPlayerId ?? null,
                             source: options.source ?? null,
                             durationMs: poisonDurationMs,
-                            hitDamageSnapshot: damage,
+                            hitDamageSnapshot: Math.max(1, hitDamageSnapshot),
                             tags: ['poison', 'cloud']
                         });
                         affectedTargets.add(target);
                     }
+                    if (damage <= 0) return;
                     this.applyOwnedDamage(target, damage, {
                         ownerPlayerId: options.ownerPlayerId ?? null,
                         source: options.source ?? null,
@@ -1409,15 +1596,16 @@ export default class StatusEffectSystem {
 
         this.scene.time.delayedCall(durationMs, () => {
             tickEvent.remove(false);
-            puffEvent.remove(false);
+            puffEvent?.remove?.(false);
             pulseTween?.remove?.();
             mistLayers.forEach((shape) => {
                 this.scene.tweens.add({
                     targets: shape,
                     alpha: 0,
-                    scaleX: 0.8,
-                    scaleY: 0.8,
-                    duration: 180,
+                    scaleX: 0.72,
+                    scaleY: 0.72,
+                    y: '-=8',
+                    duration: 220,
                     onComplete: () => shape.destroy()
                 });
             });

@@ -19,13 +19,14 @@ export const PLAYER_BASE_STATS = Object.freeze({
     goldGainMultiplier: 1,
     healthRegenPerSecond: 0,
     lifesteal: 0,
-    shield: 0
+    shield: 0,
+    dodge: 0
 });
 
 export const ENEMY_BASE_STATS = Object.freeze({
     maxHealth: 10,
-    damage: 10,
-    moveSpeed: 35,
+    damage: 15,
+    moveSpeed: 60,
     armor: 2,
     effectResist: 0,
     attackCooldown: 500,

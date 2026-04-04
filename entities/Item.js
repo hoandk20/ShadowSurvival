@@ -1,4 +1,5 @@
 import { ITEM_CONFIG } from '../config/items.js';
+import { rollChestReward } from '../config/chests.js';
 import { LOOT_CONFIG } from '../config/loot.js';
 import { playSfx } from '../utils/audioSettings.js';
 
@@ -118,11 +119,60 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             case 'health':
                 player.heal(effectiveValue);
                 break;
+            case 'chest':
+                this.applyChestReward(player);
+                this.destroy();
+                return;
             default:
                 player.addXP?.(effectiveValue);
         }
         this.playPickupText();
         this.destroy();
+    }
+
+    applyChestReward(player) {
+        const chestType = this.config?.chestType ?? 'normal';
+        const reward = rollChestReward(chestType);
+        if (!reward) return;
+
+        switch (reward.type) {
+            case 'gold':
+                player.addGold?.(reward.amount ?? 0);
+                break;
+            case 'xp':
+                player.addXP?.(reward.amount ?? 0);
+                break;
+            case 'health':
+                player.heal?.(reward.amount ?? 0);
+                break;
+            case 'stat_card':
+                player.applyCardEffect?.(reward.card);
+                break;
+            case 'enemy_spawn':
+                this.spawnChestEnemyReward(player, reward);
+                break;
+            default:
+                break;
+        }
+
+        this.playAnnouncementText(
+            reward.announcementText ?? this.config?.label ?? 'Chest Reward',
+            reward.announcementColor ?? this.config?.pickupTextColor ?? '#ffffff'
+        );
+    }
+
+    spawnChestEnemyReward(player, reward) {
+        const scene = this.scene;
+        if (!scene?.spawnEnemyAtPosition || !reward?.enemyType) return;
+        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const distance = 120;
+        const x = player.x + Math.cos(angle) * distance;
+        const y = player.y + Math.sin(angle) * distance;
+        scene.spawnEnemyAtPosition(x, y, reward.enemyType, {
+            countsTowardWave: false,
+            isBoss: false,
+            statsOverride: reward.statsOverride ?? { maxHealth: 300 }
+        });
     }
 
     getEffectiveValue() {
@@ -210,6 +260,25 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             y: text.y - 20,
             alpha: 0,
             duration: 420,
+            ease: 'Cubic.easeOut',
+            onComplete: () => text.destroy()
+        });
+    }
+
+    playAnnouncementText(label, color = '#ffffff') {
+        const text = this.scene.add.text(this.x, this.y - 14, label, {
+            fontSize: '8px',
+            fontFamily: '"Press Start 2P", "PixelFont", monospace',
+            color,
+            stroke: '#000000',
+            strokeThickness: 2,
+            align: 'center'
+        }).setOrigin(0.5).setDepth(72);
+        this.scene.tweens.add({
+            targets: text,
+            y: text.y - 24,
+            alpha: 0,
+            duration: 650,
             ease: 'Cubic.easeOut',
             onComplete: () => text.destroy()
         });

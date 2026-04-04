@@ -22,6 +22,7 @@ const DEFAULT_MELEE_ATTACK_CONFIG = Object.freeze({
     windupMs: 110,
     recoveryMs: 120,
     rangePadding: 6,
+    hitConfirmPadding: 18,
     dashSpeed: 280,
     dashDistance: 120,
     dashOvershootDistance: 100
@@ -104,6 +105,7 @@ export default class Enemy extends BaseEntity {
         this.baseStats = null;
         this.currentStats = null;
         this.pendingDeathSource = null;
+        this.isBoss = Boolean(enemyConfig.isBoss);
         this.statusEffectTint = null;
         this.healthText = null;
         this.showHealthText = false;
@@ -403,7 +405,7 @@ export default class Enemy extends BaseEntity {
         if (this.isDashLungeStyle()) {
             if (this.isDashAttacking && !this.dashAttackHitResolved && player?.active && !player?.isDead) {
                 this.dashAttackHitResolved = true;
-                player.takeDamage?.(this.damage ?? 10);
+                player.takeDamage?.(this.damage ?? 10, this, { fromEnemyAttack: true });
                 this.spawnMeleeAttackImpact(player);
                 return true;
             }
@@ -464,9 +466,11 @@ export default class Enemy extends BaseEntity {
         const dx = targetPlayer.x - this.x;
         const dy = targetPlayer.y - this.y;
         const attackDistance = this.getMeleeAttackDistance(targetPlayer);
-        const withinRange = ((dx * dx) + (dy * dy)) <= attackDistance * attackDistance;
+        const hitConfirmPadding = Math.max(0, this.meleeAttackConfig.hitConfirmPadding ?? 0);
+        const confirmedAttackDistance = attackDistance + hitConfirmPadding;
+        const withinRange = ((dx * dx) + (dy * dy)) <= confirmedAttackDistance * confirmedAttackDistance;
         if (withinRange && targetPlayer.takeDamage && !targetPlayer.isDead) {
-            targetPlayer.takeDamage(this.damage ?? 10);
+            targetPlayer.takeDamage(this.damage ?? 10, this, { fromEnemyAttack: true });
             this.spawnMeleeAttackImpact(targetPlayer);
         }
 
@@ -521,7 +525,7 @@ export default class Enemy extends BaseEntity {
             );
             if (hitPlayerDuringDash) {
                 this.dashAttackHitResolved = true;
-                targetPlayer.takeDamage?.(this.damage ?? 10);
+                targetPlayer.takeDamage?.(this.damage ?? 10, this, { fromEnemyAttack: true });
                 this.spawnMeleeAttackImpact(targetPlayer);
                 return;
             }

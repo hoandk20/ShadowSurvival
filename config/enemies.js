@@ -16,7 +16,6 @@ export const ENEMIES = {
     skeleton: createEnemyConfig({
         name: 'Skeleton',
         statsBonus: {
-            moveSpeed: 55,
             attackRange: 200,
             attackCooldown: 900,
             knockbackResist: -0.2
@@ -53,7 +52,6 @@ export const ENEMIES = {
     succubus: createEnemyConfig({
         name: 'Succubus',
         statsBonus: {
-            moveSpeed: 48,
             attackCooldown: 100,
             knockbackResist: -0.2
         },
@@ -69,7 +67,6 @@ export const ENEMIES = {
     lamia: createEnemyConfig({
         name: 'Lamia',
         statsBonus: {
-            moveSpeed: 48,
             attackCooldown: 100,
             knockbackResist: -0.2
         },
@@ -84,9 +81,6 @@ export const ENEMIES = {
     }),
     moth_woman: createEnemyConfig({
         name: 'Moth Woman',
-        statsBonus: {
-            moveSpeed: 45
-        },
         behavior: 'chase',
         texture: 'moth_woman',
         displaySize: scaleDimension({ width: 20, height: 20 }),
@@ -99,9 +93,6 @@ export const ENEMIES = {
     }),
     widow: createEnemyConfig({
         name: 'Widow',
-        statsBonus: {
-            moveSpeed: 48
-        },
         combatType: 'melee',
         attackStyle: 'contact_bite',
         behavior: 'chase',
@@ -114,7 +105,6 @@ export const ENEMIES = {
     medusa: createEnemyConfig({
         name: 'Medusa',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -128,7 +118,6 @@ export const ENEMIES = {
     minotau: createEnemyConfig({
         name: 'Minotau',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -142,7 +131,6 @@ export const ENEMIES = {
     baphomet: createEnemyConfig({
         name: 'Baphomet',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -156,7 +144,6 @@ export const ENEMIES = {
     dino: createEnemyConfig({
         name: 'Dino',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -170,7 +157,6 @@ export const ENEMIES = {
     bugmonster: createEnemyConfig({
         name: 'Bug Monster',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -184,7 +170,6 @@ export const ENEMIES = {
     cursed_maiden: createEnemyConfig({
         name: 'Cursed Maiden',
         statsBonus: {
-            moveSpeed: 45,
             effectResist: 0.6
         },
         behavior: 'chase',
@@ -198,7 +183,6 @@ export const ENEMIES = {
     kitsume: createEnemyConfig({
         name: 'Kitsume',
         statsBonus: {
-            moveSpeed: 55,
             attackRange: 200,
             attackCooldown: 900
         },
@@ -222,9 +206,6 @@ export const ENEMIES = {
     }),
     mummy: createEnemyConfig({
         name: 'Mummy',
-        statsBonus: {
-            moveSpeed: 45
-        },
         behavior: 'chase',
         texture: 'mummy',
         displaySize: { width: 20, height: 20 },
@@ -235,7 +216,6 @@ export const ENEMIES = {
     zombie_woman: createEnemyConfig({
         name: 'Zombie Woman',
         statsBonus: {
-            moveSpeed: 45,
             knockbackResist: 8
         },
         behavior: 'chase',
@@ -247,9 +227,6 @@ export const ENEMIES = {
     }),
     slime: createEnemyConfig({
         name: 'Slime',
-        statsBonus: {
-            moveSpeed: 45
-        },
         combatType: 'melee',
         attackStyle: 'contact_smash',
         behavior: 'chase',
@@ -261,9 +238,6 @@ export const ENEMIES = {
     }),
     worm: createEnemyConfig({
         name: 'Worm',
-        statsBonus: {
-            moveSpeed: 45
-        },
         behavior: 'chase',
         texture: 'worm',
         displaySize: { width: 20, height: 20 },
@@ -273,9 +247,6 @@ export const ENEMIES = {
     }),
     rat: createEnemyConfig({
         name: 'Rat',
-        statsBonus: {
-            moveSpeed: 45
-        },
         behavior: 'chase',
         texture: 'rat',
         displaySize: { width: 20, height: 20 },
@@ -285,9 +256,6 @@ export const ENEMIES = {
     }),
     bat: createEnemyConfig({
         name: 'Bat',
-        statsBonus: {
-            moveSpeed: 48
-        },
         combatType: 'melee',
         attackStyle: 'contact_bite',
         behavior: 'chase',
@@ -299,9 +267,6 @@ export const ENEMIES = {
     }),
     demonbat: createEnemyConfig({
         name: 'Demon Bat',
-        statsBonus: {
-            moveSpeed: 45
-        },
         behavior: 'chase',
         texture: 'demonbat',
         displaySize: { width: 20, height: 20 },
@@ -313,7 +278,6 @@ export const ENEMIES = {
         name: 'Eyes',
         statsBonus: {
             damage: 4,
-            moveSpeed: 20,
             attackCooldown: 350,
             attackRange: 180
         },

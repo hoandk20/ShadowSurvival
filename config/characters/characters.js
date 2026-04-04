@@ -4,7 +4,8 @@ import { createCharacterConfig } from '../stats.js';
 export const CHARACTER_CONFIG = {
     lumina: createCharacterConfig({
         label: 'Lumina',
-        description: 'A light mage, the last beacon against the darkness. Passive: +80 skill range.',
+        description: 'A light mage, the last beacon against the darkness.',
+        passiveDescription: '+40 skill range.',
         assetKey: 'lumina',
         assetFormat: 'spritesheet',
         defaultSkill: 'shooting_star',
@@ -17,6 +18,7 @@ export const CHARACTER_CONFIG = {
     knight: createCharacterConfig({
         label: 'Knight',
         description: 'A heavily armored melee fighter who sweeps a broad blade arc across enemies in front.',
+        passiveDescription: '+20% dodge chance.',
         assetKey: 'knight',
         assetFormat: 'spritesheet',
         defaultSkill: 'slash',
@@ -35,7 +37,8 @@ export const CHARACTER_CONFIG = {
         statsBonus: {
             hp: 20,
             armor: 2,
-            moveSpeed: -5
+            moveSpeed: -5,
+            dodge: 0.2
         },
         size: { width: 22, height: 22 }
     }),

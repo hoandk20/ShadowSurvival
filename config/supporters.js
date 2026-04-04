@@ -127,7 +127,7 @@ export const SUPPORTER_CONFIG = {
         supportGlowColor: 0xf2fff7,
         supportPulseRadius: 10,
         passiveBonuses: {
-            healthRegenPerSecond: 2,
+            healthRegenPerSecond: 1,
             maxHealthPercent: 0.1
         },
         tags: [],

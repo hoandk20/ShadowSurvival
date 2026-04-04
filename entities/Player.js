@@ -7,6 +7,7 @@ import { getCharacterLevelGrowth } from '../config/characterLevelGrowth.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY, getCharacterConfig } from '../config/characters/characters.js';
 import { getCharacterStats, PLAYER_BASE_STATS } from '../config/stats.js';
 import { LOOT_CONFIG } from '../config/loot.js';
+import { getStatusEffectDefaultOptions } from '../config/statusEffects.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
 import SupporterClawEffect from './effects/SupporterClawEffect.js';
 import KnightSlashEffect from './effects/KnightSlashEffect.js';
@@ -24,6 +25,12 @@ const DEFAULT_CHARACTER_HP = PLAYER_BASE_STATS.hp;
 const DEFAULT_CHARACTER_ARMOR = PLAYER_BASE_STATS.armor;
 const MAX_ACTIVE_SKILLS = 6;
 const TARGET_VIEW_MARGIN = 100;
+const POISON_TRAIL_STEP_DISTANCE = 24;
+const POISON_TRAIL_SPAWN_INTERVAL_MS = 72;
+const POISON_TRAIL_MOVEMENT_START_DELAY_MS = 180;
+const POISON_TRAIL_CLOUD_RADIUS = 44;
+const POISON_TRAIL_CLOUD_DURATION_MS = 1085;
+const POISON_TRAIL_POISON_DURATION_MS = 2200;
 
 const getRunState = (scene, player) => scene?.getRunStateForPlayer?.(player) ?? null;
 
@@ -47,6 +54,7 @@ export default class Player extends BaseEntity {
         this.armor = characterStats.armor ?? DEFAULT_CHARACTER_ARMOR;
         this.armorPierce = Math.max(0, characterStats.armorPierce ?? PLAYER_BASE_STATS.armorPierce ?? 0);
         this.skillRange = Math.max(0, characterStats.skillRange ?? PLAYER_BASE_STATS.skillRange ?? 0);
+        this.dodge = Phaser.Math.Clamp(characterStats.dodge ?? PLAYER_BASE_STATS.dodge ?? 0, 0, 1);
         this.displayedHealth = this.health;
         this.level = 1;
         this.currentXP = 0;
@@ -65,6 +73,7 @@ export default class Player extends BaseEntity {
         this.bonusMaxHealthFlat = 0;
         this.bonusMaxHealthPercent = 0;
         this.levelGrowthMaxHealthBonus = 0;
+        this.levelGrowthArmorBonus = 0;
         this.bonusArmor = 0;
         this.bonusArmorPierce = 0;
         this.bonusSkillRange = 0;
@@ -94,6 +103,7 @@ export default class Player extends BaseEntity {
         this.shieldRegenAmount = 0;
         this.shieldRegenIntervalMs = 30000;
         this.shieldRegenTimer = 0;
+        this.dodgeFeedbackTween = null;
         this.globalProjectileSpeedMultiplier = 1;
         this.globalSkillAreaMultiplier = 1;
         this.globalSkillDurationMultiplier = 1;
@@ -110,6 +120,9 @@ export default class Player extends BaseEntity {
         this.skillKnockbackCountBonuses = {};
         this.skillRuntimeConfigOverrides = {};
         this.readyAnimated = false;
+        this.poisonTrailDistanceAccumulator = 0;
+        this.poisonTrailSpawnTimer = 0;
+        this.poisonTrailMovementDelayTimer = 0;
 
         // Skill cooldown
         this.skillCooldownOffset = 0;
@@ -146,7 +159,7 @@ export default class Player extends BaseEntity {
     }
 
     spawnMeleeHitEffect(target, options = {}) {
-        if (!target?.active) return;
+        if (!target) return;
         const skillConfig = options.skill?.config
             ?? (options.skillKey ? this.getSkillConfig(options.skillKey) : null);
         if (skillConfig?.category !== 'melee') return;
@@ -154,6 +167,7 @@ export default class Player extends BaseEntity {
         const effectConfig = skillConfig?.meleeHitEffect
             ?? this.characterConfig?.meleeHitEffect
             ?? {};
+        const effectDepth = Math.max(this.depth ?? 0, target.depth ?? 0, 20) + 10;
         if ((effectConfig.style === 'arcSweep' || effectConfig.style === 'knightSlash') && options.skill) {
             if (options.skill.__meleeEffectSpawned) return;
             options.skill.__meleeEffectSpawned = true;
@@ -186,6 +200,7 @@ export default class Player extends BaseEntity {
                 forwardOffset: effectConfig.forwardOffset,
                 flashWidth: effectConfig.flashWidth ?? effectConfig.arcWidth,
                 centerFlashRadius: effectConfig.centerFlashRadius ?? effectConfig.impactRadius,
+                depth: effectDepth,
                 direction
             });
             return;
@@ -211,7 +226,7 @@ export default class Player extends BaseEntity {
             offsetX: effectConfig.offsetX,
             offsetY: effectConfig.offsetY,
             direction,
-            depth: (target.depth ?? 20) + 10
+            depth: effectDepth
         });
     }
 
@@ -485,8 +500,111 @@ export default class Player extends BaseEntity {
         this.updateItemShield(delta);
         this.attractLoot(delta);
         super.update(time, delta);
+        let deltaX = this.body?.deltaX?.() ?? (this.x - this.lastTrackedPosition.x);
+        let deltaY = this.body?.deltaY?.() ?? (this.y - this.lastTrackedPosition.y);
+        if (Math.abs(deltaX) < 0.01 && Math.abs(deltaY) < 0.01 && isMoving && Number.isFinite(delta)) {
+            deltaX = velocityX * (delta / 1000);
+            deltaY = velocityY * (delta / 1000);
+        }
+        const movedDistanceThisFrame = Math.hypot(deltaX, deltaY);
+        const previousX = this.x - deltaX;
+        const previousY = this.y - deltaY;
+        this.updatePoisonTrail(
+            movedDistanceThisFrame,
+            previousX,
+            previousY,
+            this.x,
+            this.y,
+            delta,
+            isMoving
+        );
         this.wasMovingLastFrame = isMoving;
         this.lastTrackedPosition.set(this.x, this.y);
+    }
+
+    hasVenomTrailEnabled() {
+        const runState = getRunState(this.scene, this);
+        if (!runState) return false;
+        const hasPurchasedVenomTrail = (runState.shopPurchaseCounts?.venom_trail ?? 0) > 0
+            || (Array.isArray(runState.shopPurchasedItemIds) && runState.shopPurchasedItemIds.includes('venom_trail'));
+        if (hasPurchasedVenomTrail) return true;
+        return Object.values(runState.shopEffectBonuses ?? {}).some((itemBonuses) => {
+            const poisonBonuses = itemBonuses?.poison;
+            return Boolean(poisonBonuses?.spawnTrail);
+        });
+    }
+
+    updatePoisonTrail(
+        movedDistance = 0,
+        fromX = this.x,
+        fromY = this.y,
+        toX = this.x,
+        toY = this.y,
+        delta = 0,
+        isMoving = false
+    ) {
+        if (!this.scene?.statusEffectSystem || this.isDead) return;
+        if (!this.hasVenomTrailEnabled()) {
+            this.poisonTrailDistanceAccumulator = 0;
+            this.poisonTrailSpawnTimer = 0;
+            this.poisonTrailMovementDelayTimer = 0;
+            return;
+        }
+        if (isMoving && Number.isFinite(delta) && delta > 0) {
+            if (!this.wasMovingLastFrame) {
+                this.poisonTrailMovementDelayTimer = POISON_TRAIL_MOVEMENT_START_DELAY_MS;
+                this.poisonTrailSpawnTimer = 0;
+            }
+            if (this.poisonTrailMovementDelayTimer > 0) {
+                this.poisonTrailMovementDelayTimer = Math.max(0, this.poisonTrailMovementDelayTimer - delta);
+                return;
+            }
+            this.poisonTrailSpawnTimer += delta;
+            while (this.poisonTrailSpawnTimer >= POISON_TRAIL_SPAWN_INTERVAL_MS) {
+                const direction = this.lastMoveDirection?.lengthSq?.() > 0
+                    ? this.lastMoveDirection
+                    : new Phaser.Math.Vector2(1, 0);
+                this.spawnPoisonTrailCloud(
+                    toX - (direction.x * 20),
+                    toY - (direction.y * 20)
+                );
+                this.poisonTrailSpawnTimer -= POISON_TRAIL_SPAWN_INTERVAL_MS;
+            }
+        } else {
+            this.poisonTrailSpawnTimer = 0;
+            this.poisonTrailMovementDelayTimer = 0;
+        }
+        this.poisonTrailDistanceAccumulator = Number.isFinite(movedDistance) ? movedDistance : 0;
+    }
+
+    spawnPoisonTrailCloud(x = this.x, y = this.y) {
+        const statusEffectSystem = this.scene?.statusEffectSystem;
+        if (!statusEffectSystem) return;
+        const activeSkillKey = this.getActiveSkillKey?.() ?? null;
+        const poisonDefaults = getStatusEffectDefaultOptions('poison');
+        const poisonDurationMs = Math.max(
+            500,
+            Math.round((poisonDefaults?.durationMs ?? POISON_TRAIL_POISON_DURATION_MS) * (this.globalEffectDurationMultiplier ?? 1))
+        );
+        statusEffectSystem.spawnPoisonCloud(this, {
+            x,
+            y,
+            radius: POISON_TRAIL_CLOUD_RADIUS,
+            durationMs: POISON_TRAIL_CLOUD_DURATION_MS,
+            tickIntervalMs: 180,
+            visualProfile: 'trail',
+            poisonDurationMs,
+            damage: 0,
+            ownerPlayerId: this.playerId,
+            source: {
+                owner: this,
+                ownerPlayerId: this.playerId,
+                playerId: this.playerId,
+                skillType: activeSkillKey
+            },
+            tags: ['poison', 'trail', 'cloud'],
+            showDamageText: false
+        });
     }
 
     trackMovedDistance() {
@@ -499,7 +617,9 @@ export default class Player extends BaseEntity {
             this.lastTrackedPosition = new Phaser.Math.Vector2(this.x, this.y);
             return;
         }
-        const movedDistance = Phaser.Math.Distance.Between(previous.x, previous.y, this.x, this.y);
+        const deltaX = this.body?.deltaX?.() ?? (this.x - previous.x);
+        const deltaY = this.body?.deltaY?.() ?? (this.y - previous.y);
+        const movedDistance = Math.hypot(deltaX, deltaY);
         if (!Number.isFinite(movedDistance) || movedDistance <= 0) return;
         runState.totalMovedDistance = (runState.totalMovedDistance ?? 0) + movedDistance;
     }
@@ -746,8 +866,23 @@ export default class Player extends BaseEntity {
             isCritical: options?.isCritical ?? false
         }) ?? { amount, absorbedDamage: 0 };
         const incomingAmount = incomingDamageContext.amount ?? amount ?? 0;
+        const dodgeChance = Phaser.Math.Clamp(this.dodge ?? 0, 0, 1);
+        if (incomingAmount > 0 && dodgeChance > 0 && Math.random() < dodgeChance) {
+            this.playDodgeFeedback();
+            return {
+                healthDamage: 0,
+                absorbedDamage: incomingDamageContext.absorbedDamage ?? 0,
+                didKill: false,
+                dodged: true
+            };
+        }
         const armorValue = Number.isFinite(this.armor) ? this.armor : DEFAULT_CHARACTER_ARMOR;
-        const mitigatedDamage = Math.max(0, Math.round(incomingAmount - armorValue));
+        const isEnemyDamageSource = options?.fromEnemyAttack === true
+            || options?.fromEnemyProjectile === true
+            || source?.constructor?.name === 'Enemy';
+        const mitigatedDamage = isEnemyDamageSource && incomingAmount > 0
+            ? Math.max(1, Math.round(incomingAmount - armorValue))
+            : Math.max(0, Math.round(incomingAmount - armorValue));
         let remainingDamage = mitigatedDamage;
         if (this.itemShieldValue > 0) {
             const absorbedDamage = Math.min(this.itemShieldValue, remainingDamage);
@@ -843,7 +978,9 @@ export default class Player extends BaseEntity {
     playFloatingAnnouncementEffect(x, y, {
         text = 'LEVEL UP',
         glowColor = 0xffd966,
-        textColor = '#ffe066'
+        textColor = '#ffe066',
+        fontSize = '18px',
+        alpha = 1
     } = {}) {
         const scene = this.scene;
         if (!scene) return;
@@ -863,12 +1000,12 @@ export default class Player extends BaseEntity {
         });
 
         const announcementText = scene.add.text(x, y - heightOffset - 20, text, {
-            fontSize: '18px',
+            fontSize,
             fontFamily: 'Arial',
             color: textColor,
             stroke: '#000000',
             strokeThickness: 3
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setAlpha(alpha);
         scene.tweens.add({
             targets: announcementText,
             y: announcementText.y - 30,
@@ -887,6 +1024,36 @@ export default class Player extends BaseEntity {
             text: 'LEVEL UP',
             glowColor: 0xffd966,
             textColor: '#ffe066'
+        });
+    }
+
+    playDodgeFeedback() {
+        const scene = this.scene;
+        if (!scene || !this.active) return;
+        this.playFloatingAnnouncementEffect(this.x, this.y, {
+            text: 'MISS',
+            glowColor: 0x8ff7ff,
+            textColor: '#bffcff',
+            fontSize: '9px',
+            alpha: 0.72
+        });
+        this.dodgeFeedbackTween?.stop?.();
+        this.clearTint();
+        this.setAlpha(1);
+        this.dodgeFeedbackTween = scene.tweens.add({
+            targets: this,
+            alpha: { from: 0.42, to: 1 },
+            duration: 70,
+            yoyo: true,
+            ease: 'Sine.easeOut',
+            onStart: () => {
+                this.setTint(0xbffcff);
+            },
+            onComplete: () => {
+                this.setAlpha(1);
+                this.clearTint();
+                this.dodgeFeedbackTween = null;
+            }
         });
     }
 
@@ -1012,6 +1179,9 @@ export default class Player extends BaseEntity {
                 break;
             case 'lifesteal':
                 this.lifesteal = Math.max(0, (this.lifesteal ?? 0) + (effect.value ?? 0));
+                break;
+            case 'dodge':
+                this.dodge = Phaser.Math.Clamp((this.dodge ?? 0) + (effect.value ?? 0), 0, 1);
                 break;
             case 'lootMagnetRadiusPercent':
                 this.lootMagnetRadiusMultiplier *= (1 + (effect.value ?? 0));
@@ -1412,6 +1582,7 @@ export default class Player extends BaseEntity {
             this.runtimeDefaultSkillKey = this.runtimeDefaultSkillKey ?? defaultSkill;
             this.syncCharacterLevelGrowth();
             this.updateArmorFromConfig();
+            this.updateDodgeFromConfig();
             this.updateSkillRangeFromConfig();
             this.updateSpeedFromConfig();
             return this.runtimeDefaultSkillKey;
@@ -1453,6 +1624,7 @@ export default class Player extends BaseEntity {
         this.idleFrameIndex = config?.idleFrameIndex ?? this.idleFrameIndex;
         this.syncCharacterLevelGrowth();
         this.updateArmorFromConfig();
+        this.updateDodgeFromConfig();
         this.updateSkillRangeFromConfig();
         this.updateSpeedFromConfig();
         return defaultSkill;
@@ -1467,6 +1639,10 @@ export default class Player extends BaseEntity {
             this.bonusMaxHealthFlat -= this.levelGrowthMaxHealthBonus;
         }
         this.levelGrowthMaxHealthBonus = 0;
+        if ((this.levelGrowthArmorBonus ?? 0) !== 0) {
+            this.bonusArmor -= this.levelGrowthArmorBonus;
+        }
+        this.levelGrowthArmorBonus = 0;
 
         Object.entries(this.levelGrowthSkillDamageBonuses ?? {}).forEach(([skillKey, value]) => {
             if (!skillKey || !value) return;
@@ -1486,6 +1662,12 @@ export default class Player extends BaseEntity {
                 this.bonusMaxHealthFlat += hpBonus;
             }
 
+            const armorBonus = Math.max(0, Number(growthConfig.armorPerLevel) || 0) * gainedLevels;
+            if (armorBonus > 0) {
+                this.levelGrowthArmorBonus = armorBonus;
+                this.bonusArmor += armorBonus;
+            }
+
             const damageBonus = Math.max(0, Number(growthConfig.damagePerLevel) || 0) * gainedLevels;
             const growthSkillKey = growthConfig.skillKey
                 ?? this.characterConfig?.defaultSkill
@@ -1497,6 +1679,7 @@ export default class Player extends BaseEntity {
         }
 
         this.updateHealthFromCharacterConfig();
+        this.updateArmorFromConfig();
         if (healForMaxHealthGain) {
             const gainedMaxHealth = Math.max(0, this.maxHealth - previousMaxHealth);
             if (gainedMaxHealth > 0) {
@@ -1531,6 +1714,11 @@ export default class Player extends BaseEntity {
     updateArmorPierceFromConfig() {
         const baseArmorPierce = this.resolveCharacterStats()?.armorPierce ?? PLAYER_BASE_STATS.armorPierce ?? 0;
         this.armorPierce = Math.max(0, baseArmorPierce + (this.bonusArmorPierce ?? 0));
+    }
+
+    updateDodgeFromConfig() {
+        const baseDodge = this.resolveCharacterStats()?.dodge ?? PLAYER_BASE_STATS.dodge ?? 0;
+        this.dodge = Phaser.Math.Clamp(baseDodge, 0, 1);
     }
 
     updateSkillRangeFromConfig() {

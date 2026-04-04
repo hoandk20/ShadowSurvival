@@ -6,7 +6,7 @@ export const PRE_SHOP_CARD_RARITIES = Object.freeze({
         label: 'Normal',
         color: 0xa3a3a3,
         accentColor: 0xd9d9d9,
-        weight: 70,
+        weight: 60,
         unlockWave: 1
     }),
     epic: Object.freeze({
@@ -14,7 +14,7 @@ export const PRE_SHOP_CARD_RARITIES = Object.freeze({
         label: 'Epic',
         color: 0x3e9b54,
         accentColor: 0x92ef8a,
-        weight: 24,
+        weight: 30,
         unlockWave: 5
     }),
     legendary: Object.freeze({
@@ -22,7 +22,7 @@ export const PRE_SHOP_CARD_RARITIES = Object.freeze({
         label: 'Legendary',
         color: 0xc96b21,
         accentColor: 0xffc36b,
-        weight: 6,
+        weight: 10,
         unlockWave: 10
     })
 });
@@ -125,6 +125,17 @@ const PRE_SHOP_CARD_DEFINITIONS = Object.freeze([
             normal: 0.01,
             epic: 0.02,
             legendary: 0.03
+        })
+    }),
+    Object.freeze({
+        key: 'dodge',
+        label: 'Dodge',
+        effectType: 'dodge',
+        unit: '%',
+        values: Object.freeze({
+            normal: 0.03,
+            epic: 0.05,
+            legendary: 0.07
         })
     })
 ]);

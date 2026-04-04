@@ -1,29 +1,31 @@
 export const ITEM_CONFIG = {
     xp_orb: {
         textureKey: 'xp_orb_icon',
+        assetPath: 'assets/shopitem/xp.png',
         label: 'XP Orb',
         type: 'xp',
         baseValue: 5,
         outerColor: 0x4fe4ff,
         innerColor: 0xffffff,
-        size: 11,
+        size: 9,
         displayScale: 1,
         pickupTextColor: '#a0f5ff',
         floatAmplitude: 3,
-        displaySize: 11
+        displaySize: 9
     },
     gold_coin: {
         textureKey: 'item_gold_coin',
+        assetPath: 'assets/shopitem/coin.png',
         label: 'Gold Coin',
         type: 'gold',
         baseValue: 1,
         outerColor: 0xf5d350,
         innerColor: 0xc37f08,
-        size: 11,
+        size: 10,
         displayScale: 1,
         pickupTextColor: '#ffe066',
         floatAmplitude: 5,
-        displaySize: 11
+        displaySize: 10
     },
     health_flask: {
         textureKey: 'item_hp',
@@ -37,6 +39,42 @@ export const ITEM_CONFIG = {
         pickupTextColor: '#ffb8c9',
         floatAmplitude: 5,
         displaySize: 8
+    },
+    chest_normal: {
+        textureKey: 'item_chest_normal',
+        assetPath: 'assets/shopitem/chestnormal.png',
+        label: 'Normal Chest',
+        type: 'chest',
+        chestType: 'normal',
+        baseValue: 1,
+        displayScale: 1,
+        pickupTextColor: '#cfd6df',
+        floatAmplitude: 4,
+        displaySize: 18
+    },
+    chest_good: {
+        textureKey: 'item_chest_good',
+        assetPath: 'assets/shopitem/chestgood.png',
+        label: 'Good Chest',
+        type: 'chest',
+        chestType: 'good',
+        baseValue: 1,
+        displayScale: 1,
+        pickupTextColor: '#8df7a7',
+        floatAmplitude: 4,
+        displaySize: 18
+    },
+    chest_rare: {
+        textureKey: 'item_chest_rare',
+        assetPath: 'assets/shopitem/chestrare.png',
+        label: 'Rare Chest',
+        type: 'chest',
+        chestType: 'rare',
+        baseValue: 1,
+        displayScale: 1,
+        pickupTextColor: '#ffbf69',
+        floatAmplitude: 4,
+        displaySize: 18
     }
 };
 

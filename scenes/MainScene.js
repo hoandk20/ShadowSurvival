@@ -1232,7 +1232,7 @@ export default class MainScene extends Phaser.Scene {
             .map(([effectKey]) => definitions[effectKey])
             .find(Boolean);
         if (!selectedEntry) {
-            return { statusEffects: [], tags: [] };
+            return null;
         }
         return {
             tags: Array.from(new Set(selectedEntry.tags ?? [])),
@@ -1245,8 +1245,17 @@ export default class MainScene extends Phaser.Scene {
         const existingOverride = this.player.skillRuntimeConfigOverrides?.[skillKey] ?? {};
         const nextOverride = { ...existingOverride };
         const debugOverride = this.buildDebugSkillEffectOverride(skillKey);
-        nextOverride.tags = debugOverride.tags;
-        nextOverride.statusEffects = debugOverride.statusEffects;
+        if (!debugOverride) {
+            if (Object.prototype.hasOwnProperty.call(nextOverride, 'tags')) {
+                delete nextOverride.tags;
+            }
+            if (Object.prototype.hasOwnProperty.call(nextOverride, 'statusEffects')) {
+                delete nextOverride.statusEffects;
+            }
+        } else {
+            nextOverride.tags = debugOverride.tags;
+            nextOverride.statusEffects = debugOverride.statusEffects;
+        }
         this.player.setSkillRuntimeOverrides(skillKey, nextOverride);
     }
 
@@ -1391,11 +1400,13 @@ export default class MainScene extends Phaser.Scene {
     spawnEnemyAtPosition(x, y, enemyType, options = {}) {
         if (!enemyType || !this.canSpawnMoreEnemies()) return null;
         const enemy = new Enemy(this, x, y, enemyType);
+        enemy.isBoss = Boolean(options.isBoss ?? options.waveSpawnEntry?.isBoss ?? enemy.isBoss);
         enemy.countsTowardWave = options.countsTowardWave === true;
         enemy.waveNumber = enemy.countsTowardWave ? (options.waveNumber ?? this.currentWaveNumber) : null;
         enemy.waveSpawnEntry = options.waveSpawnEntry ? {
             enemyType: options.waveSpawnEntry.enemyType ?? enemyType,
-            statsOverride: options.waveSpawnEntry.statsOverride ? { ...options.waveSpawnEntry.statsOverride } : null
+            statsOverride: options.waveSpawnEntry.statsOverride ? { ...options.waveSpawnEntry.statsOverride } : null,
+            isBoss: Boolean(options.waveSpawnEntry.isBoss)
         } : null;
         const healthMultiplier = getScenarioEnemyHealthMultiplier(this, this.stageScenario);
         if (healthMultiplier !== 1) {
@@ -1473,7 +1484,8 @@ export default class MainScene extends Phaser.Scene {
         this.waveEnemyCount = this.currentWavePlan.length || ENEMIES_PER_WAVE;
         this.waveSpawnQueue = this.currentWavePlan.map((entry) => ({
             enemyType: entry.enemyType,
-            statsOverride: entry.statsOverride ? { ...entry.statsOverride } : null
+            statsOverride: entry.statsOverride ? { ...entry.statsOverride } : null,
+            isBoss: Boolean(entry.isBoss)
         }));
         this.waveSpawnRemaining = this.waveEnemyCount;
         this.waveKillCount = 0;
@@ -1528,7 +1540,8 @@ export default class MainScene extends Phaser.Scene {
             for (let index = 0; index < count; index += 1) {
                 entries.push({
                     enemyType,
-                    statsOverride: group?.statsOverride ? { ...group.statsOverride } : null
+                    statsOverride: group?.statsOverride ? { ...group.statsOverride } : null,
+                    isBoss: Boolean(group?.isBoss)
                 });
             }
         });
@@ -1543,6 +1556,7 @@ export default class MainScene extends Phaser.Scene {
                 countsTowardWave: true,
                 waveNumber: this.currentWaveNumber,
                 statsOverride: nextEntry.statsOverride,
+                isBoss: nextEntry.isBoss,
                 waveSpawnEntry: nextEntry
             });
         }
@@ -1553,7 +1567,8 @@ export default class MainScene extends Phaser.Scene {
         if (!enemy?.waveSpawnEntry || !Array.isArray(this.waveSpawnQueue)) return;
         this.waveSpawnQueue.unshift({
             enemyType: enemy.waveSpawnEntry.enemyType,
-            statsOverride: enemy.waveSpawnEntry.statsOverride ? { ...enemy.waveSpawnEntry.statsOverride } : null
+            statsOverride: enemy.waveSpawnEntry.statsOverride ? { ...enemy.waveSpawnEntry.statsOverride } : null,
+            isBoss: Boolean(enemy.waveSpawnEntry.isBoss)
         });
     }
 
@@ -1569,9 +1584,13 @@ export default class MainScene extends Phaser.Scene {
 
     hasCurrentWaveTimedOut() {
         if (!this.waveSystemEnabled || this.waveStartPending || this.waveEnding) return false;
+        return this.getCurrentWaveRemainingMs() <= 0;
+    }
+
+    getCurrentWaveRemainingMs() {
         const durationMs = Math.max(0, Math.round((this.currentWaveDurationSeconds ?? 0) * 1000));
-        if (durationMs <= 0) return false;
-        return (this.currentWaveElapsedMs ?? 0) >= durationMs;
+        if (durationMs <= 0) return 0;
+        return Math.max(0, durationMs - Math.max(0, this.currentWaveElapsedMs ?? 0));
     }
 
     clearActiveWaveEnemies() {
@@ -1585,6 +1604,10 @@ export default class MainScene extends Phaser.Scene {
         this.respawnPool = 0;
     }
 
+    clearActiveWaveLoot() {
+        this.lootSystem?.clearGroundItems?.();
+    }
+
     endCurrentWave(reason = 'cleared') {
         if (!this.waveSystemEnabled || this.waveEnding || this.waveShopPending || this.isShopOpen || this.isRunComplete) return;
         this.waveEnding = true;
@@ -1592,7 +1615,8 @@ export default class MainScene extends Phaser.Scene {
         this.waveSpawnQueue = [];
         this.waveKillCount = this.waveEnemyCount;
         if (reason === 'timeout') {
-            this.clearActiveWaveEnemies();
+            this.clearAllActiveEnemiesAndProjectiles();
+            this.clearActiveWaveLoot();
         }
         this.handleWaveCleared();
     }
@@ -2042,16 +2066,39 @@ export default class MainScene extends Phaser.Scene {
         this.resetTouchMoveState();
         this.physics.world.pause();
         this.scene.pause('HudScene');
+        if (this.player?.active) {
+            this.skillBehaviorPipeline?.effects?.spawnAshDissolve?.(this.player, (this.player.depth ?? 1000) + 2, {
+                duration: 1850,
+                riseDistance: 18,
+                driftX: 6,
+                particleCount: 18,
+                particleSpreadX: 24,
+                glowRadius: 22,
+                glowAlpha: 0.28,
+                spiritScale: 0.9,
+                spiritAlpha: 0.6
+            });
+            this.player.body?.stop?.();
+            if (this.player.body) {
+                this.player.body.enable = false;
+            }
+            this.player.setVisible(false);
+            this.player.setActive(false);
+        }
         const elapsedMs = this.getTotalRunMs();
         const totalSeconds = Math.floor(elapsedMs / 1000);
         const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
         const seconds = String(totalSeconds % 60).padStart(2, '0');
-        this.scene.launch('GameOverScene', {
+        const gameOverPayload = {
             timeSurvived: `${minutes}:${seconds}`,
             enemiesKilled: this.killCount ?? 0,
             levelReached: this.player?.level ?? 1
+        };
+        this.time.delayedCall(2000, () => {
+            if (!this.scene.isActive('MainScene')) return;
+            this.scene.launch('GameOverScene', gameOverPayload);
+            this.scene.pause();
         });
-        this.scene.pause();
     }
 
     beginLevelUpTimerPause() {
@@ -2364,6 +2411,9 @@ export default class MainScene extends Phaser.Scene {
                 case 'shield':
                     effects.push({ type: 'shieldGrant', value });
                     break;
+                case 'dodge':
+                    effects.push({ type: 'dodge', value });
+                    break;
                 case 'moveSpeed':
                     effects.push({ type: 'speed', value });
                     break;
@@ -2462,7 +2512,7 @@ export default class MainScene extends Phaser.Scene {
             const extraItems = getRandomShopItemStock(missingCount, [
                 ...existingStockIds,
                 ...this.getUnlockElementShopExcludeIds(context.player),
-                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player))
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player), context.player?.characterKey ?? null)
             ]);
             let fillIndex = 0;
             for (let i = 0; i < currentStockIds.length && fillIndex < extraItems.length; i += 1) {
@@ -2559,7 +2609,7 @@ export default class MainScene extends Phaser.Scene {
             [
                 ...preservedIds,
                 ...this.getUnlockElementShopExcludeIds(player),
-                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(player))
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(player), player?.characterKey ?? null)
             ]
         );
         let nextIndex = 0;
