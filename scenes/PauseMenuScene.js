@@ -7,6 +7,20 @@ import {
     createPixelToggle
 } from './ui/PixelSceneHelpers.js';
 
+const SHOP_HUB_COLORS = {
+    panelOuter: 0x11171b,
+    panelInner: 0x1b252b,
+    border: 0x7e99a8,
+    title: '#e7f4ff',
+    text: '#d9f6ff',
+    buttonFill: 0x25343d,
+    buttonInner: 0x30454f,
+    buttonActiveFill: 0x30454f,
+    buttonActiveInner: 0x3b5663,
+    buttonBorder: 0x7e99a8,
+    buttonActiveBorder: 0xa8d6ea
+};
+
 export default class PauseMenuScene extends Phaser.Scene {
     constructor() {
         super('PauseMenuScene');
@@ -51,24 +65,50 @@ export default class PauseMenuScene extends Phaser.Scene {
         const buttonWidth = Math.min(panelWidth - 44, 250);
         const buttonHeight = isCompact ? 44 : 38;
         createBackdrop(this, 0.7);
-        const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight);
+        const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
+        });
         panel.add(createPixelText(this, 0, -panelHeight / 2 + 28, this.mode === 'settings' ? 'SETTINGS' : 'PAUSED', {
-            fontSize: isCompact ? '16px' : '18px'
+            fontSize: isCompact ? '16px' : '18px',
+            color: SHOP_HUB_COLORS.title
         }));
         this.add.existing(panel);
 
         if (this.mode === 'pause') {
             panel.add(createPixelButton(this, 0, -30, buttonWidth, buttonHeight, 'RESUME', () => this.resumeGame(), {
-                fontSize: isCompact ? '15px' : '16px'
+                fontSize: isCompact ? '15px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.buttonBorder,
+                activeBorder: SHOP_HUB_COLORS.buttonActiveBorder
             }));
             panel.add(createPixelButton(this, 0, 28, buttonWidth, buttonHeight, 'SETTINGS', () => {
                 this.mode = 'settings';
                 this.render();
             }, {
-                fontSize: isCompact ? '15px' : '16px'
+                fontSize: isCompact ? '15px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.buttonBorder,
+                activeBorder: SHOP_HUB_COLORS.buttonActiveBorder
             }));
             panel.add(createPixelButton(this, 0, 86, buttonWidth, buttonHeight, 'QUIT TO MENU', () => this.quitToMenu(), {
-                fontSize: isCompact ? '15px' : '16px'
+                fontSize: isCompact ? '15px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.buttonBorder,
+                activeBorder: SHOP_HUB_COLORS.buttonActiveBorder
             }));
         } else {
             const settings = getAudioSettings(this);
@@ -84,7 +124,14 @@ export default class PauseMenuScene extends Phaser.Scene {
                 this.mode = 'pause';
                 this.render();
             }, {
-                fontSize: isCompact ? '14px' : '15px'
+                fontSize: isCompact ? '14px' : '15px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.buttonBorder,
+                activeBorder: SHOP_HUB_COLORS.buttonActiveBorder
             }));
         }
     }

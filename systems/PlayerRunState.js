@@ -13,6 +13,8 @@ export default class PlayerRunState {
         this.skillHitCounts = {};
         this.totalMovedDistance = 0;
         this.killCount = 0;
+        this.shopPurchaseCounts = {};
+        this.shopLockedItemIds = [];
         this.shopPurchasedItemIds = [];
         this.shopPurchasedItems = [];
         this.shopCurrentStockIds = [];

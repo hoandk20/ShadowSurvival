@@ -49,7 +49,7 @@ const createShopItem = ({
 export const SHOP_ITEM_CONFIG = Object.freeze([
     createShopItem({ id: 'iron_sword', name: 'Iron Sword', type: 'stat', cost: 43, assetPath: 'assets/shopitem/iron_sword.png', modifiers: { damageMultiplier: 0.1, skillRange: -5 } }),
     createShopItem({ id: 'sharpened_blade', name: 'Sharpened Blade', type: 'stat', cost: 43, assetPath: 'assets/shopitem/sharpened_blade.png', modifiers: { critChance: 0.05 } }),
-    createShopItem({ id: 'heavy_edge', name: 'Heavy Edge', type: 'stat', cost: 43, assetPath: 'assets/shopitem/heavy_edge.png', modifiers: { critMultiplier: 0.1, skillRange: -10 } }),
+    createShopItem({ id: 'heavy_edge', name: 'Heavy Edge', type: 'stat', cost: 43, assetPath: 'assets/shopitem/heavy_edge.png', modifiers: { critMultiplier: 0.1, skillRange: -5 } }),
     createShopItem({ id: 'quick_gloves', name: 'Quick Gloves', type: 'stat', cost: 45, assetPath: 'assets/shopitem/quick_gloves.png', modifiers: { attackSpeed: 0.18, moveSpeed: -5 } }),
     createShopItem({ id: 'battle_focus', name: 'Battle Focus', type: 'stat', cost: 51, assetPath: 'assets/shopitem/battle_focus.png', modifiers: { damageMultiplier: 0.1, critChance: 0.08, armor: -10 } }),
     createShopItem({ id: 'steel_armor', name: 'Steel Armor', type: 'stat', cost: 42, assetPath: 'assets/shopitem/steel_armor.png', modifiers: { armor: 3, hp: -10 } }),
@@ -92,9 +92,9 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
     createShopItem({ id: 'time_distorter', name: 'Time Distorter', type: 'hybrid', cost: 38, assetPath: 'assets/shopitem/time_distorter.png', modifiers: { armor: -2, dodge: 0.1 } }),
     createShopItem({ id: 'abyssal_catalyst', name: 'Abyssal Catalyst', type: 'hybrid', cost: 33, assetPath: 'assets/shopitem/Abyssal_Catalyst.png', modifiers: { damageMultiplier: 0.35, effectDamageMultiplier: 0.25, healthRegenPerSecond: -4 } }),
     createShopItem({ id: 'singularity_field', name: 'Singularity Field', type: 'hybrid', cost: 32, assetPath: 'assets/shopitem/Singularity_Field.png', modifiers: { areaSizeMultiplier: 0.5, knockbackMultiplier: 0.5, damageMultiplier: -0.15 } }),
-    createShopItem({ id: 'phantom_stride', name: 'Phantom Stride', type: 'hybrid', cost: 30, assetPath: 'assets/shopitem/Phantom_Stride.png', modifiers: { moveSpeed: 30, pickupRangeMultiplier: 0.4, armor: -4 } }),
+    createShopItem({ id: 'phantom_stride', name: 'Phantom Stride', type: 'hybrid', cost: 40, assetPath: 'assets/shopitem/Phantom_Stride.png', modifiers: { moveSpeed: 30, pickupRangeMultiplier: 0.4, armor: -4 } }),
     createShopItem({ id: 'rotheart_sigil', name: 'Rotheart Sigil', type: 'hybrid', cost: 32, assetPath: 'assets/shopitem/Rotheart_Sigil.png', modifiers: { effectChance: 0.25, effectDamageMultiplier: 0.3, damageMultiplier: -0.2 } }),
-    createShopItem({ id: 'fractured_tempo', name: 'Fractured Tempo', type: 'hybrid', cost: 33, assetPath: 'assets/shopitem/Fractured_Tempo.png', modifiers: { attackSpeed: 0.4, damageMultiplier: -0.25, knockbackMultiplier: -0.3 } }),
+    createShopItem({ id: 'fractured_tempo', name: 'Fractured Tempo', type: 'hybrid', cost: 40, assetPath: 'assets/shopitem/Fractured_Tempo.png', modifiers: { attackSpeed: 0.4, damageMultiplier: -0.25, knockbackMultiplier: -0.3 } }),
     createShopItem({ id: 'vampire_pact', name: 'Vampire Pact', type: 'hybrid', cost: 32, assetPath: 'assets/shopitem/vampire_pact.png', modifiers: { lifesteal: 0.1, hp: -50 } }),
     createShopItem({ id: 'reckless_core', name: 'Reckless Core', type: 'hybrid', cost: 32, assetPath: 'assets/shopitem/reckless_core.png', modifiers: { critMultiplier: 0.2, hp: -15 } }),
     createShopItem({ id: 'impact_engine', name: 'Impact Engine', type: 'hybrid', cost: 50, assetPath: 'assets/shopitem/impact_engine.png', modifiers: { knockbackMultiplier: 0.3, damageMultiplier: 0.1 } }),
@@ -151,6 +151,7 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
     createShopItem({ id: 'ice_core', name: 'Ice Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/ice_core.png', unlockElement: { effectKey: 'freeze', chance: 0.4, tags: ['ice'] } }),
     createShopItem({ id: 'poison_core', name: 'Poison Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/poison_core.png', unlockElement: { effectKey: 'poison', chance: 0.3, tags: ['poison'] } }),
     createShopItem({ id: 'shock_core', name: 'Shock Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/shock_core.png', unlockElement: { effectKey: 'shock', chance: 0.3, tags: ['lightning'] } }),
+    createShopItem({ id: 'aim_core', name: 'Aim Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/aim_core.png', unlockElement: { effectKey: 'mark', chance: 0.3, tags: ['mark', 'aim'] } }),
     createShopItem({ id: 'afang', name: 'Afang', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/afang.png', unlockElement: { effectKey: 'bleed', chance: 0.3, tags: ['bleed'] } }),
     createShopItem({
         id: 'explore_core',

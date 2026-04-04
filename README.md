@@ -301,7 +301,7 @@ Current runtime shop notes:
 | `Time Distorter` | `38` | `armor -2`, `dodge +10%` |
 | `Abyssal Catalyst` | `33` | `damageMultiplier +0.35`, `effectDamageMultiplier +0.25`, `healthRegenPerSecond -4` |
 | `Singularity Field` | `32` | `areaSizeMultiplier +0.5`, `knockbackMultiplier +0.5`, `damageMultiplier -0.15` |
-| `Phantom Stride` | `30` | `moveSpeed +30`, `pickupRangeMultiplier +0.4`, `armor -4` |
+| `Phantom Stride` | `40` | `moveSpeed +30`, `pickupRangeMultiplier +0.4`, `armor -4` |
 | `Rotheart Sigil` | `32` | `effectChance +0.25`, `effectDamageMultiplier +0.3`, `damageMultiplier -0.2` |
 | `Fractured Tempo` | `33` | `attackSpeed +0.4`, `damageMultiplier -0.25`, `knockbackMultiplier -0.3` |
 | `Vampire Pact` | `32` | `lifesteal +0.1`, `hp -50` |

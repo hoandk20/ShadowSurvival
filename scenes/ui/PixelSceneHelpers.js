@@ -1,19 +1,19 @@
 export const UI_COLORS = {
-    gold: 0xd8b15a,
-    goldBright: 0xf8d67f,
-    ember: 0xff9b54,
+    gold: 0x7e99a8,
+    goldBright: 0xa8d6ea,
+    ember: 0x8cc4dc,
     ink: 0x110d12,
-    panel: 0x1b1420,
-    panelDark: 0x140f17,
-    panelLite: 0x2b2031,
-    border: 0x4d3b25,
+    panel: 0x1b252b,
+    panelDark: 0x11171b,
+    panelLite: 0x30454f,
+    border: 0x556f80,
     accent: 0x7d2f2f,
     ice: 0x8fd3ff,
     forest: 0x5f8f56,
     crimson: 0xb84c4c,
     disabled: 0x605a62,
-    text: '#f5e6c8',
-    dimText: '#c8bba4'
+    text: '#d9f6ff',
+    dimText: '#b7d0db'
 };
 
 export function createBackdrop(scene, alpha = 0.5) {
@@ -66,8 +66,8 @@ export function createPixelButton(scene, x, y, width, height, label, onClick, op
     const hitArea = scene.add.rectangle(0, 0, width, height, 0xffffff, 0.001).setOrigin(0.5);
 
     const redraw = (state = 'idle') => {
-        const fill = state === 'active' ? (options.activeFill ?? 0x3f2b20) : (options.fill ?? UI_COLORS.panelDark);
-        const inner = state === 'active' ? (options.activeInner ?? 0x5f4229) : (options.inner ?? UI_COLORS.panel);
+        const fill = state === 'active' ? (options.activeFill ?? 0x30454f) : (options.fill ?? UI_COLORS.panelDark);
+        const inner = state === 'active' ? (options.activeInner ?? 0x3b5663) : (options.inner ?? UI_COLORS.panel);
         const border = state === 'active' ? (options.activeBorder ?? UI_COLORS.goldBright) : (options.border ?? UI_COLORS.gold);
         bg.clear();
         bg.fillStyle(fill, 0.92);

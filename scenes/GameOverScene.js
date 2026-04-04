@@ -21,14 +21,14 @@ export default class GameOverScene extends Phaser.Scene {
         const buttonHeight = isCompact ? 44 : 38;
         createBackdrop(this, 0.78);
         const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight, {
-            fill: 0x241418,
-            fillDark: 0x160b0d,
-            border: 0xc76464
+            fill: 0x1b252b,
+            fillDark: 0x11171b,
+            border: 0x7e99a8
         });
         this.add.existing(panel);
         panel.add(createPixelText(this, 0, -panelHeight / 2 + 34, 'GAME OVER', {
             fontSize: isCompact ? '20px' : '22px',
-            color: '#ffb0a8'
+            color: '#e7f4ff'
         }));
 
         const stats = [
@@ -39,7 +39,7 @@ export default class GameOverScene extends Phaser.Scene {
         stats.forEach((line, index) => {
             panel.add(createPixelText(this, 0, -36 + index * (isCompact ? 40 : 42), line, {
                 fontSize: isCompact ? '13px' : '14px',
-                color: index === 0 ? '#ffd7c7' : '#f0dcc8'
+                color: index === 0 ? '#e7f4ff' : '#d9f6ff'
             }));
         });
 

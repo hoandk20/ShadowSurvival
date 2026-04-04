@@ -36,6 +36,7 @@ export const SUPPORTER_CONFIG = {
             goldGainMultiplier: 0.15,
             critChance: 0.05
         },
+        passiveDescription: 'Gold gain +15%\nCrit chance +5%',
         tags: [],
         statusEffects: []
     },
@@ -94,6 +95,7 @@ export const SUPPORTER_CONFIG = {
         conditionalPassiveBonuses: {
             attackSpeed: 0.3
         },
+        passiveDescription: 'Lifesteal +10%\nMelee characters gain +30% attack speed',
         tags: [],
         statusEffects: []
     },
@@ -130,6 +132,7 @@ export const SUPPORTER_CONFIG = {
             healthRegenPerSecond: 1,
             maxHealthPercent: 0.1
         },
+        passiveDescription: 'Heal aura: +35 HP every 15s\nHealth regen +1/s\nMax HP +10%',
         tags: [],
         statusEffects: []
     },
@@ -170,6 +173,7 @@ export const SUPPORTER_CONFIG = {
             projectileSpeedPercent: 0.2,
             armorPierce: 0.2
         },
+        passiveDescription: 'Projectile speed +20%\nArmor pierce +20%',
         tags: [],
         statusEffects: []
     },
@@ -210,6 +214,7 @@ export const SUPPORTER_CONFIG = {
             skillRange: 30,
             critMultiplier: 0.1
         },
+        passiveDescription: 'Skill range +30\nCrit damage +10%\nSupporter hits always apply Mark',
         tags: [],
         statusEffects: [
             {
@@ -256,6 +261,7 @@ export const SUPPORTER_CONFIG = {
         passiveBonuses: {
             effectDurationMultiplier: 0.3
         },
+        passiveDescription: 'Effect duration +30%\nSupporter hits always apply Freeze',
         tags: [],
         statusEffects: [
             {
@@ -302,6 +308,7 @@ export const SUPPORTER_CONFIG = {
         passiveBonuses: {
             effectDamageMultiplier: 0.3
         },
+        passiveDescription: 'Effect damage +30%\nSupporter hits always apply Burn',
         tags: [],
         statusEffects: [
             {
@@ -351,9 +358,10 @@ export const SUPPORTER_CONFIG = {
         lightningParticleCount: 8,
         lightningDuration: 130,
         passiveBonuses: {
-            shockChainCountBonus: 2,
+            shockChainCountBonus: 1,
             attackSpeed: 0.1
         },
+        passiveDescription: 'Shock chain count +1\nAttack speed +10%\nSupporter hits always apply Shock',
         tags: [],
         statusEffects: [
             {
@@ -401,6 +409,7 @@ export const SUPPORTER_CONFIG = {
             effectDurationMultiplier: 0.2,
             effectDamageMultiplier: 0.1
         },
+        passiveDescription: 'Effect duration +20%\nEffect damage +10%\nSupporter hits always apply Poison',
         tags: [],
         statusEffects: [
             {
@@ -445,6 +454,7 @@ export const SUPPORTER_CONFIG = {
             shieldResetAmount: 20,
             shieldResetIntervalMs: 10000
         },
+        passiveDescription: 'Armor aura: +8 armor\nArmor +1\nGain 20 shield every 10s',
         tags: [],
         statusEffects: []
     },
@@ -509,6 +519,7 @@ export const SUPPORTER_CONFIG = {
             knockbackMultiplier: 0.1,
             armor: 5
         },
+        passiveDescription: 'Knockback +10%\nArmor +5\nSupporter hits trigger Explosion',
         tags: [],
         statusEffects: [
             {

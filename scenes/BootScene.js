@@ -13,6 +13,16 @@ const MAP_ICON_PATHS = {
     maprock_field: 'assets/mapicon/Rock.png',
     church_sanctuary: 'assets/mapicon/Church.png'
 };
+const SHOP_HUB_COLORS = {
+    panelOuter: 0x11171b,
+    panelInner: 0x1b252b,
+    border: 0x7e99a8,
+    title: '#e7f4ff',
+    subtitle: '#b7d0db',
+    text: '#d9f6ff',
+    fill: 0x30454f,
+    fillBorder: 0xa8d6ea
+};
 
 export default class BootScene extends Phaser.Scene {
     constructor() {
@@ -42,21 +52,22 @@ export default class BootScene extends Phaser.Scene {
         const panelWidth = Math.min(width - 32, 420);
         const panelHeight = 168;
         const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight, {
-            fill: UI_COLORS.panelLite,
-            fillDark: UI_COLORS.panelDark
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
         });
         panel.add(createPixelText(this, 0, -42, 'LOADING', {
             fontSize: width < 640 ? '18px' : '22px',
-            color: '#ffe7ab'
+            color: SHOP_HUB_COLORS.title
         }));
         this.progressLabel = createPixelText(this, 0, -12, 'Preparing assets...', {
             fontSize: '12px',
-            color: UI_COLORS.dimText
+            color: SHOP_HUB_COLORS.subtitle
         });
         this.progressBar = this.add.graphics();
         this.progressValueText = createPixelText(this, 0, 42, '0%', {
             fontSize: '14px',
-            color: UI_COLORS.text
+            color: SHOP_HUB_COLORS.text
         });
         panel.add([this.progressLabel, this.progressBar, this.progressValueText]);
         this.drawProgressBar(0);
@@ -85,13 +96,13 @@ export default class BootScene extends Phaser.Scene {
         this.progressBar.clear();
         this.progressBar.fillStyle(UI_COLORS.ink, 0.95);
         this.progressBar.fillRect(x, y, width, height);
-        this.progressBar.fillStyle(UI_COLORS.panelDark, 1);
+        this.progressBar.fillStyle(SHOP_HUB_COLORS.panelOuter, 1);
         this.progressBar.fillRect(x + 3, y + 3, width - 6, height - 6);
-        this.progressBar.fillStyle(UI_COLORS.gold, 1);
+        this.progressBar.fillStyle(SHOP_HUB_COLORS.fill, 1);
         this.progressBar.fillRect(x + 4, y + 4, Math.max(0, (width - 8) * clamped), height - 8);
         this.progressBar.lineStyle(2, 0x000000, 1);
         this.progressBar.strokeRect(x, y, width, height);
-        this.progressBar.lineStyle(2, UI_COLORS.goldBright, 1);
+        this.progressBar.lineStyle(2, SHOP_HUB_COLORS.fillBorder, 1);
         this.progressBar.strokeRect(x + 2, y + 2, width - 4, height - 4);
 
         if (this.progressValueText) {

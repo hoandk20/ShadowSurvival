@@ -25,6 +25,47 @@ import { STATUS_SYNERGY_RULES } from '../../config/statusSynergies.js';
  */
 
 const ACTION_HANDLERS = {
+    frostfireBurst(resolver, context, rule) {
+        const freezeEffect = resolver.getRelevantEffect(context, 'freeze');
+        const ownerPlayerId = context.ownerPlayerId ?? freezeEffect?.ownerPlayerId ?? null;
+        const source = context.source ?? freezeEffect?.source ?? null;
+        const baseDamage = Math.max(1, Math.round(context.damageTaken ?? context.damage ?? 10));
+
+        resolver.system.scene?.skillBehaviorPipeline?.effects?.spawnExplosion?.(
+            context.target?.x ?? 0,
+            context.target?.y ?? 0,
+            (context.target?.depth ?? 20) + 4,
+            {
+                coreColor: 0xe8ffff,
+                outerColor: 0x63c8ff,
+                ringColor: 0x2f8fd9,
+                emberColor: 0xb8f4ff,
+                coreRadius: 16,
+                outerRadius: 44,
+                ringRadius: 12,
+                pixelSize: 3
+            }
+        );
+
+        resolver.system.applyOwnedDamage(context.target, baseDamage, {
+            ownerPlayerId,
+            source,
+            tags: ['fire', 'ice', 'explosion', 'frostfire'],
+            showDamageText: true,
+            damageTextColor: '#bff3ff'
+        });
+
+        resolver.system.explodeAround(context.target, {
+            radius: 110,
+            damage: Math.max(1, baseDamage),
+            ownerPlayerId,
+            source,
+            tags: ['fire', 'ice', 'explosion', 'frostfire']
+        });
+
+        resolver.consumeStatuses(context, rule.consumeStatuses ?? ['freeze']);
+    },
+
     shatterChain(resolver, context, rule) {
         const freezeEffect = resolver.getRelevantEffect(context, 'freeze');
         const ownerPlayerId = freezeEffect?.ownerPlayerId ?? context.ownerPlayerId ?? null;

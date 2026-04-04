@@ -47,6 +47,7 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'normal',
         baseValue: 1,
+        pickupDelayMs: 450,
         displayScale: 1,
         pickupTextColor: '#cfd6df',
         floatAmplitude: 4,
@@ -59,6 +60,7 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'good',
         baseValue: 1,
+        pickupDelayMs: 450,
         displayScale: 1,
         pickupTextColor: '#8df7a7',
         floatAmplitude: 4,
@@ -71,6 +73,7 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'rare',
         baseValue: 1,
+        pickupDelayMs: 450,
         displayScale: 1,
         pickupTextColor: '#ffbf69',
         floatAmplitude: 4,
@@ -80,7 +83,7 @@ export const ITEM_CONFIG = {
 
 const DEFAULT_LOOT_TABLE = [
     { itemKey: 'xp_orb', chance: 0.98, minAmount: 1, maxAmount: 2 },
-    { itemKey: 'gold_coin', chance: 1, minAmount: 1, maxAmount: 4 }
+    { itemKey: 'gold_coin', chance: 1, minAmount: 1, maxAmount: 3 }
 ];
 
 const ENEMY_LOOT_TABLES = {

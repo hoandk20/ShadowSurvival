@@ -1,5 +1,13 @@
 export const STATUS_SYNERGY_RULES = [
     {
+        key: 'burn_freeze_frostfire_burst',
+        trigger: 'hit',
+        priority: 880,
+        requiredTargetStatuses: ['freeze', 'burn'],
+        actionKey: 'frostfireBurst',
+        consumeStatuses: ['freeze', 'burn']
+    },
+    {
         key: 'lightning_freeze_shatter_chain',
         trigger: 'hit',
         priority: 900,

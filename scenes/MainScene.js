@@ -27,7 +27,7 @@ import PlayerPartySystem from '../systems/PlayerPartySystem.js';
 import PlayerRunState from '../systems/PlayerRunState.js';
 import TargetingSystem from '../systems/TargetingSystem.js';
 import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
-import { ensureAudioSettings, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
+import { ensureAudioSettings, installAudioUnlock, isAudioUnlocked, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 import EnemyProjectile from '../entities/EnemyProjectile.js';
 
 const SPAWN_PADDING = 50;
@@ -185,6 +185,10 @@ export default class MainScene extends Phaser.Scene {
             this.maxWaveCount = scenarioWavePlans.length;
         }
         const mapDef = this.mapManager.loadMap(selectedMapKey);
+        this.audioUnlockCleanup = installAudioUnlock(this, () => {
+            if (!this.scene.isActive('MainScene')) return;
+            this.syncMapMusic(this.mapManager.currentMapDefinition ?? mapDef);
+        });
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
@@ -1608,6 +1612,15 @@ export default class MainScene extends Phaser.Scene {
         this.lootSystem?.clearGroundItems?.();
     }
 
+    clearTimedOutWaveRemnants() {
+        this.waveSpawnRemaining = 0;
+        this.waveSpawnQueue = [];
+        this.spawnTimer = 0;
+        this.respawnPool = 0;
+        this.clearAllActiveEnemiesAndProjectiles();
+        this.clearActiveWaveLoot();
+    }
+
     endCurrentWave(reason = 'cleared') {
         if (!this.waveSystemEnabled || this.waveEnding || this.waveShopPending || this.isShopOpen || this.isRunComplete) return;
         this.waveEnding = true;
@@ -1615,8 +1628,15 @@ export default class MainScene extends Phaser.Scene {
         this.waveSpawnQueue = [];
         this.waveKillCount = this.waveEnemyCount;
         if (reason === 'timeout') {
-            this.clearAllActiveEnemiesAndProjectiles();
-            this.clearActiveWaveLoot();
+            this.clearTimedOutWaveRemnants();
+            this.time.delayedCall(0, () => {
+                if (!this.scene.isActive('MainScene') || !this.waveEnding) return;
+                this.clearTimedOutWaveRemnants();
+            });
+            this.time.delayedCall(50, () => {
+                if (!this.scene.isActive('MainScene') || !this.waveEnding) return;
+                this.clearTimedOutWaveRemnants();
+            });
         }
         this.handleWaveCleared();
     }
@@ -1701,7 +1721,7 @@ export default class MainScene extends Phaser.Scene {
     syncMapMusic(mapDef) {
         const nextMusicKey = mapDef?.music?.key ?? null;
         const musicEnabled = isMusicEnabled(this);
-        const canPlayNextMusic = Boolean(nextMusicKey && this.cache.audio.exists(nextMusicKey) && musicEnabled);
+        const canPlayNextMusic = Boolean(nextMusicKey && this.cache.audio.exists(nextMusicKey) && musicEnabled && isAudioUnlocked(this));
 
         if (!canPlayNextMusic) {
             if (this.currentMapMusic) {
@@ -1747,6 +1767,8 @@ export default class MainScene extends Phaser.Scene {
         this.input.off('pointerup', this.handleTouchPointerUp, this);
         this.input.off('pointerupoutside', this.handleTouchPointerUp, this);
         this.events.off('enemy-dead', this.handleEnemyDeath, this);
+        this.audioUnlockCleanup?.();
+        this.audioUnlockCleanup = null;
         const panel = document.getElementById('debug-panel');
         if (panel) {
             panel.style.display = 'none';

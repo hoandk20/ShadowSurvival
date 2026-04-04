@@ -1,9 +1,7 @@
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
 import { CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { DEFAULT_MAP_KEY, getAvailableMaps, getMapDefinition } from '../config/map.js';
-import { getCharacterStats } from '../config/stats.js';
-import { SKILL_CONFIG } from '../config/skill.js';
-import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, updateAudioSetting } from '../utils/audioSettings.js';
+import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, installAudioUnlock, updateAudioSetting } from '../utils/audioSettings.js';
 import {
     UI_COLORS,
     createBackdrop,
@@ -31,8 +29,21 @@ const MAP_THEME_COLORS = {
     maprock_field: 0x8fa7c7
 };
 const PASSIVE_INFO_PANEL_MAX_WIDTH = 220;
-
-const formatCharacterStatLine = (label, totalValue) => `${label}: ${totalValue ?? 0}`;
+const SHOP_HUB_COLORS = {
+    panelOuter: 0x11171b,
+    panelInner: 0x1b252b,
+    panelAccent: 0x213039,
+    border: 0x7e99a8,
+    borderBright: 0xa8d6ea,
+    title: '#e7f4ff',
+    subtitle: '#b7d0db',
+    text: '#d9f6ff',
+    dimText: '#b7d0db',
+    buttonFill: 0x25343d,
+    buttonInner: 0x30454f,
+    buttonActiveFill: 0x30454f,
+    buttonActiveInner: 0x3b5663
+};
 
 export default class MainMenuScene extends Phaser.Scene {
     constructor() {
@@ -77,6 +88,7 @@ export default class MainMenuScene extends Phaser.Scene {
         this.debugMode = this.registry.get('debugMode') === true;
         this.setDebugPanelVisible(false);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+        this.audioUnlockCleanup = installAudioUnlock(this);
         this.input.keyboard.on('keydown', this.handleKeyboardNavigation, this);
         this.render();
         this.scale.on('resize', this.render, this);
@@ -85,6 +97,8 @@ export default class MainMenuScene extends Phaser.Scene {
     shutdown() {
         this.destroyRenderTree();
         this.setDebugPanelVisible(false);
+        this.audioUnlockCleanup?.();
+        this.audioUnlockCleanup = null;
         this.input.keyboard.off('keydown', this.handleKeyboardNavigation, this);
         this.scale.off('resize', this.render, this);
     }
@@ -125,17 +139,25 @@ export default class MainMenuScene extends Phaser.Scene {
             .setDisplaySize(width, height)
             .setAlpha(0.4);
         this.backdrop = createBackdrop(this, 0.48);
-        this.sparkField = createSparkField(this, width / 2, height / 2, width * 0.68, height * 0.68, metrics.isCompact ? 12 : 18);
+        this.sparkField = createSparkField(
+            this,
+            width / 2,
+            height / 2,
+            width * 0.68,
+            height * 0.68,
+            metrics.isCompact ? 12 : 18,
+            0x8cc4dc
+        );
 
         this.uiRoot = this.add.container(0, 0);
         this.uiRoot.add(createPixelText(this, width / 2, metrics.safeY + 24, 'SHADOW SURVIVORS', {
             fontSize: metrics.isCompact ? '22px' : metrics.isPortrait ? '26px' : '32px',
-            color: '#ffe7ab',
+            color: SHOP_HUB_COLORS.title,
             strokeThickness: 5
         }));
         this.uiRoot.add(createPixelText(this, width / 2, metrics.safeY + 56, 'RETRO FANTASY HUNT', {
             fontSize: metrics.isCompact ? '11px' : '12px',
-            color: UI_COLORS.dimText,
+            color: SHOP_HUB_COLORS.dimText,
             strokeThickness: 3
         }));
 
@@ -171,8 +193,14 @@ export default class MainMenuScene extends Phaser.Scene {
                 if (!entry.disabled) entry.action();
             }, {
                 fontSize: isCompact ? '15px' : '17px',
-                textColor: entry.disabled ? '#9f947e' : UI_COLORS.text,
-                border: entry.disabled ? UI_COLORS.disabled : UI_COLORS.gold
+                textColor: entry.disabled ? '#8a98a0' : SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: entry.disabled ? UI_COLORS.disabled : SHOP_HUB_COLORS.border,
+                activeBorder: SHOP_HUB_COLORS.borderBright,
+                glowColor: 0x8cc4dc
             });
             if (entry.disabled) {
                 button.getAll().forEach((child) => child.setAlpha?.(0.65));
@@ -188,20 +216,26 @@ export default class MainMenuScene extends Phaser.Scene {
 
     renderCharacterSelect() {
         const { width, height, safeX, safeY, isPortrait, isCompact } = this.getResponsiveMetrics();
+        const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
         const panelWidth = Math.min(isPortrait ? width - safeX * 2 : width - safeX * 2, isPortrait ? 420 : 920);
         const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 680 : 560);
-        const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 8 : 12), panelWidth, panelHeight);
+        const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 8 : 12), panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
+        });
         this.uiRoot.add(panel);
         panel.add(createPixelText(this, 0, -panelHeight / 2 + 26, 'CHARACTER SELECT', {
             fontSize: isCompact ? '16px' : '18px',
-            color: '#ffe9b8'
+            color: SHOP_HUB_COLORS.title
         }));
 
         const entries = Object.entries(CHARACTER_CONFIG);
         const contentTop = -panelHeight / 2 + 68;
         const footerHeight = isCompact ? 108 : 92;
-        const previewWidth = isPortrait ? panelWidth - 28 : Math.min(300, Math.floor(panelWidth * 0.34));
-        const previewHeight = isPortrait ? 236 : Math.min(388, panelHeight - 84);
+        const previewScale = isMobileDevice ? 0.7 : 1;
+        const previewWidth = Math.max(180, Math.round((isPortrait ? panelWidth - 28 : Math.min(300, Math.floor(panelWidth * 0.34))) * previewScale));
+        const previewHeight = Math.max(170, Math.round((isPortrait ? 236 : Math.min(388, panelHeight - 84)) * previewScale));
         const gridAreaWidth = isPortrait ? panelWidth - 28 : panelWidth - previewWidth - 38;
         const gridAreaHeight = isPortrait
             ? panelHeight - previewHeight - footerHeight - 86
@@ -221,14 +255,16 @@ export default class MainMenuScene extends Phaser.Scene {
         const previewX = isPortrait ? 0 : panelWidth / 2 - previewWidth / 2 - 12;
         const previewY = isPortrait ? contentTop + previewHeight / 2 : 14;
         const previewPanel = createPixelPanel(this, previewX, previewY, previewWidth, previewHeight, {
-            fill: 0x211722
+            fill: SHOP_HUB_COLORS.panelAccent,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
         });
         panel.add(previewPanel);
         const selectedCharacter = CHARACTER_CONFIG[this.selectedCharacterKey];
         const compactPortrait = isPortrait && isCompact;
         previewPanel.add(createPixelText(this, 0, -previewHeight / 2 + 26, selectedCharacter.label ?? this.selectedCharacterKey, {
             fontSize: isCompact ? '16px' : '18px',
-            color: '#fff0c5'
+            color: SHOP_HUB_COLORS.title
         }));
         const passiveInfoBadge = this.createPassiveInfoBadge(
             previewWidth / 2 - 24,
@@ -239,35 +275,27 @@ export default class MainMenuScene extends Phaser.Scene {
         if (passiveInfoBadge) {
             previewPanel.add(passiveInfoBadge);
         }
-        previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, isPortrait ? -52 : -72, isPortrait ? 70 : 88));
-        previewPanel.add(this.add.text(0, compactPortrait ? -14 : isPortrait ? -8 : -18, selectedCharacter.description ?? '', {
+        const previewSpriteY = isPortrait ? Math.round(-52 * previewScale) : Math.round(-72 * previewScale);
+        const previewSpriteSize = Math.max(50, Math.round((isPortrait ? 70 : 88) * previewScale));
+        previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, previewSpriteY, previewSpriteSize));
+        const descriptionY = compactPortrait ? -6 : isPortrait ? 0 : Math.round(-4 * previewScale);
+        previewPanel.add(this.add.text(0, descriptionY, selectedCharacter.description ?? '', {
             fontFamily: 'monospace',
-            fontSize: isCompact ? '10px' : '11px',
-            color: UI_COLORS.dimText,
+            fontSize: isMobileDevice ? '9px' : isCompact ? '10px' : '11px',
+            color: SHOP_HUB_COLORS.dimText,
             align: 'center',
             stroke: '#000000',
             strokeThickness: 2,
             wordWrap: { width: previewWidth - 32, useAdvancedWrap: true }
         }).setOrigin(0.5, 0));
-        const skillKey = selectedCharacter.defaultSkill ?? 'thunder';
-        const skillCfg = SKILL_CONFIG[skillKey] ?? {};
-        const characterStats = getCharacterStats(selectedCharacter);
-        const stats = [
-            formatCharacterStatLine('HP', characterStats.hp),
-            `DAMAGE: ${skillCfg.damage ?? 0}`,
-            `SKILL: ${(skillCfg.label ?? skillKey).toUpperCase()}`,
-            formatCharacterStatLine('SPEED', characterStats.moveSpeed),
-            formatCharacterStatLine('ARMOR', characterStats.armor)
-        ];
-        const statsStartY = compactPortrait ? 50 : isPortrait ? 64 : 82;
-        const statsGap = compactPortrait ? 14 : isCompact ? 18 : 22;
-        const statsFontSize = compactPortrait ? '10px' : isCompact ? '12px' : '13px';
-        stats.forEach((line, index) => {
-            previewPanel.add(createPixelText(this, 0, statsStartY + index * statsGap, line, {
-                fontSize: statsFontSize,
-                color: index === 2 ? '#ffd888' : UI_COLORS.text
-            }));
-        });
+        const styleLabelY = compactPortrait ? 48 : isPortrait ? Math.round(72 * previewScale) : Math.round(96 * previewScale);
+        const characterStyleLabel = String(selectedCharacter.combatStyle ?? selectedCharacter.style ?? 'ranged').toUpperCase();
+        const characterStyleColor = characterStyleLabel === 'MELEE' ? '#ffb4a8' : '#a8e3ff';
+        previewPanel.add(createPixelText(this, 0, styleLabelY, characterStyleLabel, {
+            fontSize: isMobileDevice ? '12px' : compactPortrait ? '12px' : isCompact ? '14px' : '15px',
+            color: characterStyleColor,
+            strokeThickness: 3
+        }));
 
         const gridViewportX = isPortrait ? 0 : -panelWidth / 2 + 18 + gridAreaWidth / 2;
         const gridViewportY = isPortrait
@@ -291,10 +319,24 @@ export default class MainMenuScene extends Phaser.Scene {
         const actionHeight = isCompact ? 44 : 46;
         this.uiRoot.add([
             createPixelButton(this, width / 2 - actionWidth / 2 - actionGap / 2, actionButtonY, actionWidth, actionHeight, 'BACK', () => this.setMode('main'), {
-                fontSize: isCompact ? '14px' : '16px'
+                fontSize: isCompact ? '14px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.border,
+                activeBorder: SHOP_HUB_COLORS.borderBright
             }),
             createPixelButton(this, width / 2 + actionWidth / 2 + actionGap / 2, actionButtonY, actionWidth, actionHeight, 'CONFIRM', () => this.setMode('maps'), {
-                fontSize: isCompact ? '14px' : '16px'
+                fontSize: isCompact ? '14px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.border,
+                activeBorder: SHOP_HUB_COLORS.borderBright
             })
         ]);
     }
@@ -305,45 +347,72 @@ export default class MainMenuScene extends Phaser.Scene {
         const compactPortrait = isPortrait && isCompact;
         this.mapOptionKeys = maps.map((mapEntry) => mapEntry.id);
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 420 : 920);
-        const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 520 : 420);
-        const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 6 : 10), panelWidth, panelHeight);
+        const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 680 : 560);
+        const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 6 : 10), panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
+        });
         this.uiRoot.add(panel);
-        panel.add(createPixelText(this, 0, compactPortrait ? -panelHeight / 2 + 34 : -160, 'MAP SELECT', {
+        panel.add(createPixelText(this, 0, -panelHeight / 2 + 26, 'MAP SELECT', {
             fontSize: isCompact ? '16px' : '18px',
-            color: '#ffe9b8'
+            color: SHOP_HUB_COLORS.title
         }));
 
-        const gap = compactPortrait ? 10 : isCompact ? 14 : 18;
-        const availableWidth = panelWidth - 40;
-        const slotSize = Math.max(80, Math.min(
-            Math.floor((availableWidth - gap * (maps.length - 1)) / maps.length),
-            compactPortrait ? 118 : isCompact ? 128 : 150
-        ));
-        const contentWidth = maps.length * slotSize + Math.max(0, maps.length - 1) * gap;
-        const stripY = compactPortrait ? -46 : -22;
-        const mapContent = this.add.container(0, stripY);
-        const startX = -contentWidth / 2 + slotSize / 2;
-        maps.forEach((mapEntry, index) => {
-            const definition = getMapDefinition(mapEntry.id);
-            const x = startX + index * (slotSize + gap);
-            const slot = this.createMapSlot(mapEntry.id, definition, mapEntry.id === this.selectedMapKey, slotSize);
-            slot.setPosition(x, 0);
-            mapContent.add(slot);
+        const contentTop = -panelHeight / 2 + 68;
+        const footerHeight = isCompact ? 108 : 92;
+        const previewWidth = isPortrait ? panelWidth - 28 : Math.min(300, Math.floor(panelWidth * 0.34));
+        const previewHeight = isPortrait ? 156 : Math.min(216, panelHeight - 180);
+        const gridAreaWidth = isPortrait ? panelWidth - 28 : panelWidth - previewWidth - 38;
+        const gridAreaHeight = isPortrait
+            ? panelHeight - previewHeight - footerHeight - 86
+            : panelHeight - footerHeight - 92;
+        const columns = Math.min(5, maps.length);
+        const rows = Math.max(1, Math.ceil(maps.length / columns));
+        const gap = isCompact ? 8 : 12;
+        const slotSizeByWidth = Math.floor((gridAreaWidth - gap * (columns - 1)) / columns);
+        const slotSizeByHeight = Math.floor((gridAreaHeight - gap * (rows - 1)) / rows);
+        const slotSize = Math.max(72, Math.min(slotSizeByWidth, slotSizeByHeight, compactPortrait ? 104 : isCompact ? 116 : 126));
+        const gridWidth = columns * slotSize + (columns - 1) * gap;
+        const gridHeight = rows * slotSize + Math.max(0, rows - 1) * gap;
+
+        const previewX = isPortrait ? 0 : panelWidth / 2 - previewWidth / 2 - 12;
+        const previewY = isPortrait ? contentTop + previewHeight / 2 : 14;
+        const previewPanel = createPixelPanel(this, previewX, previewY, previewWidth, previewHeight, {
+            fill: SHOP_HUB_COLORS.panelAccent,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
         });
-        panel.add(mapContent);
+        panel.add(previewPanel);
 
         const selectedMap = getMapDefinition(this.selectedMapKey);
-        const titleY = compactPortrait ? 52 : isPortrait ? 98 : 110;
-        const descriptionY = compactPortrait ? 72 : isPortrait ? 130 : 142;
-        panel.add(createPixelText(this, 0, titleY, (selectedMap?.label ?? this.selectedMapKey).toUpperCase(), {
-            fontSize: compactPortrait ? '13px' : isCompact ? '15px' : '16px',
-            color: '#fff0c5'
-        }));
-        panel.add(this.add.text(0, descriptionY, selectedMap?.description ?? '', {
+        const mapInfoText = selectedMap?.description ?? '';
+        previewPanel.add(this.add.text(0, -previewHeight / 2 + 18, mapInfoText, {
             fontFamily: 'monospace',
-            fontSize: compactPortrait ? '10px' : isCompact ? '11px' : '12px',
-            color: UI_COLORS.dimText
-        }).setOrigin(0.5, 0).setAlign('center').setStroke('#000000', 2).setWordWrapWidth(Math.min(420, panelWidth - 36)));
+            fontSize: isCompact ? '10px' : '11px',
+            color: SHOP_HUB_COLORS.dimText,
+            align: 'center',
+            stroke: '#000000',
+            strokeThickness: 2,
+            wordWrap: { width: previewWidth - 26, useAdvancedWrap: true }
+        }).setOrigin(0.5, 0));
+
+        const gridViewportX = isPortrait ? 0 : -panelWidth / 2 + 18 + gridAreaWidth / 2;
+        const gridViewportY = isPortrait
+            ? contentTop + previewHeight + 18 + gridHeight / 2
+            : contentTop + gridAreaHeight / 2;
+        const gridContent = this.add.container(gridViewportX, gridViewportY);
+        const startX = -gridWidth / 2 + slotSize / 2;
+        const startY = -gridHeight / 2 + slotSize / 2;
+        maps.forEach((mapEntry, index) => {
+            const definition = getMapDefinition(mapEntry.id);
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            const slot = this.createMapSlot(mapEntry.id, definition, mapEntry.id === this.selectedMapKey, slotSize);
+            slot.setPosition(startX + col * (slotSize + gap), startY + row * (slotSize + gap));
+            gridContent.add(slot);
+        });
+        panel.add(gridContent);
 
         const actionButtonY = height - safeY - (isCompact ? 28 : 24);
         const actionGap = isCompact ? 14 : 18;
@@ -351,10 +420,24 @@ export default class MainMenuScene extends Phaser.Scene {
         const actionHeight = isCompact ? 44 : 46;
         this.uiRoot.add([
             createPixelButton(this, width / 2 - actionWidth / 2 - actionGap / 2, actionButtonY, actionWidth, actionHeight, 'BACK', () => this.setMode('characters'), {
-                fontSize: isCompact ? '14px' : '16px'
+                fontSize: isCompact ? '14px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.border,
+                activeBorder: SHOP_HUB_COLORS.borderBright
             }),
             createPixelButton(this, width / 2 + actionWidth / 2 + actionGap / 2, actionButtonY, actionWidth, actionHeight, 'START HUNT', () => this.startGame(), {
-                fontSize: isCompact ? '14px' : '16px'
+                fontSize: isCompact ? '14px' : '16px',
+                textColor: SHOP_HUB_COLORS.text,
+                fill: SHOP_HUB_COLORS.buttonFill,
+                inner: SHOP_HUB_COLORS.buttonInner,
+                activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                border: SHOP_HUB_COLORS.border,
+                activeBorder: SHOP_HUB_COLORS.borderBright
             })
         ]);
     }
@@ -366,11 +449,15 @@ export default class MainMenuScene extends Phaser.Scene {
         const panelHeight = showFullscreenButton
             ? (isCompact ? 382 : 360)
             : (isCompact ? 320 : 300);
-        const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight);
+        const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
+        });
         this.uiRoot.add(panel);
         panel.add(createPixelText(this, 0, -96, 'SETTINGS', {
             fontSize: isCompact ? '16px' : '18px',
-            color: '#ffe9b8'
+            color: SHOP_HUB_COLORS.title
         }));
         const settings = getAudioSettings(this);
         const toggleX = -Math.min(110, panelWidth * 0.25);
@@ -396,12 +483,26 @@ export default class MainMenuScene extends Phaser.Scene {
                     this.time.delayedCall(50, () => this.render());
                 },
                 {
-                    fontSize: isCompact ? '13px' : '14px'
+                    fontSize: isCompact ? '13px' : '14px',
+                    textColor: SHOP_HUB_COLORS.text,
+                    fill: SHOP_HUB_COLORS.buttonFill,
+                    inner: SHOP_HUB_COLORS.buttonInner,
+                    activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+                    activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+                    border: SHOP_HUB_COLORS.border,
+                    activeBorder: SHOP_HUB_COLORS.borderBright
                 }
             ));
         }
         this.uiRoot.add(createPixelButton(this, width / 2, backButtonY, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
-            fontSize: isCompact ? '14px' : '16px'
+            fontSize: isCompact ? '14px' : '16px',
+            textColor: SHOP_HUB_COLORS.text,
+            fill: SHOP_HUB_COLORS.buttonFill,
+            inner: SHOP_HUB_COLORS.buttonInner,
+            activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+            activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+            border: SHOP_HUB_COLORS.border,
+            activeBorder: SHOP_HUB_COLORS.borderBright
         }));
     }
 
@@ -429,13 +530,15 @@ export default class MainMenuScene extends Phaser.Scene {
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 420 : 560);
         const panelHeight = Math.min(height - safeY * 2 - 24, isCompact ? 420 : 460);
         const panel = createPixelPanel(this, width / 2, height / 2 + 6, panelWidth, panelHeight, {
-            fill: 0x201720
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
         });
         this.uiRoot.add(panel);
 
         panel.add(createPixelText(this, 0, -panelHeight / 2 + 30, 'CREDITS', {
             fontSize: isCompact ? '16px' : '18px',
-            color: '#ffe9b8'
+            color: SHOP_HUB_COLORS.title
         }));
 
         const sections = [
@@ -451,39 +554,46 @@ export default class MainMenuScene extends Phaser.Scene {
             const y = sectionStartY + index * sectionGap;
             panel.add(createPixelText(this, 0, y, section.title.toUpperCase(), {
                 fontSize: isCompact ? '12px' : '13px',
-                color: '#ffd888',
+                color: SHOP_HUB_COLORS.title,
                 strokeThickness: 3
             }));
             section.lines.forEach((line, lineIndex) => {
                 panel.add(createPixelText(this, 0, y + 24 + lineIndex * 20, line, {
                     fontSize: isCompact ? '12px' : '13px',
-                    color: UI_COLORS.text,
+                    color: SHOP_HUB_COLORS.text,
                     strokeThickness: 3
                 }));
             });
         });
 
         this.uiRoot.add(createPixelButton(this, width / 2, height - safeY - (isCompact ? 28 : 24), Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
-            fontSize: isCompact ? '14px' : '16px'
+            fontSize: isCompact ? '14px' : '16px',
+            textColor: SHOP_HUB_COLORS.text,
+            fill: SHOP_HUB_COLORS.buttonFill,
+            inner: SHOP_HUB_COLORS.buttonInner,
+            activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+            activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+            border: SHOP_HUB_COLORS.border,
+            activeBorder: SHOP_HUB_COLORS.borderBright
         }));
     }
 
     createCharacterSlot(key, config, size, selected) {
         const container = this.add.container(0, 0);
         const frame = this.add.graphics();
-        const borderColor = selected ? UI_COLORS.goldBright : UI_COLORS.border;
-        frame.fillStyle(0x150f16, 0.88);
+        const borderColor = selected ? SHOP_HUB_COLORS.borderBright : SHOP_HUB_COLORS.border;
+        frame.fillStyle(SHOP_HUB_COLORS.panelOuter, 0.88);
         frame.fillRect(-size / 2, -size / 2, size, size);
         frame.lineStyle(2, 0x000000, 1);
         frame.strokeRect(-size / 2, -size / 2, size, size);
         frame.lineStyle(2, borderColor, 1);
         frame.strokeRect(-size / 2 + 2, -size / 2 + 2, size - 4, size - 4);
-        frame.fillStyle(selected ? 0xf9d87a : 0x6f5938, selected ? 0.12 : 0.08);
+        frame.fillStyle(selected ? 0x8cc4dc : SHOP_HUB_COLORS.panelAccent, selected ? 0.18 : 0.16);
         frame.fillRect(-size / 2 + 6, -size / 2 + 6, size - 12, size - 12);
         const sprite = this.createCharacterPreview(key, 0, -Math.max(6, size * 0.07), Math.max(36, Math.floor(size * 0.48)));
         const label = createPixelText(this, 0, size / 2 - 12, config.label ?? key, {
             fontSize: size <= 64 ? '8px' : '10px',
-            color: selected ? '#fff0c5' : UI_COLORS.dimText,
+            color: selected ? SHOP_HUB_COLORS.title : SHOP_HUB_COLORS.dimText,
             strokeThickness: 2
         });
         const hitArea = this.add.rectangle(0, 0, size, size, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
@@ -491,15 +601,7 @@ export default class MainMenuScene extends Phaser.Scene {
             this.selectedCharacterKey = key;
             this.render();
         });
-        const passiveInfoBadge = this.createPassiveInfoBadge(size / 2 - 12, -size / 2 + 12, config.passiveDescription, {
-            panelWidth: Math.min(170, Math.max(110, size * 1.7)),
-            compact: size <= 72
-        });
-        const children = [frame, sprite, label, hitArea];
-        if (passiveInfoBadge) {
-            children.push(passiveInfoBadge);
-        }
-        container.add(children);
+        container.add([frame, sprite, label, hitArea]);
         return container;
     }
 
@@ -525,13 +627,13 @@ export default class MainMenuScene extends Phaser.Scene {
 
         const container = this.add.container(x, y);
         const badge = this.add.graphics();
-        badge.fillStyle(0x101820, 0.95);
+        badge.fillStyle(SHOP_HUB_COLORS.panelOuter, 0.95);
         badge.fillRoundedRect(-badgeSize / 2, -badgeSize / 2, badgeSize, badgeSize, 4);
-        badge.lineStyle(2, UI_COLORS.goldBright, 1);
+        badge.lineStyle(2, SHOP_HUB_COLORS.borderBright, 1);
         badge.strokeRoundedRect(-badgeSize / 2, -badgeSize / 2, badgeSize, badgeSize, 4);
         const badgeText = createPixelText(this, 0, 1, 'i', {
             fontSize: compact ? '10px' : '11px',
-            color: '#fff0c5',
+            color: SHOP_HUB_COLORS.title,
             strokeThickness: 2
         });
         const tooltipText = this.add.text(0, 0, `Passive\n${normalizedPassiveText}`, tooltipTextStyle)
@@ -539,9 +641,9 @@ export default class MainMenuScene extends Phaser.Scene {
         const tooltipHeight = Math.max(44, tooltipText.height + tooltipPadding * 2 + 8);
         const tooltip = this.add.container(0, -badgeSize / 2 - 10);
         const tooltipBackground = this.add.graphics();
-        tooltipBackground.fillStyle(0x140f15, 0.96);
+        tooltipBackground.fillStyle(SHOP_HUB_COLORS.panelOuter, 0.96);
         tooltipBackground.fillRoundedRect(-panelWidth / 2, -tooltipHeight, panelWidth, tooltipHeight, 8);
-        tooltipBackground.lineStyle(2, UI_COLORS.gold, 1);
+        tooltipBackground.lineStyle(2, SHOP_HUB_COLORS.border, 1);
         tooltipBackground.strokeRoundedRect(-panelWidth / 2, -tooltipHeight, panelWidth, tooltipHeight, 8);
         tooltipText.setPosition(0, -tooltipHeight + tooltipPadding);
         tooltip.add([tooltipBackground, tooltipText]);
@@ -585,21 +687,21 @@ export default class MainMenuScene extends Phaser.Scene {
 
     createMapSlot(mapKey, definition, selected, size = 120) {
         const container = this.add.container(0, 0);
-        const fillColor = MAP_THEME_COLORS[mapKey] ?? UI_COLORS.gold;
+        const fillColor = MAP_THEME_COLORS[mapKey] ?? SHOP_HUB_COLORS.border;
         const iconTextureKey = MAP_ICON_KEYS[mapKey];
         const hasIconTexture = Boolean(iconTextureKey && this.textures.exists(iconTextureKey));
         const frame = this.add.graphics();
-        frame.fillStyle(0x151018, 0.9);
+        frame.fillStyle(SHOP_HUB_COLORS.panelOuter, 0.9);
         frame.fillRect(-size / 2, -size / 2, size, size);
         frame.fillStyle(fillColor, selected ? 0.16 : 0.08);
         frame.fillRect(-size / 2 + 8, -size / 2 + 8, size - 16, size - 16);
         frame.lineStyle(2, 0x000000, 1);
         frame.strokeRect(-size / 2, -size / 2, size, size);
-        frame.lineStyle(2, selected ? UI_COLORS.goldBright : UI_COLORS.border, 1);
+        frame.lineStyle(2, selected ? SHOP_HUB_COLORS.borderBright : SHOP_HUB_COLORS.border, 1);
         frame.strokeRect(-size / 2 + 2, -size / 2 + 2, size - 4, size - 4);
         const label = createPixelText(this, 0, -size / 2 + 20, definition?.label ?? mapKey, {
             fontSize: size <= 108 ? '7px' : size <= 120 ? '9px' : '10px',
-            color: selected ? '#fff0c5' : UI_COLORS.dimText,
+            color: selected ? SHOP_HUB_COLORS.title : SHOP_HUB_COLORS.dimText,
             strokeThickness: 2
         });
         const initials = definition?.label?.split(' ').map(part => part[0]).join('').slice(0, 2) ?? mapKey.slice(0, 2).toUpperCase();

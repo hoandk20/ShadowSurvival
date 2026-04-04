@@ -16,13 +16,13 @@ export const STAGE_SCENARIOS = {
         enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
         wavePlans: [
             {
-                durationSeconds: 30,
+                durationSeconds: 45,
                 enemies: [
                     { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 20 } }
                 ]
             },
             {
-                durationSeconds: 30,
+                durationSeconds: 45,
                 enemies: [
                     { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 22 } }
                 ]
@@ -43,7 +43,7 @@ export const STAGE_SCENARIOS = {
                 durationSeconds: 999,
                 enemies: [
                     { enemyType: 'worm', count: 35, isBoss: false, statsOverride: { maxHealth: 60 } },
-                    { enemyType: 'kitsume', count: 3, isBoss: true, statsOverride: { maxHealth: 2000, damage: 50 } }
+                    { enemyType: 'kitsume', count: 3, isBoss: true, statsOverride: { maxHealth: 2000, damage: 50, armor: 5 } }
                 ]
             },
             {
@@ -84,7 +84,7 @@ export const STAGE_SCENARIOS = {
                     { enemyType: 'mummy', count: 25, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 25, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'eyes', count: 10 },
-                    { enemyType: 'skeleton', count: 3, statsOverride: { maxHealth: 8000, damage: 50 } }
+                    { enemyType: 'skeleton', count: 3, statsOverride: { maxHealth: 8000, damage: 50, armor: 10 } }
                 ]
             }
         ]

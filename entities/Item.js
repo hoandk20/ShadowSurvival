@@ -222,6 +222,11 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
     }
 
     canBeCollectedBy(player, time = null) {
+        const now = typeof time === 'number' ? time : (this.scene?.time?.now ?? 0);
+        const pickupDelayMs = Math.max(0, this.config?.pickupDelayMs ?? 0);
+        if (pickupDelayMs > 0 && (now - (this.spawnTime ?? 0)) < pickupDelayMs) {
+            return false;
+        }
         return !this.isReservedForOtherPlayer(player, time);
     }
 
