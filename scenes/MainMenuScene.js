@@ -444,7 +444,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
     renderSettings() {
         const { width, height, safeX, isCompact, isPortrait } = this.getResponsiveMetrics();
-        const showFullscreenButton = this.supportsFullscreen();
+        const showFullscreenButton = true;
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 400 : 460);
         const panelHeight = showFullscreenButton
             ? (isCompact ? 382 : 360)
@@ -517,12 +517,27 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     toggleFullscreen() {
-        if (!this.supportsFullscreen()) return;
+        const canvas = this.game?.canvas;
+        if (!canvas) return;
         if (this.scale.isFullscreen) {
             this.scale.stopFullscreen();
             return;
         }
-        this.scale.startFullscreen();
+        if (this.supportsFullscreen()) {
+            this.scale.startFullscreen();
+            return;
+        }
+        if (typeof canvas.requestFullscreen === 'function') {
+            canvas.requestFullscreen();
+            return;
+        }
+        if (typeof canvas.webkitRequestFullscreen === 'function') {
+            canvas.webkitRequestFullscreen();
+            return;
+        }
+        if (typeof canvas.msRequestFullscreen === 'function') {
+            canvas.msRequestFullscreen();
+        }
     }
 
     renderCredits() {
