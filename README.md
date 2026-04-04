@@ -63,6 +63,7 @@ Source: [config/stats.js](./config/stats.js)
 | Effect Chance | `effectChance` | 0 |
 | Effect Damage Multiplier | `effectDamageMultiplier` | 1 |
 | Effect Duration Multiplier | `effectDurationMultiplier` | 1 |
+| Shock Chain Count | `shockChainCount` | 0 |
 | Pickup Range Multiplier | `pickupRangeMultiplier` | 1 |
 | XP Gain Multiplier | `xpGainMultiplier` | 1 |
 | Gold Gain Multiplier | `goldGainMultiplier` | 1 |
@@ -272,7 +273,7 @@ Current runtime shop notes:
 | `Sharpened Blade` | `43` | `critChance +0.05` |
 | `Heavy Edge` | `43` | `critMultiplier +0.1`, `skillRange -10` |
 | `Quick Gloves` | `45` | `attackSpeed +0.18`, `moveSpeed -5` |
-| `Battle Focus` | `51` | `damageMultiplier +0.1`, `critChance +0.08`, `armor -10` |
+| `Battle Focus` | `51` | `damageMultiplier +0.1`, `critChance +0.08`, `armor -5` |
 | `Steel Armor` | `42` | `armor +3`, `hp -10` |
 | `Vital Ring` | `42` | `hp +30`, `armor -1` |
 | `Regeneration Charm` | `42` | `healthRegenPerSecond +1`, `hp -10` |
@@ -294,18 +295,18 @@ Current runtime shop notes:
 | `Berserker Blood` | `40` | `dodge +15%`, `hp -20` |
 | `Sniper Scope` | `40` | `critChance +0.15`, `attackSpeed -0.25` |
 | `Heavy Payload` | `40` | `projectileCount +1`, `damageMultiplier +0.1`, `attackSpeed -0.15` |
-| `Overcharged Reactor` | `39` | `skillRange +10`, `attackSpeed -0.15` |
-| `Unstable Shield` | `33` | `shield +30`, `armor -2` |
-| `Speed Injector` | `33` | `moveSpeed +20`, `damageMultiplier -0.15` |
-| `Overgrowth Engine` | `33` | `areaSizeMultiplier +0.2`, `attackSpeed -0.1` |
-| `Time Distorter` | `38` | `armor -2`, `dodge +10%` |
-| `Abyssal Catalyst` | `33` | `damageMultiplier +0.35`, `effectDamageMultiplier +0.25`, `healthRegenPerSecond -4` |
-| `Singularity Field` | `32` | `areaSizeMultiplier +0.5`, `knockbackMultiplier +0.5`, `damageMultiplier -0.15` |
+| `Overcharged Reactor` | `40` | `skillRange +10`, `attackSpeed -0.15` |
+| `Unstable Shield` | `40` | `shield +30`, `armor -2` |
+| `Speed Injector` | `40` | `moveSpeed +20`, `damageMultiplier -0.15` |
+| `Overgrowth Engine` | `40` | `areaSizeMultiplier +0.2`, `attackSpeed -0.1` |
+| `Time Distorter` | `40` | `armor -2`, `dodge +10%` |
+| `Abyssal Catalyst` | `40` | `damageMultiplier +0.35`, `effectDamageMultiplier +0.25`, `healthRegenPerSecond -4` |
+| `Singularity Field` | `40` | `areaSizeMultiplier +0.5`, `knockbackMultiplier +0.5`, `damageMultiplier -0.15` |
 | `Phantom Stride` | `40` | `moveSpeed +30`, `pickupRangeMultiplier +0.4`, `armor -4` |
-| `Rotheart Sigil` | `32` | `effectChance +0.25`, `effectDamageMultiplier +0.3`, `damageMultiplier -0.2` |
-| `Fractured Tempo` | `33` | `attackSpeed +0.4`, `damageMultiplier -0.25`, `knockbackMultiplier -0.3` |
-| `Vampire Pact` | `32` | `lifesteal +0.1`, `hp -50` |
-| `Reckless Core` | `32` | `critMultiplier +0.2`, `hp -15` |
+| `Rotheart Sigil` | `40` | `effectChance +0.25`, `effectDamageMultiplier +0.3`, `damageMultiplier -0.2` |
+| `Fractured Tempo` | `40` | `attackSpeed +0.4`, `damageMultiplier -0.25`, `knockbackMultiplier -0.3` |
+| `Vampire Pact` | `40` | `lifesteal +0.1`, `hp -50` |
+| `Reckless Core` | `40` | `critMultiplier +0.2`, `hp -15` |
 | `Impact Engine` | `50` | `knockbackMultiplier +0.3`, `damageMultiplier +0.1` |
 
 ### Effect Items
@@ -314,7 +315,7 @@ Current runtime shop notes:
 | --- | ---: | --- |
 | `Toxic Catalyst` | `56` | `effectChance +0.2`, `effectDamageMultiplier +0.15`, `dodge -7%` |
 | `Lingering Curse` | `73` | `attackSpeed +0.2`, `effectDurationMultiplier +0.25` |
-| `Chain Amplifier` | `59` | `shock.chainCount +1`, only rolls if `shock` is active |
+| `Chain Amplifier` | `59` | `shockChainCount +1`, only rolls if `shock` is active |
 | `Flame` | `56` | `burn.explodeOnMaxStacks = true`, only rolls if `burn` is active |
 | `Frozen Edge` | `56` | `freeze.bonusCritDamageToFrozen +0.35`, only rolls if `freeze` is active |
 | `Venom Trail` | `55` | `hp -20`, `poison.spawnTrail = true`, leaves a poison trail even without `Poison Core` |
@@ -325,11 +326,12 @@ Current runtime shop notes:
 
 | Item | Cost | Current unlock |
 | --- | ---: | --- |
-| `Fire Core` | `70` | unlock `burn` on the current skill, `30%` effect chance |
-| `Ice Core` | `70` | unlock `freeze` on the current skill, `40%` effect chance |
-| `Poison Core` | `70` | unlock `poison` on the current skill, `30%` effect chance |
-| `Shock Core` | `70` | unlock `shock` on the current skill, `30%` effect chance |
-| `Afang` | `70` | unlock `bleed` on the current skill, `30%` effect chance |
+| `Fire Core` | `70` | unlock `burn` on the current skill, `50%` effect chance |
+| `Ice Core` | `70` | unlock `freeze` on the current skill, `50%` effect chance |
+| `Poison Core` | `70` | unlock `poison` on the current skill, `50%` effect chance |
+| `Shock Core` | `70` | unlock `shock` on the current skill, `50%` effect chance |
+| `Aim Core` | `70` | unlock `mark` on the current skill, `50%` effect chance |
+| `Afang` | `70` | unlock `bleed` on the current skill, `50%` effect chance |
 | `Explore Core` | `70` | add `explosion` as a bonus on-hit effect without replacing the current main status effect |
 
 ### Utility Items
@@ -400,7 +402,7 @@ Current supporter mechanics:
 | `eye_monster` | orb | range `130`, cooldown `1500` | damage `28`, speed `260` | `skillRange +30`, `critMultiplier +0.1`, `mark on hit 100%` |
 | `dragon_ice` | orb | range `145`, cooldown `1300` | damage `29`, speed `320` | `freeze on hit 100%`, `effectDurationMultiplier +0.3` |
 | `fire_spirite` | orb | range `135`, cooldown `1100` | damage `27`, speed `360` | `burn on hit 100%`, `effectDamageMultiplier +0.3` |
-| `shock_mouse` | chain lightning | range `150`, cooldown `1150` | damage `31`, speed `380` | `shock on hit 100%`, `shockChainCountBonus +2`, `attackSpeed +0.1` |
+| `shock_mouse` | chain lightning | range `150`, cooldown `1150` | damage `31`, speed `380` | `shock on hit 100%`, `shockChainCountBonus +1`, `attackSpeed +0.1` |
 | `poison_ball` | orb | range `140`, cooldown `1200` | damage `27`, speed `320` | `poison on hit 100%`, `effectDurationMultiplier +0.2`, `effectDamageMultiplier +0.1` |
 | `shield_drone` | armor aura | interval `2200` | armor `+8` | `armor +1`, `shieldResetAmount 20` every `10s` |
 | `rock` | claw slash | range `20`, cooldown `2000`, attack area `100` | damage `35` | `knockbackMultiplier +0.1`, `armor +5`, gray explosion on hit `30%` |
@@ -449,16 +451,16 @@ Current runtime flow:
 - a wave ends when either its timer expires or all wave enemies are killed
 - when a wave ends by timeout, remaining enemies from that wave are cleared
 - map rock wave composition is currently:
-  - wave `1`: `30s`, `worm` up to `999`, `20 HP`
-  - wave `2`: `30s`, `worm` up to `999`, `22 HP`
+  - wave `1`: `45s`, `worm` up to `999`, `20 HP`
+  - wave `2`: `45s`, `worm` up to `999`, `22 HP`
   - wave `3`: `45s`, `worm` up to `999`, `23 HP`
   - wave `4`: `45s`, `worm` up to `999`, `50 HP`
-  - wave `5`: open-ended boss clear, `35 worm`, `60 HP` plus `3 kitsume`, `2000 HP / 50 damage`
+  - wave `5`: open-ended boss clear, `35 worm`, `60 HP` plus `3 kitsume`, `2000 HP / 50 damage / 5 armor / scale 1.7`
   - wave `6`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
   - wave `7`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
   - wave `8`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
   - wave `9`: `45s`, `mummy` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
-  - wave `10`: `45s`, `25 mummy`, `100 HP` plus `25 bat`, `100 HP`, `10 eyes`, and `3 skeleton`, `8000 HP / 50 damage`
+  - wave `10`: `45s`, `25 mummy`, `100 HP` plus `25 bat`, `100 HP`, `10 eyes`, and `3 skeleton`, `8000 HP / 50 damage / 10 armor / scale 1.7`
 - the maximum number of enemies alive on the map at once is currently `25`
 - about `2s` after a wave ends, the shop flow begins
 - before the shop opens, the game now rolls `4` stat cards and the player picks `1`

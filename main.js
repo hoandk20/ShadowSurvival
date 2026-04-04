@@ -4,6 +4,7 @@ import MainScene from './scenes/MainScene.js';
 import HudScene from './scenes/HudScene.js';
 import PauseMenuScene from './scenes/PauseMenuScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
+import VictoryScene from './scenes/VictoryScene.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -24,7 +25,7 @@ const config = {
             debug: false
         }
     },
-    scene: [BootScene, MainMenuScene, MainScene, HudScene, PauseMenuScene, GameOverScene]
+    scene: [BootScene, MainMenuScene, MainScene, HudScene, PauseMenuScene, GameOverScene, VictoryScene]
 };
 
 new Phaser.Game(config);

@@ -40,6 +40,13 @@ export default class HudScene extends Phaser.Scene {
         this.goldText = null;
         this.killCountText = null;
         this.waveCountdownText = null;
+        this.bossBarContainer = null;
+        this.bossBarBg = null;
+        this.bossBarFill = null;
+        this.bossBarNameText = null;
+        this.bossBarInfoKey = null;
+        this.bossBarVisible = false;
+        this.bossBarSlideTween = null;
         this.waveAnnouncementContainer = null;
         this.waveAnnouncementBackdrop = null;
         this.waveAnnouncementText = null;
@@ -220,6 +227,7 @@ export default class HudScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(1003);
+        this.createBossBar();
 
         this.createPauseButton();
         this.createTouchJoystick();
@@ -273,6 +281,7 @@ export default class HudScene extends Phaser.Scene {
                 this.waveCountdownText.setText(`${waveRemainingMinutesText}:${waveRemainingSecondsText}`);
             }
         }
+        this.updateBossBar(this.mainScene?.getBossHudInfo?.() ?? null);
         this.updateTouchJoystick();
         this.drawHpBar(hpProgress, rawHealth, maxHealth, shield);
         this.drawExpBar(progress, level, rawXP, xpToNextLevel);
@@ -340,7 +349,8 @@ export default class HudScene extends Phaser.Scene {
             this.killCountText.setPosition(pauseOffset, 14);
         }
         if (this.waveCountdownText) {
-            this.waveCountdownText.setPosition(width / 2, 18);
+            const bossOffset = this.bossBarVisible ? 42 : 18;
+            this.waveCountdownText.setPosition(width / 2, bossOffset);
         }
         if (this.goldText && this.goldIcon) {
             const rightMargin = width < 640 ? 10 : 14;
@@ -362,6 +372,7 @@ export default class HudScene extends Phaser.Scene {
         }
         this.layoutPauseButton();
         this.layoutTouchJoystick();
+        this.layoutBossBar();
         if (this.expLevelText) {
             this.expLevelText.setPosition(width / 2, expBarY - 9);
         }
@@ -372,6 +383,26 @@ export default class HudScene extends Phaser.Scene {
             this.hpText.setPosition(barX + 6, hpBarY + barHeight / 2 - 1);
         }
         this.layoutShopOverlay();
+    }
+
+    createBossBar() {
+        this.bossBarContainer?.destroy(true);
+        this.bossBarContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(1010).setVisible(false);
+        this.bossBarBg = this.add.graphics();
+        this.bossBarFill = this.add.graphics();
+        this.bossBarNameText = this.add.text(0, -13, '', {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            fontStyle: 'bold',
+            color: '#fff3d8',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5, 0.5);
+        this.bossBarContainer.add([
+            this.bossBarBg,
+            this.bossBarFill,
+            this.bossBarNameText
+        ]);
     }
 
     createInventoryPanel() {
@@ -784,6 +815,91 @@ export default class HudScene extends Phaser.Scene {
         }
     }
 
+    layoutBossBar() {
+        if (!this.bossBarContainer) return;
+        const width = this.scale.width;
+        const compact = width < 640;
+        const barWidth = compact ? Math.min(220, Math.floor(width * 0.7)) : Math.min(340, Math.floor(width * 0.52));
+        const visibleX = Math.floor(width / 2);
+        const hiddenX = width + Math.floor(barWidth * 0.7);
+        const y = compact ? 18 : 20;
+        const targetX = this.bossBarVisible ? visibleX : hiddenX;
+        if (!this.bossBarSlideTween) {
+            this.bossBarContainer.setPosition(targetX, y);
+        } else {
+            this.bossBarContainer.y = y;
+        }
+        this.bossBarContainer.setData('barWidth', barWidth);
+    }
+
+    updateBossBar(info = null) {
+        if (!this.bossBarContainer || !this.bossBarBg || !this.bossBarFill) return;
+        const hadVisibleBoss = this.bossBarVisible;
+        this.bossBarVisible = Boolean(info && info.maxHealth > 0 && info.health >= 0);
+        this.layoutBossBar();
+
+        if (!this.bossBarVisible) {
+            this.bossBarInfoKey = null;
+            this.bossBarSlideTween?.stop?.();
+            this.bossBarSlideTween = null;
+            this.bossBarContainer.setVisible(false);
+            return;
+        }
+
+        const barWidth = this.bossBarContainer.getData('barWidth') ?? 280;
+        const barHeight = 12;
+        const fillProgress = Phaser.Math.Clamp((info.health ?? 0) / Math.max(1, info.maxHealth ?? 1), 0, 1);
+        const frameColor = info.barFrameColor ?? 0x26110d;
+        const fillColor = info.barColor ?? 0xd24e3b;
+        const glowColor = info.barGlowColor ?? 0xffdca8;
+
+        this.bossBarContainer.setVisible(true);
+        this.bossBarBg.clear();
+        this.bossBarBg.fillStyle(0x0e0908, 0.94);
+        this.bossBarBg.fillRoundedRect(-barWidth / 2 - 5, -6, barWidth + 10, barHeight + 12, 6);
+        this.bossBarBg.lineStyle(2, 0x000000, 1);
+        this.bossBarBg.strokeRoundedRect(-barWidth / 2 - 5, -6, barWidth + 10, barHeight + 12, 6);
+        this.bossBarBg.lineStyle(2, frameColor, 1);
+        this.bossBarBg.strokeRoundedRect(-barWidth / 2 - 2, -3, barWidth + 4, barHeight + 6, 5);
+
+        this.bossBarFill.clear();
+        this.bossBarFill.fillStyle(0x20110d, 1);
+        this.bossBarFill.fillRoundedRect(-barWidth / 2, 0, barWidth, barHeight, 4);
+        const fillWidth = Math.max(0, Math.floor(barWidth * fillProgress));
+        if (fillWidth > 0) {
+            const fillX = (barWidth / 2) - fillWidth;
+            this.bossBarFill.fillStyle(fillColor, 1);
+            this.bossBarFill.fillRoundedRect(fillX, 0, fillWidth, barHeight, 4);
+            this.bossBarFill.lineStyle(1, glowColor, 0.7);
+            this.bossBarFill.strokeRoundedRect(fillX, 0, fillWidth, barHeight, 4);
+        }
+
+        if (this.bossBarNameText) {
+            this.bossBarNameText.setText(info.name ?? 'BOSS');
+        }
+
+        const infoKey = `${info.key}:${info.roundNumber}`;
+        if (!hadVisibleBoss || this.bossBarInfoKey !== infoKey) {
+            this.bossBarInfoKey = infoKey;
+            this.bossBarSlideTween?.stop?.();
+            const targetY = this.bossBarContainer.y;
+            const hiddenX = this.scale.width + Math.floor(barWidth * 0.7);
+            const visibleX = Math.floor(this.scale.width / 2);
+            this.bossBarContainer.setPosition(hiddenX, targetY);
+            this.bossBarContainer.setAlpha(0);
+            this.bossBarSlideTween = this.tweens.add({
+                targets: this.bossBarContainer,
+                x: visibleX,
+                alpha: 1,
+                duration: 340,
+                ease: 'Cubic.easeOut',
+                onComplete: () => {
+                    this.bossBarSlideTween = null;
+                }
+            });
+        }
+    }
+
     showWaveAnnouncement({ waveNumber = 1, durationMs = 1600 } = {}) {
         this.hideWaveAnnouncement();
         const width = this.scale.width;
@@ -885,6 +1001,8 @@ export default class HudScene extends Phaser.Scene {
                 return `${prefix}${Math.round(value * 100)}% effect dmg`;
             case 'effectDurationMultiplier':
                 return `${prefix}${Math.round(value * 100)}% effect dur`;
+            case 'shockChainCount':
+                return `${prefix}${Math.round(value)} shock chain`;
             case 'pickupRangeMultiplier':
                 return `${prefix}${Math.round(value * 100)}% pickup`;
             case 'goldGainMultiplier':

@@ -11,6 +11,7 @@ import { getStatusEffectDefaultOptions } from '../config/statusEffects.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
 import SupporterClawEffect from './effects/SupporterClawEffect.js';
 import KnightSlashEffect from './effects/KnightSlashEffect.js';
+import FirecoatAuraEffect from './effects/FirecoatAuraEffect.js';
 import { playSfx } from '../utils/audioSettings.js';
 
 const selectAnimationName = (config) => {
@@ -67,6 +68,9 @@ export default class Player extends BaseEntity {
         this.healthBarHeight = 10;
         this.lastDamageTime = -Infinity;
         this.damageCooldown = 300;
+        this.externalKnockbackVelocity = new Phaser.Math.Vector2(0, 0);
+        this.externalKnockbackTimer = 0;
+        this.externalKnockbackDragFactor = 0.94;
         this.damageMultiplier = 1;
         this.attackSpeedMultiplier = 1;
         this.critMultiplierBonus = 0;
@@ -78,7 +82,7 @@ export default class Player extends BaseEntity {
         this.bonusArmorPierce = 0;
         this.bonusSkillRange = 0;
         this.shockChainDamageBonus = 0;
-        this.shockChainCountBonus = 0;
+        this.shockChainCountBonus = Math.max(0, characterStats.shockChainCount ?? PLAYER_BASE_STATS.shockChainCount ?? 0);
         this.bonusSpeedFlat = 0;
         this.bonusSpeedPercent = 0;
         this.bonusKnockbackMultiplier = 0;
@@ -141,11 +145,15 @@ export default class Player extends BaseEntity {
         this.motionTrailEffect = new MotionTrailEffect(scene, this);
         this.meleeHitEffect = new SupporterClawEffect(scene);
         this.knightSlashEffect = new KnightSlashEffect(scene);
+        this.firecoatAuraEffect = new FirecoatAuraEffect(scene, this);
 
         this.once(Phaser.GameObjects.Events.ADDED_TO_SCENE, () => {
             this.ensurePhysicsSize();
             this.ensureVisibleState();
             this.setState('move');
+        });
+        this.once(Phaser.GameObjects.Events.DESTROY, () => {
+            this.firecoatAuraEffect?.destroy?.();
         });
     }
 
@@ -427,6 +435,14 @@ export default class Player extends BaseEntity {
 
         this.trackMovedDistance();
         this.ensureVisibleState();
+        if (this.externalKnockbackTimer > 0) {
+            this.setVelocity(this.externalKnockbackVelocity.x, this.externalKnockbackVelocity.y);
+            this.externalKnockbackVelocity.scale(this.externalKnockbackDragFactor);
+            this.externalKnockbackTimer = Math.max(0, this.externalKnockbackTimer - delta);
+            if (this.externalKnockbackTimer <= 0) {
+                this.externalKnockbackVelocity.set(0, 0);
+            }
+        }
         // Handle input
         let inputX = 0;
         let inputY = 0;
@@ -451,7 +467,9 @@ export default class Player extends BaseEntity {
         const velocityX = movementInput.x * effectiveSpeed;
         const velocityY = movementInput.y * effectiveSpeed;
 
-        this.setVelocity(velocityX, velocityY);
+        if (this.externalKnockbackTimer <= 0) {
+            this.setVelocity(velocityX, velocityY);
+        }
 
         // Flip sprite based on horizontal movement direction
         if (velocityX < 0) {
@@ -496,6 +514,7 @@ export default class Player extends BaseEntity {
         this.motionTrailEffect?.update(time, delta);
         this.smoothExpBar(delta);
         this.updateRegeneration(delta);
+        this.firecoatAuraEffect?.update(delta);
         this.updateShieldRegeneration(delta);
         this.updateItemShield(delta);
         this.attractLoot(delta);
@@ -520,6 +539,17 @@ export default class Player extends BaseEntity {
         );
         this.wasMovingLastFrame = isMoving;
         this.lastTrackedPosition.set(this.x, this.y);
+    }
+
+    applyExternalKnockback(direction, speed = 0, durationMs = 0, dragFactor = 0.94) {
+        if (!direction) return;
+        const knockbackDirection = direction.clone?.() ?? new Phaser.Math.Vector2(direction.x ?? 0, direction.y ?? 0);
+        if (knockbackDirection.lengthSq() === 0) return;
+        knockbackDirection.normalize();
+        this.externalKnockbackVelocity.copy(knockbackDirection.scale(Math.max(0, speed)));
+        this.externalKnockbackTimer = Math.max(0, durationMs);
+        this.externalKnockbackDragFactor = Phaser.Math.Clamp(dragFactor, 0, 0.999);
+        this.setVelocity(this.externalKnockbackVelocity.x, this.externalKnockbackVelocity.y);
     }
 
     hasVenomTrailEnabled() {
@@ -897,6 +927,10 @@ export default class Player extends BaseEntity {
         if (remainingDamage > 0) {
             this.health = Phaser.Math.Clamp(this.health - remainingDamage, 0, this.maxHealth);
         }
+        const isBossDamageSource = Boolean(source?.isBoss || source?.isFinalBoss);
+        if (remainingDamage > 0 && isBossDamageSource) {
+            this.playBossHitEffect();
+        }
         this.updateHealthBarUI();
         if (this.health <= 0) {
             this.isDead = true;
@@ -912,6 +946,32 @@ export default class Player extends BaseEntity {
             absorbedDamage: incomingDamageContext.absorbedDamage ?? 0,
             didKill: this.health <= 0
         };
+    }
+
+    playBossHitEffect() {
+        const effectRunner = this.scene?.skillBehaviorPipeline?.effects;
+        if (!effectRunner?.spawnAshDissolve) return;
+        effectRunner.spawnAshDissolve(this, (this.depth ?? 1000) + 2, {
+            duration: 280,
+            riseDistance: 8,
+            driftX: 3,
+            particleCount: 7,
+            particleSpreadX: 14,
+            particleSize: {
+                min: 1,
+                max: 3
+            },
+            particleRise: {
+                min: 5,
+                max: 12
+            },
+            minAlpha: 0.38,
+            glowRadius: 12,
+            glowAlpha: 0.16,
+            spiritScale: 0.55,
+            spiritAlpha: 0.24,
+            spiritColor: 0xd8d0c2
+        });
     }
 
     heal(amount) {
@@ -1230,6 +1290,9 @@ export default class Player extends BaseEntity {
                 break;
             case 'effectDurationMultiplier':
                 this.globalEffectDurationMultiplier *= (1 + (effect.value ?? 0));
+                break;
+            case 'shockChainCount':
+                this.shockChainCountBonus += effect.value ?? 0;
                 break;
             default:
         }

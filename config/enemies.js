@@ -44,8 +44,8 @@ export const ENEMIES = {
         },
         behavior: 'chase',
         texture: 'skeleton',
-        displaySize: scaleDimension({ width: 35, height: 35 }),
-        hitboxSize: scaleHitbox({ width: 35, height: 35 }),
+        displaySize: scaleDimension({ width: 20, height: 20 }),
+        hitboxSize: scaleHitbox({ width: 20, height: 20 }),
         flashTint: 0xff0000,
         flashDuration: 120
     }),
@@ -112,8 +112,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     minotau: createEnemyConfig({
         name: 'Minotau',
@@ -125,8 +124,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     baphomet: createEnemyConfig({
         name: 'Baphomet',
@@ -138,8 +136,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     dino: createEnemyConfig({
         name: 'Dino',
@@ -151,8 +148,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     bugmonster: createEnemyConfig({
         name: 'Bug Monster',
@@ -164,8 +160,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     cursed_maiden: createEnemyConfig({
         name: 'Cursed Maiden',
@@ -177,8 +172,7 @@ export const ENEMIES = {
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120,
-        isBoss: true
+        flashDuration: 120
     }),
     kitsume: createEnemyConfig({
         name: 'Kitsume',
@@ -199,8 +193,8 @@ export const ENEMIES = {
         },
         behavior: 'chase',
         texture: 'kitsume',
-        displaySize: { width: 35, height: 35 },
-        hitboxSize: { width: 35, height: 35 },
+        displaySize: { width: 20, height: 20 },
+        hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120
     }),
@@ -244,6 +238,68 @@ export const ENEMIES = {
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
         flashDuration: 120
+    }),
+    bomber: createEnemyConfig({
+        name: 'Bomber',
+        combatType: 'melee',
+        attackStyle: 'contact_smash',
+        behavior: 'chase',
+        texture: 'bomber',
+        displaySize: { width: 24, height: 24 },
+        hitboxSize: { width: 24, height: 24 },
+        flashTint: 0xff8c42,
+        flashDuration: 120,
+        explodeOnDead: {
+            moveSpeedMultiplier: 1.5,
+            delayMs: 500,
+            damage: 50,
+            radius: 36,
+            triggerOnPlayerContact: true,
+            contactRadius: 18
+        }
+    }),
+    lava_monster: createEnemyConfig({
+        name: 'Lava Monster',
+        combatType: 'melee',
+        attackStyle: 'contact_smash',
+        behavior: 'chase',
+        texture: 'lava_monster',
+        displaySize: { width: 24, height: 24 },
+        hitboxSize: { width: 24, height: 24 },
+        flashTint: 0xff7a33,
+        flashDuration: 120
+    }),
+    giant_rock: createEnemyConfig({
+        name: 'Giant Rock',
+        statsBonus: {
+            maxHealth: 40,
+            damage: 5,
+            moveSpeed: -15,
+            armor: 6,
+            effectResist: 0.7,
+            knockbackResist: 4
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_smash',
+        behavior: 'chase',
+        meleeAttack: {
+            engageDelayMs: 140,
+            windupMs: 900,
+            recoveryMs: 260,
+            rangePadding: 10,
+            dashSpeed: 320,
+            dashDistance: 220,
+            dashOvershootDistance: 150
+        },
+        dashTelegraphWidth: 24,
+        dashTelegraphAlpha: 0.18,
+        texture: 'giant_rock',
+        displaySize: { width: 64, height: 64 },
+        hitboxSize: { width: 44, height: 44 },
+        flashTint: 0xffb36b,
+        flashDuration: 120,
+        isBoss: true,
+        finalBossKey: 'giant_rock'
     }),
     rat: createEnemyConfig({
         name: 'Rat',

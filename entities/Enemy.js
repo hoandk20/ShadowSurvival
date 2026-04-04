@@ -2,6 +2,8 @@ import BaseEntity from './BaseEntity.js';
 import { ENEMIES } from '../config/enemies.js';
 import { ENEMY_BASE_STATS, getEnemyStats } from '../config/stats.js';
 import { getStatusEffectConfig } from '../config/statusEffects.js';
+import { getChestTypeConfig, rollChestType } from '../config/chests.js';
+import { getFinalBossConfig, getFinalBossRoundConfig } from '../config/finalBosses.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
 
 const HITBOX_DISTANCE = 30;
@@ -37,6 +39,7 @@ export default class Enemy extends BaseEntity {
         this.body.setBounce(0);
 
         const enemyConfig = ENEMIES[type] ?? {};
+        this.enemyConfig = enemyConfig;
         const enemyStats = getEnemyStats(enemyConfig);
         this.speed = enemyStats.moveSpeed ?? ENEMY_BASE_STATS.moveSpeed;
         const rawDisplay = enemyConfig.displaySize || { width: 34, height: 50 };
@@ -76,6 +79,9 @@ export default class Enemy extends BaseEntity {
             ...DEFAULT_MELEE_ATTACK_CONFIG,
             ...(enemyConfig.meleeAttack ?? {})
         };
+        this.baseMeleeAttackConfig = { ...this.meleeAttackConfig };
+        this.dashTelegraphWidth = Math.max(2, enemyConfig.dashTelegraphWidth ?? 6);
+        this.dashTelegraphAlpha = Phaser.Math.Clamp(enemyConfig.dashTelegraphAlpha ?? 0.18, 0.05, 1);
         this.lastRangedAttackTime = -Infinity;
         this.lastAttackTime = -Infinity;
         this.isAttacking = false;
@@ -88,6 +94,7 @@ export default class Enemy extends BaseEntity {
         this.dashAttackLastPosition = new Phaser.Math.Vector2(x, y);
         this.dashAttackRemainingDistance = 0;
         this.dashAttackHitResolved = false;
+        this.dashAttackTrackedPlayer = null;
         this.dashBackFanElapsedMs = 0;
         this.dashBackFanShotTimerMs = 0;
         this.dashAttackTelegraph = null;
@@ -105,7 +112,30 @@ export default class Enemy extends BaseEntity {
         this.baseStats = null;
         this.currentStats = null;
         this.pendingDeathSource = null;
+        this.chestDropSpawned = false;
+        this.explodeOnDead = enemyConfig.explodeOnDead ? {
+            moveSpeedMultiplier: Math.max(1, enemyConfig.explodeOnDead.moveSpeedMultiplier ?? 1.4),
+            delayMs: Math.max(0, enemyConfig.explodeOnDead.delayMs ?? 500),
+            damage: Math.max(0, enemyConfig.explodeOnDead.damage ?? 50),
+            radius: Math.max(12, enemyConfig.explodeOnDead.radius ?? 52),
+            triggerOnPlayerContact: enemyConfig.explodeOnDead.triggerOnPlayerContact !== false,
+            contactRadius: Math.max(8, enemyConfig.explodeOnDead.contactRadius ?? 18)
+        } : null;
+        if (this.explodeOnDead) {
+            this.speed = Math.round(this.speed * this.explodeOnDead.moveSpeedMultiplier);
+        }
+        this.deathExplosionPrimed = false;
+        this.deathExplosionResolved = false;
+        this.deathExplosionTimer = 0;
+        this.deathSequenceTimer = null;
+        this.isDeathSequenceActive = false;
+        this.contactExplosionStartedAt = null;
         this.isBoss = Boolean(enemyConfig.isBoss);
+        this.isMiniBoss = Boolean(enemyConfig.isMiniBoss);
+        this.finalBossKey = enemyConfig.finalBossKey ?? null;
+        this.finalBossConfig = getFinalBossConfig(this.finalBossKey);
+        this.finalBossRoundIndex = 0;
+        this.isFinalBoss = Boolean(this.finalBossConfig);
         this.statusEffectTint = null;
         this.healthText = null;
         this.showHealthText = false;
@@ -120,6 +150,11 @@ export default class Enemy extends BaseEntity {
         this.baseHeight = this.displaySize.height;
         this.enforceHitboxSize();
         this.captureBaseStats();
+        if (this.isFinalBoss) {
+            this.isBoss = true;
+            this.applyFinalBossRound(0, { preserveHealthRatio: false, emitEvent: false });
+            this.captureBaseStats();
+        }
         this.scene?.statusEffectSystem?.attach?.(this, { entityType: 'enemy' });
 
         this.separation = new Phaser.Math.Vector2(0, 0);
@@ -137,6 +172,21 @@ export default class Enemy extends BaseEntity {
 
     update(time, delta, players, allEnemies) {
         if (!this.scene || !this.active) return;
+        if (this.deathExplosionPrimed) {
+            this.updateDeathExplosion(delta);
+            this.updateHealthTextPosition();
+            this.updateStuckMemory();
+            return;
+        }
+        if (this.isDeathSequenceActive) {
+            if (this.body) {
+                this.body.setVelocity(0, 0);
+            }
+            this.updateHealthTextPosition();
+            this.updateStuckMemory();
+            return;
+        }
+        this.updateContactExplosionFuse(time);
         this.statusEffects?.update?.(delta);
         if (!this.scene || !this.active || !this.body) return;
         const targetPlayer = this.scene?.getNearestPlayerTarget?.(this.x, this.y) ?? (Array.isArray(players) ? players[0] : players);
@@ -144,7 +194,7 @@ export default class Enemy extends BaseEntity {
         if (this.anims?.currentAnim) {
             if (this.isStunned && !this.anims.isPaused) {
                 this.anims.pause();
-            } else if (!this.isStunned && this.anims.isPaused && !this.stunTimer) {
+            } else if (!this.isStunned && this.anims.isPaused && !this.stunTimer && this.holdAnimationPaused !== true) {
                 this.anims.resume();
             }
         }
@@ -223,6 +273,19 @@ export default class Enemy extends BaseEntity {
             this.body.velocity.copy(this.knockbackVelocity);
         }
         if (this.health <= 0) {
+            const finalBossDeathSequence = this.beginFinalBossDeathSequence(source);
+            if (finalBossDeathSequence) {
+                if (!finalBossDeathSequence.phaseChanged) {
+                    this.spawnDeathChest(source);
+                }
+                return {
+                    healthDamage: actualDamage,
+                    absorbedDamage: incomingDamageContext.absorbedDamage ?? 0,
+                    didKill: !finalBossDeathSequence.phaseChanged,
+                    phaseChanged: finalBossDeathSequence.phaseChanged
+                };
+            }
+            this.spawnDeathChest(source);
             const shouldDelayDeathForKnockback = Boolean(
                 skillConfig?.knockbackTakeDamage
                 && force > 0
@@ -243,6 +306,219 @@ export default class Enemy extends BaseEntity {
             absorbedDamage: incomingDamageContext.absorbedDamage ?? 0,
             didKill: this.health <= 0
         };
+    }
+
+    getCurrentFinalBossRoundConfig() {
+        if (!this.isFinalBoss) return null;
+        return getFinalBossRoundConfig(this.finalBossKey, this.finalBossRoundIndex);
+    }
+
+    applyFinalBossRound(roundIndex = 0, options = {}) {
+        if (!this.isFinalBoss) return false;
+        const roundConfig = getFinalBossRoundConfig(this.finalBossKey, roundIndex);
+        if (!roundConfig) return false;
+        this.finalBossRoundIndex = roundIndex;
+        this.applyRuntimeStats({
+            maxHealth: roundConfig.maxHealth ?? this.maxHealth,
+            damage: roundConfig.damage ?? this.damage,
+            speed: roundConfig.speed ?? this.speed,
+            scale: roundConfig.scale ?? this.scaleSize ?? 1,
+            armor: roundConfig.armor ?? this.armor,
+            effectResist: roundConfig.effectResist ?? this.effectResist,
+            attackCooldown: roundConfig.attackCooldown ?? this.attackCooldown,
+            attackRange: roundConfig.attackRange ?? this.attackRange,
+            knockbackResist: roundConfig.knockbackResist ?? this.knockbackResist,
+            stunResist: roundConfig.stunResist ?? this.stunResist,
+            ghostDuration: roundConfig.ghostDuration ?? this.ghostDuration
+        }, {
+            preserveHealthRatio: options.preserveHealthRatio === true
+        });
+        this.behavior = roundConfig.behavior ?? this.behavior;
+        this.combatType = roundConfig.combatType ?? this.combatType;
+        this.attackStyle = roundConfig.attackStyle ?? this.attackStyle;
+        this.meleeAttackConfig = {
+            ...DEFAULT_MELEE_ATTACK_CONFIG,
+            ...this.baseMeleeAttackConfig,
+            ...(roundConfig.meleeAttack ?? {})
+        };
+        this.dashTelegraphWidth = Math.max(2, roundConfig.dashTelegraphWidth ?? this.enemyConfig?.dashTelegraphWidth ?? 6);
+        this.dashTelegraphAlpha = Phaser.Math.Clamp(
+            roundConfig.dashTelegraphAlpha ?? this.enemyConfig?.dashTelegraphAlpha ?? 0.18,
+            0.05,
+            1
+        );
+        this.setAlpha(1);
+        if (options.emitEvent !== false) {
+            this.scene?.events?.emit('boss-round-changed', {
+                boss: this,
+                roundIndex: this.finalBossRoundIndex,
+                roundNumber: this.finalBossRoundIndex + 1,
+                roundConfig
+            });
+        }
+        return true;
+    }
+
+    tryAdvanceFinalBossRound() {
+        if (!this.isFinalBoss) return false;
+        const nextRoundIndex = this.finalBossRoundIndex + 1;
+        const nextRoundConfig = getFinalBossRoundConfig(this.finalBossKey, nextRoundIndex);
+        if (!nextRoundConfig) return false;
+        this.isDead = false;
+        this.pendingDeathSource = null;
+        this.knockbackTimer = 0;
+        this.knockbackVelocity.set(0, 0);
+        this.body?.setVelocity?.(0, 0);
+        this.isAttacking = false;
+        this.isDashAttacking = false;
+        this.dashAttackTargetPoint = null;
+        this.destroyDashAttackTelegraph();
+        this.applyFinalBossRound(nextRoundIndex, { preserveHealthRatio: false, emitEvent: true });
+        this.scene?.cameras?.main?.shake?.(180, 0.004);
+        this.scene?.skillBehaviorPipeline?.effects?.spawnExplosion?.(this.x, this.y, (this.depth ?? 20) + 2, {
+            coreRadius: 10,
+            outerRadius: 22,
+            ringRadius: 38,
+            coreColor: 0xfff0c7,
+            outerColor: 0xd87a49,
+            ringColor: 0x7a2d17,
+            emberColor: 0xffc572,
+            emberCount: 10
+        });
+        return true;
+    }
+
+    beginFinalBossDeathSequence(source = null) {
+        return this.tryAdvanceFinalBossRound()
+            ? { phaseChanged: true }
+            : null;
+    }
+
+    getBossHudInfo() {
+        if (!this.isBoss) return null;
+        const finalBossConfig = this.finalBossConfig;
+        const roundConfig = this.getCurrentFinalBossRoundConfig();
+        return {
+            key: finalBossConfig?.key ?? this.type,
+            name: finalBossConfig?.hudName ?? finalBossConfig?.name ?? ENEMIES[this.type]?.name ?? this.type,
+            health: Math.max(0, this.health ?? 0),
+            maxHealth: Math.max(1, this.maxHealth ?? 1),
+            roundIndex: this.finalBossRoundIndex,
+            roundNumber: this.finalBossRoundIndex + 1,
+            totalRounds: finalBossConfig?.rounds?.length ?? 1,
+            barColor: finalBossConfig?.barColor ?? 0xd24e3b,
+            barGlowColor: finalBossConfig?.barGlowColor ?? 0xffdca8,
+            barFrameColor: finalBossConfig?.barFrameColor ?? 0x26110d,
+            roundName: roundConfig?.name ?? null
+        };
+    }
+
+    spawnDeathChest(source = null) {
+        if (this.chestDropSpawned || !this.scene?.lootSystem) return null;
+        this.pendingDeathSource = source ?? this.pendingDeathSource ?? null;
+        const chestType = rollChestType({ isBoss: Boolean(this.isBoss || this.isMiniBoss) });
+        const chestConfig = getChestTypeConfig(chestType);
+        if (!chestConfig?.itemKey) return null;
+        this.chestDropSpawned = true;
+        const chestAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const chestRadius = Phaser.Math.Between(24, 38);
+        const chestItem = this.scene.lootSystem.spawnItem(
+            chestConfig.itemKey,
+            this.x + Math.cos(chestAngle) * chestRadius,
+            this.y + Math.sin(chestAngle) * chestRadius,
+            1,
+            {
+                ...(this.scene.lootSystem.resolveLootOwnership?.(this) ?? {}),
+                spawnBurstFromX: this.x,
+                spawnBurstFromY: this.y
+            }
+        );
+        if (!chestItem) return null;
+        chestItem.setDepth?.(24);
+        return chestItem;
+    }
+
+    updateDeathExplosion(delta) {
+        if (!this.deathExplosionPrimed || this.deathExplosionResolved) return;
+        if (this.body) {
+            this.body.setVelocity(0, 0);
+        }
+        this.deathExplosionTimer -= delta;
+        if (this.explodeOnDead?.triggerOnPlayerContact && this.isPlayerTouchingDeathExplosion()) {
+            this.triggerDeathExplosion('contact');
+            return;
+        }
+        if (this.deathExplosionTimer <= 0) {
+            this.triggerDeathExplosion('timer');
+        }
+    }
+
+    updateContactExplosionFuse(time) {
+        if (!this.explodeOnDead?.triggerOnPlayerContact || this.isDead || this.deathExplosionResolved || this.deathExplosionPrimed) {
+            this.contactExplosionStartedAt = null;
+            return;
+        }
+        if (!Number.isFinite(this.contactExplosionStartedAt)) {
+            return;
+        }
+        if ((time - this.contactExplosionStartedAt) >= (this.explodeOnDead?.delayMs ?? 500)) {
+            this.triggerDeathExplosion('contact_fuse');
+        }
+    }
+
+    isPlayerTouchingDeathExplosion() {
+        const players = this.scene?.getActivePlayers?.() ?? [];
+        const contactRadius = this.explodeOnDead?.contactRadius ?? 18;
+        const radiusSq = contactRadius * contactRadius;
+        return players.some((player) => {
+            if (!player?.active || player?.isDead) return false;
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            return ((dx * dx) + (dy * dy)) <= radiusSq;
+        });
+    }
+
+    triggerDeathExplosion(reason = 'timer') {
+        if (this.deathExplosionResolved) return;
+        this.deathExplosionResolved = true;
+        this.deathExplosionPrimed = false;
+        this.contactExplosionStartedAt = null;
+        this.isDead = true;
+
+        const explosionConfig = this.explodeOnDead ?? {};
+        const radius = Math.max(12, explosionConfig.radius ?? 52);
+        const damage = Math.max(0, explosionConfig.damage ?? 50);
+        const players = this.scene?.getActivePlayers?.() ?? [];
+        const radiusSq = radius * radius;
+        this.health = 0;
+        this.spawnDeathChest(this.pendingDeathSource ?? null);
+
+        players.forEach((player) => {
+            if (!player?.active || player?.isDead) return;
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            if (((dx * dx) + (dy * dy)) > radiusSq) return;
+            player.takeDamage?.(damage, this, {
+                fromEnemyAttack: true,
+                fromEnemyExplosion: true,
+                deathExplosionReason: reason
+            });
+        });
+
+        this.scene?.skillBehaviorPipeline?.effects?.spawnExplosion?.(this.x, this.y, (this.depth ?? 20) + 2, {
+            coreRadius: 8,
+            outerRadius: 16,
+            ringRadius: radius,
+            coreColor: 0xfff2b3,
+            outerColor: 0xff8c42,
+            ringColor: 0xff5a36,
+            emberColor: 0xffd27a,
+            emberCount: 12,
+            emberDistance: { min: 8, max: Math.max(21, Math.round(radius * 0.7)) },
+            emberDuration: { min: 160, max: 280 }
+        });
+
+        this.finishDeath(this.pendingDeathSource ?? null);
     }
 
     resolveArmorPiercePercent(source = null, options = {}) {
@@ -314,6 +590,17 @@ export default class Enemy extends BaseEntity {
     }
 
     updateMeleeBehavior(targetPlayer, time) {
+        if (this.explodeOnDead?.triggerOnPlayerContact) {
+            const dx = targetPlayer.x - this.x;
+            const dy = targetPlayer.y - this.y;
+            const effectiveSpeed = this.getStatusAdjustedSpeed?.(this.speed) ?? this.speed;
+            const angle = Math.atan2(dy, dx);
+            const vx = Math.cos(angle) * effectiveSpeed;
+            const vy = Math.sin(angle) * effectiveSpeed;
+            this.body.setVelocity(vx, vy);
+            this.setFlipX(vx < 0);
+            return;
+        }
         const dx = targetPlayer.x - this.x;
         const dy = targetPlayer.y - this.y;
         const attackDistance = this.getMeleeAttackDistance(targetPlayer);
@@ -401,6 +688,13 @@ export default class Enemy extends BaseEntity {
     }
 
     handlePlayerContact(player, time) {
+        if (this.isDead) return false;
+        if (this.explodeOnDead?.triggerOnPlayerContact) {
+            if (!Number.isFinite(this.contactExplosionStartedAt)) {
+                this.contactExplosionStartedAt = time;
+            }
+            return false;
+        }
         if (this.combatType !== 'melee') return false;
         if (this.isDashLungeStyle()) {
             if (this.isDashAttacking && !this.dashAttackHitResolved && player?.active && !player?.isDead) {
@@ -416,6 +710,7 @@ export default class Enemy extends BaseEntity {
     }
 
     tryAttackPlayer(targetPlayer, time) {
+        if (this.explodeOnDead?.triggerOnPlayerContact) return false;
         if (this.combatType !== 'melee' || !targetPlayer?.active || targetPlayer?.isDead) return false;
         if (this.isAttacking) return false;
         if ((time - this.lastAttackTime) < this.attackCooldown) return false;
@@ -431,6 +726,7 @@ export default class Enemy extends BaseEntity {
         this.body?.setVelocity(0, 0);
         this.setFlipX(dx < 0);
         if (this.isDashLungeStyle()) {
+            this.beginDashWindupAnimation();
             this.dashAttackTargetPoint = new Phaser.Math.Vector2(targetPlayer.x, targetPlayer.y);
             this.spawnDashAttackTelegraph(this.dashAttackTargetPoint);
         } else {
@@ -486,6 +782,8 @@ export default class Enemy extends BaseEntity {
         const recoveryMs = Math.max(0, this.meleeAttackConfig.recoveryMs ?? 120);
         const lockedTarget = this.dashAttackTargetPoint?.clone?.()
             ?? new Phaser.Math.Vector2(targetPlayer?.x ?? this.x, targetPlayer?.y ?? this.y);
+        this.dashAttackTrackedPlayer = targetPlayer ?? null;
+        this.resumeDashJumpAnimation();
         const dashDirection = new Phaser.Math.Vector2(lockedTarget.x - this.x, lockedTarget.y - this.y);
         if (dashDirection.lengthSq() === 0) {
             dashDirection.set(this.flipX ? -1 : 1, 0);
@@ -524,9 +822,7 @@ export default class Enemy extends BaseEntity {
                 targetPlayer
             );
             if (hitPlayerDuringDash) {
-                this.dashAttackHitResolved = true;
-                targetPlayer.takeDamage?.(this.damage ?? 10, this, { fromEnemyAttack: true });
-                this.spawnMeleeAttackImpact(targetPlayer);
+                if (this.onDashAttackHitPlayer(targetPlayer)) return;
                 return;
             }
         }
@@ -586,12 +882,20 @@ export default class Enemy extends BaseEntity {
         return Phaser.Math.Distance.Between(closestX, closestY, targetPlayer.x, targetPlayer.y) <= hitDistance;
     }
 
+    onDashAttackHitPlayer(targetPlayer) {
+        this.dashAttackHitResolved = true;
+        targetPlayer.takeDamage?.(this.damage ?? 10, this, { fromEnemyAttack: true });
+        this.spawnMeleeAttackImpact(targetPlayer);
+        return false;
+    }
+
     finishDashAttack() {
         this.isDashAttacking = false;
         this.body?.setVelocity(0, 0);
         this.dashAttackTargetPoint = null;
         this.dashAttackRemainingDistance = 0;
         this.dashAttackHitResolved = false;
+        this.dashAttackTrackedPlayer = null;
         this.dashBackFanElapsedMs = 0;
         this.dashBackFanShotTimerMs = 0;
         const recoveryMs = Math.max(0, this.meleeAttackConfig.recoveryMs ?? 120);
@@ -599,10 +903,12 @@ export default class Enemy extends BaseEntity {
             this.scene?.time?.delayedCall(recoveryMs, () => {
                 if (this.active) {
                     this.isAttacking = false;
+                    this.forceReturnToMoveAnimation();
                 }
             });
         } else {
             this.isAttacking = false;
+            this.forceReturnToMoveAnimation();
         }
     }
 
@@ -660,7 +966,7 @@ export default class Enemy extends BaseEntity {
         if (!this.scene?.add || !targetPoint) return;
         const container = this.scene.add.container(0, 0).setDepth((this.depth ?? 20) + 8);
         const line = this.scene.add.graphics();
-        line.lineStyle(2, 0xff4d4d, 0.95);
+        line.lineStyle(this.dashTelegraphWidth ?? 2, 0xff4d4d, this.dashTelegraphAlpha ?? 0.95);
         line.beginPath();
         line.moveTo(this.x, this.y);
         line.lineTo(targetPoint.x, targetPoint.y);
@@ -713,13 +1019,35 @@ export default class Enemy extends BaseEntity {
     }
 
     handleDeath(source = null) {
-        if (this.isDead) return;
+        if (this.deathExplosionResolved) return;
+        if (this.deathExplosionPrimed) return;
+        if (this.isDead && !this.explodeOnDead) return;
         this.isDead = true;
         this.setState('dead');
         this.playDeathEffect();
         this.motionTrailEffect?.destroy?.();
         this.motionTrailEffect = null;
         this.scene?.mapManager?.removeObjectCollisions?.(this);
+
+        if (this.explodeOnDead) {
+            this.pendingDeathSource = source ?? this.pendingDeathSource ?? null;
+            this.deathExplosionPrimed = true;
+            this.deathExplosionTimer = Math.max(0, this.explodeOnDead.delayMs ?? 500);
+            if (this.body) {
+                this.body.stop();
+                this.body.enable = false;
+            }
+            this.setAlpha(0.78);
+            return;
+        }
+
+        this.finishDeath(source);
+    }
+
+    finishDeath(source = null) {
+        this.deathSequenceTimer?.remove?.(false);
+        this.deathSequenceTimer = null;
+        this.isDeathSequenceActive = false;
         if (this.body) {
             this.body.stop();
             this.body.enable = false;
@@ -729,11 +1057,11 @@ export default class Enemy extends BaseEntity {
             source,
             ownerPlayerId: source?.ownerPlayerId ?? source?.playerId ?? null
         });
-        this.scene?.events?.emit('enemy-dead', { enemy: this, source });
         if (this.scene?.lootSystem) {
             this.pendingDeathSource = source ?? this.pendingDeathSource ?? null;
             this.scene.lootSystem.spawnLoot(this.type, this.x, this.y, this);
         }
+        this.scene?.events?.emit('enemy-dead', { enemy: this, source });
         this.destroy();
     }
 
@@ -763,6 +1091,76 @@ export default class Enemy extends BaseEntity {
                 spiritColor: 0xe3ddd2
             });
         }
+    }
+
+    stopCombatForDeathSequence() {
+        this.setState('dead');
+        this.body?.stop?.();
+        if (this.body) {
+            this.body.enable = false;
+        }
+        this.pendingAttackTimer?.remove?.(false);
+        this.pendingAttackTimer = null;
+        this.isAttacking = false;
+        this.isDashAttacking = false;
+        this.dashAttackTargetPoint = null;
+        this.dashAttackRemainingDistance = 0;
+        this.knockbackTimer = 0;
+        this.knockbackVelocity.set(0, 0);
+        this.resetMeleeEngageDelay();
+        this.destroyDashAttackTelegraph();
+        this.motionTrailEffect?.destroy?.();
+        this.motionTrailEffect = null;
+        this.scene?.mapManager?.removeObjectCollisions?.(this);
+    }
+
+    reviveFromDeathSequence() {
+        this.isDead = false;
+        this.pendingDeathSource = null;
+        this.pendingAttackTimer?.remove?.(false);
+        this.pendingAttackTimer = null;
+        this.isAttacking = false;
+        this.isDashAttacking = false;
+        this.dashAttackTargetPoint = null;
+        this.dashAttackRemainingDistance = 0;
+        this.knockbackTimer = 0;
+        this.knockbackVelocity.set(0, 0);
+        this.setAlpha(1);
+        if (this.body) {
+            this.body.enable = true;
+            this.body.setVelocity(0, 0);
+        }
+    }
+
+    playDeathAnimation() {
+        const deathAnimKey = `${this.type}_die`;
+        this.state = 'dead';
+        if (this.scene?.anims?.exists(deathAnimKey)) {
+            this.anims.play(deathAnimKey, true);
+            return;
+        }
+        this.setState('dead');
+    }
+
+    beginDashWindupAnimation() {
+        this.setState('attack');
+    }
+
+    resumeDashJumpAnimation() {
+        this.setState('attack');
+    }
+
+    forceReturnToMoveAnimation() {
+        if (this.isDead || this.isDeathSequenceActive) {
+            return;
+        }
+        this.state = 'move';
+        const moveAnimKey = `${this.type}_move`;
+        if (this.scene?.anims?.exists(moveAnimKey)) {
+            this.anims.play(moveAnimKey, true);
+            return;
+        }
+        this.setState('move');
     }
 
     applySeparation(enemies) {
@@ -1256,5 +1654,18 @@ export default class Enemy extends BaseEntity {
             return;
         }
         this.clearTint();
+    }
+
+    destroy(fromScene) {
+        this.deathSequenceTimer?.remove?.(false);
+        this.deathSequenceTimer = null;
+        if (this.deathExplosionResolved) {
+            return super.destroy(fromScene);
+        }
+        if (this.active && !this.isDead && (this.health ?? 1) <= 0) {
+            this.handleDeath(this.pendingDeathSource ?? null);
+            return this;
+        }
+        return super.destroy(fromScene);
     }
 }

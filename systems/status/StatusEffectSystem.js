@@ -676,8 +676,9 @@ class StatusEffectComponent {
     getActiveTags() {
         const tags = new Set();
         this.activeEffects.forEach((effect) => {
+            if (!effect) return;
             if (effect.expired) return;
-            effect.tags.forEach((tag) => tags.add(tag));
+            effect.tags?.forEach?.((tag) => tags.add(tag));
         });
         return Array.from(tags);
     }
@@ -689,6 +690,7 @@ class StatusEffectComponent {
     getIndicatorEntries() {
         const grouped = new Map();
         this.activeEffects.forEach((effect) => {
+            if (!effect) return;
             if (effect.expired) return;
             const displayConfig = getStatusEffectConfig(effect.key);
             const priority = displayConfig?.iconPriority;
@@ -726,6 +728,7 @@ class StatusEffectComponent {
         let highlightTint = null;
         let highlightPriority = -Infinity;
         this.activeEffects.forEach((effect) => {
+            if (!effect) return;
             if (effect.expired) return;
             const contribution = effect.getStateContribution?.();
             if (!contribution) return;
@@ -737,6 +740,7 @@ class StatusEffectComponent {
             }
         });
         this.activeEffects.forEach((effect) => {
+            if (!effect) return;
             if (effect.expired) return;
             const displayConfig = getStatusEffectConfig(effect.key);
             const tint = effect.getDisplayTint?.() ?? displayConfig?.highlightTint;
@@ -762,8 +766,15 @@ class StatusEffectComponent {
 
     update(delta) {
         const timeNow = this.scene?.time?.now ?? 0;
+        if (this.activeEffects.some((effect) => !effect)) {
+            this.activeEffects = this.activeEffects.filter(Boolean);
+        }
         for (let index = this.activeEffects.length - 1; index >= 0; index -= 1) {
             const effect = this.activeEffects[index];
+            if (!effect) {
+                this.activeEffects.splice(index, 1);
+                continue;
+            }
             effect.update(delta, { entity: this.entity, timeNow });
             if (!effect.expired) continue;
             effect.onExpire?.({ entity: this.entity, expired: true });

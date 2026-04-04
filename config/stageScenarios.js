@@ -40,14 +40,14 @@ export const STAGE_SCENARIOS = {
                 ]
             },
             {
-                durationSeconds: 999,
+                durationSeconds: 6000,
                 enemies: [
                     { enemyType: 'worm', count: 35, isBoss: false, statsOverride: { maxHealth: 60 } },
-                    { enemyType: 'kitsume', count: 3, isBoss: true, statsOverride: { maxHealth: 2000, damage: 50, armor: 5 } }
+                    { enemyType: 'kitsume', count: 3, isMiniBoss: true, statsOverride: { maxHealth: 2000, damage: 50, armor: 7, scale: 1.7 } }
                 ]
             },
             {
-                durationSeconds: 45,
+                durationSeconds: 60,
                 enemies: [
                     { enemyType: 'worm', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
@@ -55,7 +55,7 @@ export const STAGE_SCENARIOS = {
                 ]
             },
             {
-                durationSeconds: 45,
+                durationSeconds: 60,
                 enemies: [
                     { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
@@ -63,7 +63,7 @@ export const STAGE_SCENARIOS = {
                 ]
             },
             {
-                durationSeconds: 45,
+                durationSeconds: 60,
                 enemies: [
                     { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
@@ -71,20 +71,124 @@ export const STAGE_SCENARIOS = {
                 ]
             },
             {
-                durationSeconds: 45,
+                durationSeconds: 60,
                 enemies: [
                     { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 }
+                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 70 }}
                 ]
             },
             {
-                durationSeconds: 45,
+                durationSeconds: 6000,
                 enemies: [
                     { enemyType: 'mummy', count: 25, statsOverride: { maxHealth: 100 } },
                     { enemyType: 'bat', count: 25, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 },
-                    { enemyType: 'skeleton', count: 3, statsOverride: { maxHealth: 8000, damage: 50, armor: 10 } }
+                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 70 }},
+                    { enemyType: 'skeleton', isMiniBoss: true, count: 3, statsOverride: { maxHealth: 8000, damage: 50, armor: 10, scale: 1.7 } }
+                ]
+            },
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 2, statsOverride: { maxHealth: 100 } }
+                ]
+            },
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'eyes', count: 15 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 100 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'eyes', count: 15 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 100 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'eyes', count: 20 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 150 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 6000,
+                enemies: [
+                    { enemyType: 'mummy', count: 25, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'bat', count: 25, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 15, statsOverride: { maxHealth: 150 } },
+                    { enemyType: 'skeleton', count: 10, isMiniBoss: true, statsOverride: { maxHealth: 1000, damage: 50, armor: 10, scale: 1.7 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 60,
+                enemies: [
+                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
+                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
+                ]
+            },
+            ,
+            {
+                durationSeconds: 6000,
+                enemies: [
+                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
+                    { enemyType: 'giant_rock', count: 1, isBoss: true },
+                    { enemyType: 'mummy', count: 50, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'bat', count: 50, statsOverride: { maxHealth: 200 } },
+                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
+                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
+                    
                 ]
             }
         ]

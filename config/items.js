@@ -47,11 +47,11 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'normal',
         baseValue: 1,
-        pickupDelayMs: 450,
+        pickupDelayMs: 900,
         displayScale: 1,
         pickupTextColor: '#cfd6df',
-        floatAmplitude: 4,
-        displaySize: 18
+        floatAmplitude: 5,
+        displaySize: 16
     },
     chest_good: {
         textureKey: 'item_chest_good',
@@ -60,11 +60,11 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'good',
         baseValue: 1,
-        pickupDelayMs: 450,
+        pickupDelayMs: 900,
         displayScale: 1,
         pickupTextColor: '#8df7a7',
-        floatAmplitude: 4,
-        displaySize: 18
+        floatAmplitude: 5,
+        displaySize: 16
     },
     chest_rare: {
         textureKey: 'item_chest_rare',
@@ -73,11 +73,11 @@ export const ITEM_CONFIG = {
         type: 'chest',
         chestType: 'rare',
         baseValue: 1,
-        pickupDelayMs: 450,
+        pickupDelayMs: 900,
         displayScale: 1,
         pickupTextColor: '#ffbf69',
-        floatAmplitude: 4,
-        displaySize: 18
+        floatAmplitude: 5,
+        displaySize: 16
     }
 };
 

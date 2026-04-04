@@ -68,11 +68,17 @@ export function getChestTypeConfig(chestType) {
 }
 
 export function rollChestType({ isBoss = false } = {}, random = Math.random) {
-    const dropChance = isBoss
+    const rawDropChance = isBoss
         ? (CHEST_DROP_CONFIG.bossDropChance ?? 1)
         : (CHEST_DROP_CONFIG.normalEnemyDropChance ?? 0);
-    if ((random?.() ?? Math.random()) > dropChance) return null;
-    const selectedType = getWeightedRandomEntry(Object.values(CHEST_TYPE_CONFIG), random);
+    const dropChance = Phaser.Math.Clamp(Number(rawDropChance) || 0, 0, 1);
+    if (dropChance <= 0) return null;
+    if (dropChance < 1 && (random?.() ?? Math.random()) > dropChance) return null;
+    const chestTypeEntries = Object.values(CHEST_TYPE_CONFIG).map((entry) => ({
+        ...entry,
+        weight: entry.dropWeight ?? entry.weight ?? 0
+    }));
+    const selectedType = getWeightedRandomEntry(chestTypeEntries, random);
     return selectedType?.key ?? null;
 }
 

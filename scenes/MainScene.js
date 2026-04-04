@@ -1,6 +1,7 @@
 // scenes/MainScene.js
 import Player from '../entities/Player.js';
 import Enemy from '../entities/Enemy.js';
+import GiantRockBoss from '../entities/boss/GiantRockBoss.js';
 import { ENEMIES } from '../config/enemies.js';
 import { SKILL_CONFIG } from '../config/skill.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
@@ -44,6 +45,13 @@ const SUPPORTER_SELECTION_MAX_REROLLS = 3;
 const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
 const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 3;
 const WAVE_START_DELAY_MS = 2000;
+
+function createEnemyInstance(scene, x, y, enemyType) {
+    if (enemyType === 'giant_rock') {
+        return new GiantRockBoss(scene, x, y);
+    }
+    return new Enemy(scene, x, y, enemyType);
+}
 
 export default class MainScene extends Phaser.Scene {
     get activeSkillKey() {
@@ -303,6 +311,17 @@ export default class MainScene extends Phaser.Scene {
     getActivePlayers() {
         const players = this.playerPartySystem?.getAllPlayers?.() ?? [];
         return players.length ? players : (this.player ? [this.player] : []);
+    }
+
+    getActiveBossEnemy() {
+        const enemies = this.enemies?.getChildren?.() ?? [];
+        const activeBosses = enemies.filter((enemy) => enemy?.active && enemy.isFinalBoss && !enemy.isDead);
+        if (!activeBosses.length) return null;
+        return activeBosses[0];
+    }
+
+    getBossHudInfo() {
+        return this.getActiveBossEnemy()?.getBossHudInfo?.() ?? null;
     }
 
     getPlayerById(playerId) {
@@ -752,6 +771,41 @@ export default class MainScene extends Phaser.Scene {
         });
         supporterLabel.appendChild(supporterSelect);
         supporterSection.appendChild(supporterLabel);
+
+        let bossSection = panel.querySelector('#boss-section');
+        if (!bossSection) {
+            bossSection = document.createElement('div');
+            bossSection.id = 'boss-section';
+            bossSection.classList.add('panel-section');
+            if (enemySection) {
+                panel.insertBefore(bossSection, enemySection);
+            } else {
+                panel.appendChild(bossSection);
+            }
+        }
+        bossSection.innerHTML = '';
+        const bossTitle = document.createElement('div');
+        bossTitle.classList.add('panel-title');
+        bossTitle.textContent = 'Boss';
+        bossSection.appendChild(bossTitle);
+
+        const bossActions = document.createElement('div');
+        bossActions.classList.add('panel-list');
+        bossSection.appendChild(bossActions);
+
+        const spawnGiantRockButton = document.createElement('button');
+        spawnGiantRockButton.type = 'button';
+        spawnGiantRockButton.textContent = 'Spawn Giant Rock';
+        spawnGiantRockButton.style.padding = '6px 8px';
+        spawnGiantRockButton.style.borderRadius = '4px';
+        spawnGiantRockButton.style.background = '#5b3426';
+        spawnGiantRockButton.style.color = '#fff2db';
+        spawnGiantRockButton.style.border = '1px solid rgba(255,255,255,0.2)';
+        spawnGiantRockButton.style.cursor = 'pointer';
+        spawnGiantRockButton.addEventListener('click', () => {
+            this.spawnEnemyNearPlayer('giant_rock', 180, { isBoss: true });
+        });
+        bossActions.appendChild(spawnGiantRockButton);
 
         Object.entries(ENEMIES).forEach(([type, config]) => {
             this.enemySpawnStatus[type] = this.enemySpawnStatus[type] ?? false;
@@ -1403,17 +1457,24 @@ export default class MainScene extends Phaser.Scene {
 
     spawnEnemyAtPosition(x, y, enemyType, options = {}) {
         if (!enemyType || !this.canSpawnMoreEnemies()) return null;
-        const enemy = new Enemy(this, x, y, enemyType);
+        const enemy = createEnemyInstance(this, x, y, enemyType);
         enemy.isBoss = Boolean(options.isBoss ?? options.waveSpawnEntry?.isBoss ?? enemy.isBoss);
+        enemy.isMiniBoss = Boolean(options.isMiniBoss ?? options.waveSpawnEntry?.isMiniBoss ?? enemy.isMiniBoss);
+        if (enemy.body) {
+            enemy.body.setImmovable?.(Boolean(enemy.isBoss || enemy.isFinalBoss));
+            enemy.body.setPushable?.(!(enemy.isBoss || enemy.isFinalBoss));
+        }
+        enemy.isChestSpawned = Boolean(options.chestSpawned);
         enemy.countsTowardWave = options.countsTowardWave === true;
         enemy.waveNumber = enemy.countsTowardWave ? (options.waveNumber ?? this.currentWaveNumber) : null;
         enemy.waveSpawnEntry = options.waveSpawnEntry ? {
             enemyType: options.waveSpawnEntry.enemyType ?? enemyType,
             statsOverride: options.waveSpawnEntry.statsOverride ? { ...options.waveSpawnEntry.statsOverride } : null,
-            isBoss: Boolean(options.waveSpawnEntry.isBoss)
+            isBoss: Boolean(options.waveSpawnEntry.isBoss),
+            isMiniBoss: Boolean(options.waveSpawnEntry.isMiniBoss)
         } : null;
         const healthMultiplier = getScenarioEnemyHealthMultiplier(this, this.stageScenario);
-        if (healthMultiplier !== 1) {
+        if (healthMultiplier !== 1 && !enemy.isFinalBoss) {
             enemy.applyRuntimeStats?.({
                 maxHealth: Math.max(1, Math.round((enemy.maxHealth ?? 1) * healthMultiplier)),
                 damage: enemy.damage,
@@ -1444,6 +1505,24 @@ export default class MainScene extends Phaser.Scene {
         this.mapManager.enableObjectCollisions(enemy);
         if (enemy?.setHealthVisible) {
             enemy.setHealthVisible(this.showEnemyHP);
+        }
+        if (options.chestSpawned) {
+            const chestSpawnTint = options.chestSpawnHighlightTint ?? 0xb06cff;
+            enemy.applyStatusHighlight?.(chestSpawnTint);
+            enemy.setTint?.(chestSpawnTint);
+            this.cameras?.main?.shake?.(110, 0.003);
+            this.skillBehaviorPipeline?.effects?.spawnExplosion?.(enemy.x, enemy.y, (enemy.depth ?? 20) + 2, {
+                coreRadius: 8,
+                outerRadius: 18,
+                ringRadius: 30,
+                coreColor: 0xf4d8ff,
+                outerColor: 0xb06cff,
+                ringColor: 0x7b2cbf,
+                emberColor: 0xd6a8ff,
+                emberCount: 8,
+                emberDistance: { min: 8, max: 24 },
+                emberDuration: { min: 140, max: 260 }
+            });
         }
         return enemy;
     }
@@ -1489,7 +1568,8 @@ export default class MainScene extends Phaser.Scene {
         this.waveSpawnQueue = this.currentWavePlan.map((entry) => ({
             enemyType: entry.enemyType,
             statsOverride: entry.statsOverride ? { ...entry.statsOverride } : null,
-            isBoss: Boolean(entry.isBoss)
+            isBoss: Boolean(entry.isBoss),
+            isMiniBoss: Boolean(entry.isMiniBoss)
         }));
         this.waveSpawnRemaining = this.waveEnemyCount;
         this.waveKillCount = 0;
@@ -1545,7 +1625,8 @@ export default class MainScene extends Phaser.Scene {
                 entries.push({
                     enemyType,
                     statsOverride: group?.statsOverride ? { ...group.statsOverride } : null,
-                    isBoss: Boolean(group?.isBoss)
+                    isBoss: Boolean(group?.isBoss),
+                    isMiniBoss: Boolean(group?.isMiniBoss)
                 });
             }
         });
@@ -1561,6 +1642,7 @@ export default class MainScene extends Phaser.Scene {
                 waveNumber: this.currentWaveNumber,
                 statsOverride: nextEntry.statsOverride,
                 isBoss: nextEntry.isBoss,
+                isMiniBoss: nextEntry.isMiniBoss,
                 waveSpawnEntry: nextEntry
             });
         }
@@ -1572,7 +1654,8 @@ export default class MainScene extends Phaser.Scene {
         this.waveSpawnQueue.unshift({
             enemyType: enemy.waveSpawnEntry.enemyType,
             statsOverride: enemy.waveSpawnEntry.statsOverride ? { ...enemy.waveSpawnEntry.statsOverride } : null,
-            isBoss: Boolean(enemy.waveSpawnEntry.isBoss)
+            isBoss: Boolean(enemy.waveSpawnEntry.isBoss),
+            isMiniBoss: Boolean(enemy.waveSpawnEntry.isMiniBoss)
         });
     }
 
@@ -1643,6 +1726,10 @@ export default class MainScene extends Phaser.Scene {
 
     handleWaveCleared() {
         if (!this.waveSystemEnabled || this.waveShopPending || this.isShopOpen || this.isRunComplete) return;
+        if (this.currentWaveNumber >= this.maxWaveCount) {
+            this.handleRunVictory();
+            return;
+        }
         this.waveShopPending = true;
         this.waveShopDelayTimer?.remove?.(false);
         this.waveShopDelayTimer = this.time.delayedCall(2000, () => {
@@ -1664,6 +1751,29 @@ export default class MainScene extends Phaser.Scene {
                 return;
             }
             this.presentShopOverlay('wave_clear');
+        });
+    }
+
+    handleRunVictory() {
+        if (this.isRunComplete || this.isGameOver) return;
+        this.isRunComplete = true;
+        this.waveShopPending = false;
+        this.resetTouchMoveState();
+        this.physics.world.pause();
+        this.scene.pause('HudScene');
+        const elapsedMs = this.getTotalRunMs();
+        const totalSeconds = Math.floor(elapsedMs / 1000);
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        const victoryPayload = {
+            timeSurvived: `${minutes}:${seconds}`,
+            enemiesKilled: this.killCount ?? 0,
+            levelReached: this.player?.level ?? 1
+        };
+        this.time.delayedCall(800, () => {
+            if (!this.scene.isActive('MainScene')) return;
+            this.scene.launch('VictoryScene', victoryPayload);
+            this.scene.pause();
         });
     }
 
@@ -1899,12 +2009,12 @@ export default class MainScene extends Phaser.Scene {
         return { x, y };
     }
 
-    spawnEnemyNearPlayer(type, distance = 120) {
+    spawnEnemyNearPlayer(type, distance = 120, options = {}) {
         if (!this.player || !type) return;
         const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
         const x = this.player.x + Math.cos(angle) * distance;
         const y = this.player.y + Math.sin(angle) * distance;
-        this.spawnEnemyAtPosition(x, y, type);
+        this.spawnEnemyAtPosition(x, y, type, options);
     }
 
     pickEnemyTypeForSpawn() {
@@ -2456,6 +2566,9 @@ export default class MainScene extends Phaser.Scene {
                     break;
                 case 'effectDurationMultiplier':
                     effects.push({ type: 'effectDurationMultiplier', value });
+                    break;
+                case 'shockChainCount':
+                    effects.push({ type: 'shockChainCount', value });
                     break;
                 case 'pickupRangeMultiplier':
                     effects.push({ type: 'lootMagnetRadiusPercent', value });

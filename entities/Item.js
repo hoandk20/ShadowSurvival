@@ -48,6 +48,9 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         this.baseDisplaySize = finalDisplaySize;
         this.setDisplaySize(finalDisplaySize, finalDisplaySize);
         this.setAlpha(config.alpha ?? 0.95);
+        if (this.config?.type === 'chest') {
+            this.setDepth(24);
+        }
         const size = finalDisplaySize;
         if (this.body?.setCircle) {
             const radius = size / 2;
@@ -164,6 +167,15 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
     spawnChestEnemyReward(player, reward) {
         const scene = this.scene;
         if (!scene?.spawnEnemyAtPosition || !reward?.enemyType) return;
+        const waveTimedOut = scene.waveSystemEnabled
+            && (scene.waveEnding
+                || scene.waveShopPending
+                || scene.isShopOpen
+                || scene.hasCurrentWaveTimedOut?.()
+                || (scene.getCurrentWaveRemainingMs?.() ?? 1) <= 0);
+        if (waveTimedOut) {
+            return;
+        }
         const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
         const distance = 120;
         const x = player.x + Math.cos(angle) * distance;
@@ -171,7 +183,12 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         scene.spawnEnemyAtPosition(x, y, reward.enemyType, {
             countsTowardWave: false,
             isBoss: false,
-            statsOverride: reward.statsOverride ?? { maxHealth: 300 }
+            chestSpawned: true,
+            chestSpawnHighlightTint: 0xb06cff,
+            statsOverride: {
+                ...(reward.statsOverride ?? {}),
+                maxHealth: reward.statsOverride?.maxHealth ?? 500
+            }
         });
     }
 
@@ -283,9 +300,10 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
             targets: text,
             y: text.y - 24,
             alpha: 0,
-            duration: 650,
+            duration: 1600,
             ease: 'Cubic.easeOut',
             onComplete: () => text.destroy()
         });
     }
+
 }

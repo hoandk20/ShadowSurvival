@@ -1,6 +1,5 @@
 import Item from '../entities/Item.js';
 import { ITEM_CONFIG, getLootTableForEnemy } from '../config/items.js';
-import { getChestTypeConfig, rollChestType } from '../config/chests.js';
 import { LOOT_CONFIG } from '../config/loot.js';
 
 const XP_MERGE_RADIUS = 26;
@@ -42,8 +41,7 @@ export default class LootSystem {
     }
 
     buildLootTable(enemyType, enemy = null) {
-        const baseTable = getLootTableForEnemy(enemyType) ?? [];
-        return baseTable;
+        return (getLootTableForEnemy(enemyType) ?? []).map((entry) => ({ ...entry }));
     }
 
     spawnLoot(enemyType, x, y, enemy = null) {
@@ -62,19 +60,6 @@ export default class LootSystem {
                 lootOwnership
             );
         });
-
-        const chestType = rollChestType({ isBoss: Boolean(enemy?.isBoss) });
-        const chestConfig = getChestTypeConfig(chestType);
-        if (!chestConfig?.itemKey) return;
-        const chestAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-        const chestRadius = Phaser.Math.Between(4, 16);
-        this.spawnItem(
-            chestConfig.itemKey,
-            x + Math.cos(chestAngle) * chestRadius,
-            y + Math.sin(chestAngle) * chestRadius,
-            1,
-            lootOwnership
-        );
     }
 
     resolveLootOwnership(enemy = null) {

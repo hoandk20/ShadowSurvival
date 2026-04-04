@@ -14,6 +14,7 @@ export const PLAYER_BASE_STATS = Object.freeze({
     effectChance: 0,
     effectDamageMultiplier: 1,
     effectDurationMultiplier: 1,
+    shockChainCount: 0,
     pickupRangeMultiplier: 1,
     xpGainMultiplier: 1,
     goldGainMultiplier: 1,
