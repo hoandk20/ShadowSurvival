@@ -516,7 +516,46 @@ export default class MainMenuScene extends Phaser.Scene {
         return Boolean(fullscreenTarget && documentSupportsFullscreen);
     }
 
-    toggleFullscreen() {
+    async lockLandscapeOrientation() {
+        try {
+            if (screen.orientation?.lock) {
+                await screen.orientation.lock('landscape');
+            }
+        } catch (_error) {
+            // Mobile browsers may reject orientation lock unless fullscreen succeeds.
+        }
+    }
+
+    async requestElementFullscreen(element) {
+        if (!element) return false;
+        try {
+            if (typeof element.requestFullscreen === 'function') {
+                await element.requestFullscreen({ navigationUI: 'hide' });
+                return true;
+            }
+        } catch (_error) {
+            // Try vendor-prefixed APIs below.
+        }
+        try {
+            if (typeof element.webkitRequestFullscreen === 'function') {
+                element.webkitRequestFullscreen();
+                return true;
+            }
+        } catch (_error) {
+            // Ignore and continue fallback chain.
+        }
+        try {
+            if (typeof element.msRequestFullscreen === 'function') {
+                element.msRequestFullscreen();
+                return true;
+            }
+        } catch (_error) {
+            // Ignore and continue fallback chain.
+        }
+        return false;
+    }
+
+    async toggleFullscreen() {
         const fullscreenTarget = document.getElementById('game-container') ?? document.documentElement ?? this.game?.canvas;
         const canvas = this.game?.canvas;
         if (!fullscreenTarget && !canvas) return;
@@ -524,35 +563,28 @@ export default class MainMenuScene extends Phaser.Scene {
             this.scale.stopFullscreen();
             return;
         }
+        window.scrollTo(0, 1);
+        let enteredFullscreen = false;
         if (this.supportsFullscreen()) {
             const target = fullscreenTarget ?? canvas;
             if (target && typeof this.scale.startFullscreen === 'function') {
-                this.scale.startFullscreen(target);
-                return;
+                try {
+                    this.scale.startFullscreen(target);
+                    enteredFullscreen = true;
+                } catch (_error) {
+                    enteredFullscreen = false;
+                }
             }
         }
-        if (fullscreenTarget && typeof fullscreenTarget.requestFullscreen === 'function') {
-            fullscreenTarget.requestFullscreen();
-            return;
+        if (!enteredFullscreen) {
+            enteredFullscreen = await this.requestElementFullscreen(fullscreenTarget);
         }
-        if (fullscreenTarget && typeof fullscreenTarget.webkitRequestFullscreen === 'function') {
-            fullscreenTarget.webkitRequestFullscreen();
-            return;
+        if (!enteredFullscreen && canvas && canvas !== fullscreenTarget) {
+            enteredFullscreen = await this.requestElementFullscreen(canvas);
         }
-        if (fullscreenTarget && typeof fullscreenTarget.msRequestFullscreen === 'function') {
-            fullscreenTarget.msRequestFullscreen();
-            return;
-        }
-        if (canvas && typeof canvas.requestFullscreen === 'function') {
-            canvas.requestFullscreen();
-            return;
-        }
-        if (canvas && typeof canvas.webkitRequestFullscreen === 'function') {
-            canvas.webkitRequestFullscreen();
-            return;
-        }
-        if (canvas && typeof canvas.msRequestFullscreen === 'function') {
-            canvas.msRequestFullscreen();
+        await this.lockLandscapeOrientation();
+        if (!enteredFullscreen) {
+            this.scale.refresh();
         }
     }
 
