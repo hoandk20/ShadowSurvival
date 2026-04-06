@@ -2,12 +2,13 @@
 import BaseEntity from './BaseEntity.js';
 import Skill from './Skill.js';
 import { ENTITY_SIZE_CONFIG, CHARACTER_ASSET_CONFIG } from '../config/assets.js';
+import { getCharacterPassive } from '../config/characterPassives.js';
 import { SKILL_CONFIG } from '../config/skill.js';
 import { getCharacterLevelGrowth } from '../config/characterLevelGrowth.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY, getCharacterConfig } from '../config/characters/characters.js';
 import { getCharacterStats, PLAYER_BASE_STATS } from '../config/stats.js';
 import { LOOT_CONFIG } from '../config/loot.js';
-import { getStatusEffectDefaultOptions } from '../config/statusEffects.js';
+import { getStatusEffectConfig, getStatusEffectDefaultOptions } from '../config/statusEffects.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
 import SupporterClawEffect from './effects/SupporterClawEffect.js';
 import KnightSlashEffect from './effects/KnightSlashEffect.js';
@@ -26,6 +27,7 @@ const DEFAULT_CHARACTER_HP = PLAYER_BASE_STATS.hp;
 const DEFAULT_CHARACTER_ARMOR = PLAYER_BASE_STATS.armor;
 const MAX_ACTIVE_SKILLS = 6;
 const TARGET_VIEW_MARGIN = 100;
+const STATUS_ICON_ATLAS_KEY = 'status_effect_icons';
 const POISON_TRAIL_STEP_DISTANCE = 24;
 const POISON_TRAIL_SPAWN_INTERVAL_MS = 72;
 const POISON_TRAIL_MOVEMENT_START_DELAY_MS = 180;
@@ -54,7 +56,9 @@ export default class Player extends BaseEntity {
         this.health = this.maxHealth;
         this.armor = characterStats.armor ?? DEFAULT_CHARACTER_ARMOR;
         this.armorPierce = Math.max(0, characterStats.armorPierce ?? PLAYER_BASE_STATS.armorPierce ?? 0);
-        this.skillRange = Math.max(0, characterStats.skillRange ?? PLAYER_BASE_STATS.skillRange ?? 0);
+        this.skillRange = Number.isFinite(characterStats.skillRange)
+            ? characterStats.skillRange
+            : (PLAYER_BASE_STATS.skillRange ?? 0);
         this.dodge = Phaser.Math.Clamp(characterStats.dodge ?? PLAYER_BASE_STATS.dodge ?? 0, 0, 1);
         this.displayedHealth = this.health;
         this.level = 1;
@@ -78,6 +82,9 @@ export default class Player extends BaseEntity {
         this.bonusMaxHealthPercent = 0;
         this.levelGrowthMaxHealthBonus = 0;
         this.levelGrowthArmorBonus = 0;
+        this.levelGrowthSpeedBonus = 0;
+        this.characterPassive = null;
+        this.characterPassiveState = {};
         this.bonusArmor = 0;
         this.bonusArmorPierce = 0;
         this.bonusSkillRange = 0;
@@ -108,6 +115,8 @@ export default class Player extends BaseEntity {
         this.shieldRegenIntervalMs = 30000;
         this.shieldRegenTimer = 0;
         this.dodgeFeedbackTween = null;
+        this.statusEffectTint = null;
+        this.statusEffectIndicators = [];
         this.globalProjectileSpeedMultiplier = 1;
         this.globalSkillAreaMultiplier = 1;
         this.globalSkillDurationMultiplier = 1;
@@ -280,6 +289,7 @@ export default class Player extends BaseEntity {
         if (now - lastCast < skillCooldown) return 0;
 
         const skillDefinition = this.getSkillConfig(skillType) ?? {};
+        const isSummonSkill = skillDefinition.attackStyle === 'summon_ghosts';
         if (skillDefinition.category === 'projectile') {
             const skillRange = Math.max(0, skillDefinition.travelRange ?? 0);
             if (!this.hasEnemyInSkillRange(skillRange)) {
@@ -287,11 +297,12 @@ export default class Player extends BaseEntity {
             }
         }
 
-        const count = this.getSkillObjectCount(skillType);
+        const desiredCount = this.getSkillObjectCount(skillType);
+        const count = isSummonSkill ? 1 : desiredCount;
         const runState = getRunState(this.scene, this);
         if (runState) {
             runState.skillObjectSpawnCounts = runState.skillObjectSpawnCounts ?? {};
-            runState.skillObjectSpawnCounts[skillType] = (runState.skillObjectSpawnCounts[skillType] ?? 0) + count;
+            runState.skillObjectSpawnCounts[skillType] = (runState.skillObjectSpawnCounts[skillType] ?? 0) + desiredCount;
         }
         const movementDirection = this.lastMoveDirection.clone();
         if (movementDirection.lengthSq() === 0) {
@@ -334,6 +345,9 @@ export default class Player extends BaseEntity {
 
         const spawnSkillObject = (index) => {
             const skill = new Skill(this.scene, this, skillType);
+            if (isSummonSkill) {
+                skill.summonDesiredCount = desiredCount;
+            }
             const angle = (Math.PI * 2 / count) * index;
             if (!autoAim) {
                 skill.customAngle = angle;
@@ -432,6 +446,7 @@ export default class Player extends BaseEntity {
     update(time, delta) {
         if (this.isDead) return;
         this.statusEffects?.update?.(delta);
+        this.characterPassive?.onUpdate?.(this, { time, delta });
 
         this.trackMovedDistance();
         this.ensureVisibleState();
@@ -539,6 +554,7 @@ export default class Player extends BaseEntity {
         );
         this.wasMovingLastFrame = isMoving;
         this.lastTrackedPosition.set(this.x, this.y);
+        this.updateStatusEffectIndicatorPosition();
     }
 
     applyExternalKnockback(direction, speed = 0, durationMs = 0, dragFactor = 0.94) {
@@ -907,12 +923,16 @@ export default class Player extends BaseEntity {
             };
         }
         const armorValue = Number.isFinite(this.armor) ? this.armor : DEFAULT_CHARACTER_ARMOR;
+        const ignoreArmor = options?.ignoreArmor === true;
         const isEnemyDamageSource = options?.fromEnemyAttack === true
             || options?.fromEnemyProjectile === true
             || source?.constructor?.name === 'Enemy';
+        const rawMitigatedDamage = ignoreArmor
+            ? Math.round(incomingAmount)
+            : Math.round(incomingAmount - armorValue);
         const mitigatedDamage = isEnemyDamageSource && incomingAmount > 0
-            ? Math.max(1, Math.round(incomingAmount - armorValue))
-            : Math.max(0, Math.round(incomingAmount - armorValue));
+            ? Math.max(3, rawMitigatedDamage)
+            : Math.max(0, rawMitigatedDamage);
         let remainingDamage = mitigatedDamage;
         if (this.itemShieldValue > 0) {
             const absorbedDamage = Math.min(this.itemShieldValue, remainingDamage);
@@ -926,6 +946,20 @@ export default class Player extends BaseEntity {
         }
         if (remainingDamage > 0) {
             this.health = Phaser.Math.Clamp(this.health - remainingDamage, 0, this.maxHealth);
+        }
+        this.characterPassive?.onTakeDamage?.(this, { amount, source, options, remainingDamage });
+        if (remainingDamage > 0 && options?.fromStatusEffect) {
+            const statusKey = options?.statusKey ?? options?.statusEffect?.key ?? null;
+            const isPoison = statusKey === 'poison';
+            const glowColor = isPoison ? 0x83ff4d : 0xff3b3b;
+            const textColor = isPoison ? '#b7ff6a' : '#ff9aa6';
+            this.playFloatingAnnouncementEffect(this.x, this.y, {
+                text: `-${Math.max(1, Math.round(remainingDamage))}`,
+                glowColor,
+                textColor,
+                fontSize: '9px',
+                alpha: 0.8
+            });
         }
         const isBossDamageSource = Boolean(source?.isBoss || source?.isFinalBoss);
         if (remainingDamage > 0 && isBossDamageSource) {
@@ -979,6 +1013,7 @@ export default class Player extends BaseEntity {
         const healingContext = this.statusEffects?.beforeHealingReceived?.({ amount }) ?? { amount };
         const resolvedAmount = Math.max(0, healingContext.amount ?? amount);
         this.health = Phaser.Math.Clamp(this.health + resolvedAmount, 0, this.maxHealth);
+        this.characterPassive?.onHeal?.(this, { amount: resolvedAmount });
         this.updateHealthBarUI();
     }
 
@@ -1111,9 +1146,106 @@ export default class Player extends BaseEntity {
             },
             onComplete: () => {
                 this.setAlpha(1);
-                this.clearTint();
+                this.restorePersistentTint();
                 this.dodgeFeedbackTween = null;
             }
+        });
+    }
+
+    applyStatusHighlight(tint) {
+        this.statusEffectTint = typeof tint === 'number' ? tint : null;
+        if (!this.dodgeFeedbackTween) {
+            this.restorePersistentTint();
+        }
+    }
+
+    clearStatusHighlight() {
+        if (this.statusEffectTint == null) return;
+        this.statusEffectTint = null;
+        if (!this.dodgeFeedbackTween) {
+            this.restorePersistentTint();
+        }
+    }
+
+    restorePersistentTint() {
+        if (this.statusEffectTint != null) {
+            this.setTint(this.statusEffectTint);
+            return;
+        }
+        this.clearTint();
+    }
+
+    createStatusEffectIndicator(entry) {
+        if (!this.scene?.textures?.exists(STATUS_ICON_ATLAS_KEY)) {
+            return null;
+        }
+        const frame = getStatusEffectConfig(entry.key)?.iconFrame ?? null;
+        if (!frame) return null;
+        const icon = this.scene.add.image(this.x, this.y, STATUS_ICON_ATLAS_KEY, frame)
+            .setDepth(1210)
+            .setDisplaySize(8, 8);
+        const stackText = this.scene.add.text(this.x, this.y, '', {
+            fontSize: '4px',
+            fontFamily: '"Press Start 2P", "PixelFont", monospace',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2,
+            resolution: 2
+        }).setOrigin(1, 1).setDepth(1211);
+        return {
+            key: entry.key,
+            icon,
+            stackText
+        };
+    }
+
+    destroyStatusEffectIndicators() {
+        this.statusEffectIndicators.forEach((indicator) => {
+            indicator.icon?.destroy?.();
+            indicator.stackText?.destroy?.();
+        });
+        this.statusEffectIndicators = [];
+    }
+
+    syncStatusEffectIndicators(entries = []) {
+        if (!this.scene) return;
+        const validEntries = entries.filter((entry) => getStatusEffectConfig(entry.key)?.iconFrame);
+        for (let index = this.statusEffectIndicators.length - 1; index >= validEntries.length; index -= 1) {
+            const indicator = this.statusEffectIndicators[index];
+            indicator?.icon?.destroy?.();
+            indicator?.stackText?.destroy?.();
+            this.statusEffectIndicators.splice(index, 1);
+        }
+        validEntries.forEach((entry, index) => {
+            let indicator = this.statusEffectIndicators[index];
+            if (!indicator || indicator.key !== entry.key) {
+                indicator?.icon?.destroy?.();
+                indicator?.stackText?.destroy?.();
+                indicator = this.createStatusEffectIndicator(entry);
+                if (!indicator) return;
+                this.statusEffectIndicators[index] = indicator;
+            }
+            indicator.key = entry.key;
+            indicator.icon.setTexture(STATUS_ICON_ATLAS_KEY, getStatusEffectConfig(entry.key)?.iconFrame).setVisible(true);
+            const shouldShowStack = Boolean(getStatusEffectConfig(entry.key)?.showStack);
+            indicator.stackText
+                .setVisible(shouldShowStack)
+                .setText(shouldShowStack ? `${Math.max(1, Math.round(entry.stackCount ?? 1))}` : '');
+        });
+        this.statusEffectIndicators = this.statusEffectIndicators.filter(Boolean);
+        this.updateStatusEffectIndicatorPosition();
+    }
+
+    updateStatusEffectIndicatorPosition() {
+        if (!this.statusEffectIndicators.length) return;
+        const baseOffsetY = Math.max(this.displayHeight ?? this.height ?? 0, this.body?.height ?? 0) * 0.5 + 10;
+        const spacing = 10;
+        const startX = this.x - ((this.statusEffectIndicators.length - 1) * spacing) / 2;
+        const y = this.y - baseOffsetY;
+        this.statusEffectIndicators.forEach((indicator, index) => {
+            const iconX = startX + (index * spacing);
+            indicator.icon?.setPosition(iconX, y);
+            indicator.stackText?.setPosition(iconX + 4, y + 4);
         });
     }
 
@@ -1262,7 +1394,10 @@ export default class Player extends BaseEntity {
                 this.addSkillAreaPercent(effect.skillKey, effect.value ?? 0);
                 break;
             case 'allSkillAreaPercent':
-                this.globalSkillAreaMultiplier *= (1 + (effect.value ?? 0));
+                this.globalSkillAreaMultiplier = Math.max(
+                    0.1,
+                    (this.globalSkillAreaMultiplier ?? 1) * (1 + (effect.value ?? 0))
+                );
                 break;
             case 'skillStunDurationPercent':
                 this.addSkillStunDurationPercent(effect.skillKey, effect.value ?? 0);
@@ -1309,13 +1444,13 @@ export default class Player extends BaseEntity {
             ...baseConfig,
             ...runtimeOverride
         };
-        const rangeBonus = Math.max(0, this.skillRange ?? 0);
-        if (rangeBonus > 0) {
+        const rangeBonus = Number(this.skillRange ?? 0) || 0;
+        if (Number.isFinite(rangeBonus) && rangeBonus !== 0) {
             if (typeof mergedConfig.travelRange === 'number') {
-                mergedConfig.travelRange += rangeBonus;
+                mergedConfig.travelRange = Math.max(0, mergedConfig.travelRange + rangeBonus);
             }
             if (typeof mergedConfig.meleeRange === 'number') {
-                mergedConfig.meleeRange += rangeBonus;
+                mergedConfig.meleeRange = Math.max(0, mergedConfig.meleeRange + rangeBonus);
             }
         }
         return mergedConfig;
@@ -1533,7 +1668,10 @@ export default class Player extends BaseEntity {
 
     addSkillAreaPercent(skillKey, value) {
         if (!skillKey) return;
-        this.skillAreaMultipliers[skillKey] = (this.skillAreaMultipliers[skillKey] ?? 1) * (1 + value);
+        this.skillAreaMultipliers[skillKey] = Math.max(
+            0.1,
+            (this.skillAreaMultipliers[skillKey] ?? 1) * (1 + value)
+        );
     }
 
     addSkillProjectileSpeedPercent(skillKey, value) {
@@ -1602,7 +1740,8 @@ export default class Player extends BaseEntity {
         const supportsGlobalArea = category === 'projectile';
         const baseAreaMultiplier = this.resolveCharacterStats()?.areaSizeMultiplier ?? 1;
         const skillMultiplier = this.skillAreaMultipliers[skillKey] ?? 1;
-        return skillMultiplier * (supportsGlobalArea ? (baseAreaMultiplier * (this.globalSkillAreaMultiplier ?? 1)) : 1);
+        const effective = skillMultiplier * (supportsGlobalArea ? (baseAreaMultiplier * (this.globalSkillAreaMultiplier ?? 1)) : 1);
+        return Math.max(0.1, effective);
     }
 
     getSkillStunDurationMultiplier(skillKey) {
@@ -1618,7 +1757,8 @@ export default class Player extends BaseEntity {
     }
 
     getSkillCritChanceBonus() {
-        return this.globalCritChanceBonus ?? 0;
+        const characterCritChance = this.resolveCharacterStats?.()?.critChance ?? 0;
+        return (Number(characterCritChance) || 0) + (Number(this.globalCritChanceBonus ?? 0) || 0);
     }
 
     getSkillCritMultiplierBonus() {
@@ -1653,6 +1793,8 @@ export default class Player extends BaseEntity {
         this.characterKey = resolvedKey;
         this.characterConfig = config;
         this.characterStats = stats;
+        this.characterPassive = getCharacterPassive(resolvedKey);
+        this.characterPassiveState = {};
         this.assetKey = assetKey;
         this.type = assetKey;
         const charSize = config.size ?? ENTITY_SIZE_CONFIG[assetKey] ?? { width: 42, height: 48 };
@@ -1690,6 +1832,7 @@ export default class Player extends BaseEntity {
         this.updateDodgeFromConfig();
         this.updateSkillRangeFromConfig();
         this.updateSpeedFromConfig();
+        this.characterPassive?.onCharacterSet?.(this, { characterKey: resolvedKey });
         return defaultSkill;
     }
 
@@ -1706,6 +1849,10 @@ export default class Player extends BaseEntity {
             this.bonusArmor -= this.levelGrowthArmorBonus;
         }
         this.levelGrowthArmorBonus = 0;
+        if ((this.levelGrowthSpeedBonus ?? 0) !== 0) {
+            this.bonusSpeedFlat -= this.levelGrowthSpeedBonus;
+        }
+        this.levelGrowthSpeedBonus = 0;
 
         Object.entries(this.levelGrowthSkillDamageBonuses ?? {}).forEach(([skillKey, value]) => {
             if (!skillKey || !value) return;
@@ -1731,6 +1878,12 @@ export default class Player extends BaseEntity {
                 this.bonusArmor += armorBonus;
             }
 
+            const speedBonus = Math.max(0, Number(growthConfig.moveSpeedPerLevel) || 0) * gainedLevels;
+            if (speedBonus > 0) {
+                this.levelGrowthSpeedBonus = speedBonus;
+                this.bonusSpeedFlat += speedBonus;
+            }
+
             const damageBonus = Math.max(0, Number(growthConfig.damagePerLevel) || 0) * gainedLevels;
             const growthSkillKey = growthConfig.skillKey
                 ?? this.characterConfig?.defaultSkill
@@ -1742,7 +1895,9 @@ export default class Player extends BaseEntity {
         }
 
         this.updateHealthFromCharacterConfig();
+        this.updateSpeedFromConfig();
         this.updateArmorFromConfig();
+        this.characterPassive?.onSyncLevelGrowth?.(this);
         if (healForMaxHealthGain) {
             const gainedMaxHealth = Math.max(0, this.maxHealth - previousMaxHealth);
             if (gainedMaxHealth > 0) {
@@ -1767,7 +1922,13 @@ export default class Player extends BaseEntity {
 
     updateSpeedFromConfig() {
         const baseSpeed = this.resolveCharacterStats()?.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed;
-        this.speed = Math.max(1, Math.round((baseSpeed * (1 + (this.bonusSpeedPercent ?? 0))) + (this.bonusSpeedFlat ?? 0)));
+        const percentMultiplier = Math.max(0.1, 1 + (Number(this.bonusSpeedPercent ?? 0) || 0));
+        const flatBonus = Number(this.bonusSpeedFlat ?? 0) || 0;
+        this.speed = Math.max(1, Math.round((Number(baseSpeed) || 0) * percentMultiplier + flatBonus));
+    }
+
+    handleHitDealt(event = {}) {
+        this.characterPassive?.onHitDealt?.(this, event);
     }
 
     updateArmorFromConfig() {
@@ -1786,7 +1947,7 @@ export default class Player extends BaseEntity {
 
     updateSkillRangeFromConfig() {
         const baseSkillRange = this.resolveCharacterStats()?.skillRange ?? PLAYER_BASE_STATS.skillRange ?? 0;
-        this.skillRange = Math.max(0, baseSkillRange + (this.bonusSkillRange ?? 0));
+        this.skillRange = (Number(baseSkillRange) || 0) + (Number(this.bonusSkillRange ?? 0) || 0);
     }
 
     createHealthBarUI() {
@@ -1857,6 +2018,7 @@ export default class Player extends BaseEntity {
         this.statusEffects = null;
         this.motionTrailEffect?.destroy();
         this.motionTrailEffect = null;
+        this.destroyStatusEffectIndicators();
         this.destroyHealthBarUI();
         this.destroyExpBarUI();
         super.destroy(fromScene);

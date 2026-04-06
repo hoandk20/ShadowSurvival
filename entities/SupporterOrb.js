@@ -114,6 +114,7 @@ export default class SupporterOrb extends Phaser.GameObjects.Arc {
                 fontSize: '7px'
             });
         }
+        this.supporter?.handleAttackHit?.(time);
         this.effect?.spawnImpactBurst?.(this.target.x, this.target.y);
         this.destroy();
     }

@@ -1,6 +1,5 @@
 export const FINAL_BOSS_CONFIG = {
     giant_rock: {
-        key: 'giant_rock',
         name: 'Giant Rock',
         hudName: 'GIANT ROCK',
         barColor: 0xc95f3f,
@@ -9,18 +8,19 @@ export const FINAL_BOSS_CONFIG = {
         rounds: [
             {
                 name: 'Round 1',
-                maxHealth: 8000,
-                damage: 50,
-                armor: 12,
-                effectResist: 0.8,
+                maxHealth: 8,
+                damage: 150,
+                speed: 55,
+                armor: 30,
+                effectResist: 0.1,
                 knockbackResist: 0.1,
                 behavior: 'chase',
                 attackStyle: 'dash_lunge',
                 attackRange: 150,
-                attackCooldown: 3000,
+                attackCooldown: 500,
                 meleeAttack: {
                     engageDelayMs: 140,
-                    windupMs: 1500,
+                    windupMs: 1000,
                     recoveryMs: 260,
                     rangePadding: 10,
                     dashSpeed: 320,
@@ -32,21 +32,107 @@ export const FINAL_BOSS_CONFIG = {
             },
             {
                 name: 'Round 2',
-                maxHealth: 10000,
-                damage: 50,
-                speed: 55,
-                armor: 12,
-                effectResist: 0.8,
+                maxHealth: 100000,
+                damage: 150,
+                speed: 65,
+                armor: 30,
+                effectResist: 0.1,
                 knockbackResist: 0.1,
                 behavior: 'chase',
                 attackStyle: 'giant_rock_stone_columns',
                 attackRange: 150,
-                attackCooldown: 3000,
+                attackCooldown: 500,
                 meleeAttack: {
                     engageDelayMs: 140,
                     windupMs: 1000,
                     recoveryMs: 400,
                     rangePadding: 10
+                }
+            }
+        ]
+    },
+    plant: {
+        name: 'Plant Abomination',
+        hudName: 'PLANT ABOMINATION',
+        barColor: 0x4d9a4a,
+        barGlowColor: 0xbdf6a0,
+        barFrameColor: 0x10240f,
+        rounds: [
+            {
+                name: 'Round 1',
+                maxHealth: 80000,
+                damage: 150,
+                armor: 30,
+                speed: 60,
+                effectResist: 0.8,
+                knockbackResist: 0.1,
+                behavior: 'chase',
+                attackStyle: 'plant_boss_cycle',
+                attackRange: 150,
+                attackCooldown: 100,
+                meleeAttack: {
+                    windupMs: 1500,
+                    recoveryMs: 260
+                }
+            },
+            {
+                name: 'Round 2',
+                maxHealth: 100000,
+                damage: 150,
+                speed: 70,
+                armor: 30,
+                effectResist: 0.8,
+                knockbackResist: 0.1,
+                behavior: 'chase',
+                attackStyle: 'plant_boss_cycle',
+                attackRange: 150,
+                attackCooldown: 3000,
+                meleeAttack: {
+                    windupMs: 1000,
+                    recoveryMs: 400
+                }
+            }
+        ]
+    },
+    black_widow: {
+        name: 'Black Widow',
+        hudName: 'BLACK WIDOW',
+        barColor: 0x7f2230,
+        barGlowColor: 0xff9aa6,
+        barFrameColor: 0x1a0910,
+        rounds: [
+            {
+                name: 'Round 1',
+                maxHealth: 80000,
+                damage: 150,
+                armor: 30,
+                speed: 120,
+                effectResist: 0.8,
+                knockbackResist: 0.1,
+                behavior: 'chase',
+                attackStyle: 'black_widow_cycle',
+                attackRange: 150,
+                attackCooldown: 2000,
+                meleeAttack: {
+                    windupMs: 1500,
+                    recoveryMs: 260
+                }
+            },
+            {
+                name: 'Round 2',
+                maxHealth: 100000,
+                damage: 150,
+                speed: 120,
+                armor: 30,
+                effectResist: 0.8,
+                knockbackResist: 0.1,
+                behavior: 'chase',
+                attackStyle: 'black_widow_cycle',
+                attackRange: 150,
+                attackCooldown: 1000,
+                meleeAttack: {
+                    windupMs: 1000,
+                    recoveryMs: 400
                 }
             }
         ]

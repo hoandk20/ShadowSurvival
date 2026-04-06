@@ -18,6 +18,9 @@ const ATTACK_BOUNCE_SCALE_X = 0.98;
 const ATTACK_BOUNCE_SCALE_Y = 1.08;
 const ATTACK_SQUASH_DURATION_MS = 70;
 const ATTACK_BOUNCE_DURATION_MS = 105;
+const SNIPER_TELEGRAPH_LINE_WIDTH = 3;
+const SNIPER_TELEGRAPH_ALPHA = 0.24;
+const SNIPER_TELEGRAPH_STROKE_ALPHA = 0.52;
 const DASH_LUNGE_STYLES = new Set(['dash_lunge', 'dash_lunge_bullet_trail', 'dash_lunge_back_fan']);
 const DEFAULT_MELEE_ATTACK_CONFIG = Object.freeze({
     engageDelayMs: 90,
@@ -66,7 +69,8 @@ export default class Enemy extends BaseEntity {
         this.stunTimer = null;
         this.knockbackVelocity = new Phaser.Math.Vector2(0, 0);
         this.knockbackTimer = 0;
-        this.knockbackDragFactor = 0.92;
+        // Default knockback damping. Closer to 1 = decays slower (pushes farther).
+        this.knockbackDragFactor = 0.97;
         this.knockbackVelocity = new Phaser.Math.Vector2(0, 0);
         this.knockbackTimer = 0;
         this.attackCooldown = enemyStats.attackCooldown ?? ENEMY_BASE_STATS.attackCooldown;
@@ -101,6 +105,8 @@ export default class Enemy extends BaseEntity {
         this.dashAttackTelegraphTween = null;
         this.attackSquashTween = null;
         this.attackBounceTween = null;
+        this.sniperTelegraph = null;
+        this.sniperTelegraphTween = null;
         this.attackVisualScale = { x: 1, y: 1 };
         this.stuckTimer = 0;
         this.ghostTimer = 0;
@@ -141,6 +147,10 @@ export default class Enemy extends BaseEntity {
         this.showHealthText = false;
         this.separationTimer = Phaser.Math.Between(0, SEPARATION_UPDATE_INTERVAL_MS);
         this.statusEffectIndicators = [];
+        this.ignoreMapCollisionDuringDash = false;
+        this.blockFreezeVisual = null;
+        this.blockFreezeVisualTween = null;
+        this.blockFreezeArmorBonus = 0;
 
         this.setVisible(false);
         this.setScale(1);
@@ -155,6 +165,7 @@ export default class Enemy extends BaseEntity {
             this.applyFinalBossRound(0, { preserveHealthRatio: false, emitEvent: false });
             this.captureBaseStats();
         }
+        this.syncCollisionBodyTraits();
         this.scene?.statusEffectSystem?.attach?.(this, { entityType: 'enemy' });
 
         this.separation = new Phaser.Math.Vector2(0, 0);
@@ -168,6 +179,13 @@ export default class Enemy extends BaseEntity {
                 this.setVisible(true);
             });
         });
+    }
+
+    syncCollisionBodyTraits() {
+        if (!this.body) return;
+        const isHeavyEnemy = Boolean(this.isBoss || this.isMiniBoss || this.isFinalBoss);
+        this.body.setImmovable?.(isHeavyEnemy);
+        this.body.setPushable?.(!isHeavyEnemy);
     }
 
     update(time, delta, players, allEnemies) {
@@ -251,10 +269,11 @@ export default class Enemy extends BaseEntity {
             isCritical: options?.isCritical ?? false
         }) ?? { amount: amountWithCritFrozenBonus, absorbedDamage: 0 };
         const resolvedAmount = Math.max(0, incomingDamageContext.amount ?? amountWithCritFrozenBonus);
+        const ignoreArmor = options?.ignoreArmor === true;
         const armorValue = Math.max(0, this.armor ?? 0);
-        const armorPiercePercent = this.resolveArmorPiercePercent(source, options);
+        const armorPiercePercent = ignoreArmor ? 1 : this.resolveArmorPiercePercent(source, options);
         const piercedArmor = armorValue * armorPiercePercent;
-        const effectiveArmor = Math.max(0, armorValue - piercedArmor);
+        const effectiveArmor = ignoreArmor ? 0 : Math.max(0, armorValue - piercedArmor);
         const mitigatedAmount = Math.max(0, Math.round(resolvedAmount - effectiveArmor));
         const actualDamage = Math.min(mitigatedAmount, this.health);
         this.health = Phaser.Math.Clamp(this.health - actualDamage, 0, this.maxHealth);
@@ -266,10 +285,16 @@ export default class Enemy extends BaseEntity {
         const ignoreKnockbackWhileDashLocked = this.isDashLungeStyle()
             && (this.isDashAttacking || this.isAttacking || Boolean(this.dashAttackTargetPoint));
         if (!ignoreKnockbackWhileDashLocked && force && direction && direction.lengthSq() > 0 && this.body) {
-            const knockbackForce = force * (this.knockbackResist ?? 1);
+            const speedMultiplier = skillConfig?.knockbackSpeedMultiplier ?? 1;
+            let knockbackForce = force * (this.knockbackResist ?? 1) * speedMultiplier;
+            const maxKnockbackSpeed = skillConfig?.maxKnockbackSpeed;
+            if (typeof maxKnockbackSpeed === 'number') {
+                knockbackForce = Math.min(knockbackForce, maxKnockbackSpeed);
+            }
             this.knockbackVelocity.set(direction.x * knockbackForce, direction.y * knockbackForce);
-            this.knockbackTimer = skillConfig?.knockbackDragDuration ?? 220;
-            this.knockbackDragFactor = skillConfig?.knockbackDragFactor ?? 0.92;
+            // Default knockback: longer + less damping for a clearer pushback feel.
+            this.knockbackTimer = skillConfig?.knockbackDragDuration ?? 320;
+            this.knockbackDragFactor = skillConfig?.knockbackDragFactor ?? 0.97;
             this.body.velocity.copy(this.knockbackVelocity);
         }
         if (this.health <= 0) {
@@ -566,6 +591,12 @@ export default class Enemy extends BaseEntity {
         const retreatRangeSq = retreatRange * retreatRange;
         const effectiveSpeed = this.getStatusAdjustedSpeed?.(this.speed) ?? this.speed;
 
+        if (this.isAttacking) {
+            this.body.setVelocity(0, 0);
+            this.setFlipX(dx < 0);
+            return;
+        }
+
         if (distanceSq > preferredRangeSq) {
             const angle = Math.atan2(dy, dx);
             const vx = Math.cos(angle) * effectiveSpeed;
@@ -637,10 +668,27 @@ export default class Enemy extends BaseEntity {
         if ((time - this.lastRangedAttackTime) < this.attackCooldown) return false;
         const dx = targetPlayer.x - this.x;
         const dy = targetPlayer.y - this.y;
-        const attackDistance = Math.max(this.attackRange ?? 0, 40);
+        const preferredRange = Math.max(0, this.rangedAttackConfig?.preferredRange ?? 0);
+        const attackDistance = Math.max(this.attackRange ?? 0, preferredRange + 20, 40);
         if ((dx * dx) + (dy * dy) > attackDistance * attackDistance) return false;
         this.lastRangedAttackTime = time;
         this.playAttackSquashBounce();
+        if (this.attackStyle === 'projectile_burst') {
+            this.performBurstRangedAttack(targetPlayer);
+            return true;
+        }
+        if (this.attackStyle === 'trap_poison_cloud') {
+            this.performPoisonTrapAttack(targetPlayer);
+            return true;
+        }
+        if (this.attackStyle === 'projectile_sniper') {
+            this.beginSniperAttack(targetPlayer);
+            return true;
+        }
+        if (this.attackStyle === 'trap_burn_cloud') {
+            this.performBurnTrapAttack(targetPlayer);
+            return true;
+        }
         this.scene?.spawnEnemyProjectile?.(this, targetPlayer, {
             damage: this.damage ?? 10,
             speed: this.rangedAttackConfig?.projectileSpeed ?? 230,
@@ -650,6 +698,162 @@ export default class Enemy extends BaseEntity {
             glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xffd5ee
         });
         return true;
+    }
+
+    performBurstRangedAttack(targetPlayer) {
+        const burstCount = Math.max(2, Math.round(this.rangedAttackConfig?.burstCount ?? 3));
+        const burstSpreadDeg = Math.max(0, Number(this.rangedAttackConfig?.burstSpreadDeg ?? 18) || 18);
+        const baseAngle = Math.atan2(targetPlayer.y - this.y, targetPlayer.x - this.x);
+        const spreadRad = Phaser.Math.DegToRad(burstSpreadDeg);
+        const step = burstCount > 1 ? spreadRad / (burstCount - 1) : 0;
+        for (let index = 0; index < burstCount; index += 1) {
+            const angleOffset = burstCount > 1 ? (-spreadRad * 0.5) + (step * index) : 0;
+            const projectileAngle = baseAngle + angleOffset;
+            this.scene?.spawnEnemyProjectileDirection?.(
+                this,
+                this.x,
+                this.y,
+                Math.cos(projectileAngle),
+                Math.sin(projectileAngle),
+                {
+                    damage: this.damage ?? 10,
+                    speed: this.rangedAttackConfig?.projectileSpeed ?? 230,
+                    radius: this.rangedAttackConfig?.projectileRadius ?? 5,
+                    lifetimeMs: this.rangedAttackConfig?.projectileLifetimeMs ?? 1400,
+                    color: this.rangedAttackConfig?.projectileColor ?? 0xff7cba,
+                    glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xffd5ee
+                }
+            );
+        }
+    }
+
+    performPoisonTrapAttack(targetPlayer) {
+        this.scene?.statusEffectSystem?.spawnPoisonCloud?.(this, {
+            x: targetPlayer.x,
+            y: targetPlayer.y,
+            radius: this.rangedAttackConfig?.cloudRadius ?? 56,
+            durationMs: this.rangedAttackConfig?.cloudDurationMs ?? 2200,
+            tickIntervalMs: this.rangedAttackConfig?.cloudTickIntervalMs ?? 450,
+            poisonDurationMs: this.rangedAttackConfig?.poisonDurationMs ?? 2500,
+            damage: this.rangedAttackConfig?.cloudDamage ?? 0,
+            source: this,
+            targetMode: 'opponents',
+            tags: this.rangedAttackConfig?.cloudTags ?? ['poison', 'cloud', 'enemy_trap'],
+            showDamageText: true
+        });
+    }
+
+    performBurnTrapAttack(targetPlayer) {
+        this.scene?.statusEffectSystem?.spawnBurnCloud?.(this, {
+            x: targetPlayer.x,
+            y: targetPlayer.y,
+            radius: this.rangedAttackConfig?.fireRadius ?? 56,
+            durationMs: this.rangedAttackConfig?.fireDurationMs ?? 1800,
+            tickIntervalMs: this.rangedAttackConfig?.fireTickIntervalMs ?? 450,
+            burnDurationMs: this.rangedAttackConfig?.burnDurationMs ?? 2500,
+            damage: this.rangedAttackConfig?.fireDamage ?? 0,
+            source: this,
+            targetMode: 'opponents',
+            tags: this.rangedAttackConfig?.fireTags ?? ['fire', 'burn', 'enemy_trap'],
+            showDamageText: true
+        });
+    }
+
+    beginSniperAttack(targetPlayer) {
+        this.isAttacking = true;
+        this.body?.setVelocity?.(0, 0);
+        const targetPoint = new Phaser.Math.Vector2(targetPlayer.x, targetPlayer.y);
+        this.spawnSniperTelegraph(targetPoint.x, targetPoint.y);
+        this.pendingAttackTimer?.remove?.(false);
+        this.pendingAttackTimer = this.scene?.time?.delayedCall(this.rangedAttackConfig?.sniperWindupMs ?? 650, () => {
+            this.pendingAttackTimer = null;
+            if (!this.active) return;
+            this.destroySniperTelegraph();
+            const direction = new Phaser.Math.Vector2(targetPoint.x - this.x, targetPoint.y - this.y);
+            if (direction.lengthSq() === 0) {
+                direction.set(this.flipX ? -1 : 1, 0);
+            } else {
+                direction.normalize();
+            }
+            this.spawnSniperMuzzleFlash(direction);
+            this.scene?.spawnEnemyProjectileDirection?.(this, this.x, this.y, direction.x, direction.y, {
+                damage: this.damage ?? 10,
+                speed: this.rangedAttackConfig?.projectileSpeed ?? 320,
+                radius: this.rangedAttackConfig?.projectileRadius ?? 4,
+                lifetimeMs: this.rangedAttackConfig?.projectileLifetimeMs ?? 1800,
+                color: this.rangedAttackConfig?.projectileColor ?? 0x8fd7ff,
+                glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xe3f6ff
+            });
+            const recoveryMs = Math.max(0, this.rangedAttackConfig?.sniperRecoveryMs ?? 160);
+            this.scene?.time?.delayedCall(recoveryMs, () => {
+                if (!this.active) return;
+                this.isAttacking = false;
+            });
+        });
+    }
+
+    spawnSniperMuzzleFlash(direction) {
+        if (!this.scene?.add || !this.scene?.tweens || !direction) return;
+        const color = this.rangedAttackConfig?.projectileColor ?? 0x8fd7ff;
+        const glowColor = this.rangedAttackConfig?.projectileGlowColor ?? 0xe3f6ff;
+        const flashX = this.x + (direction.x * 12);
+        const flashY = this.y + (direction.y * 12);
+        const flashAngle = Math.atan2(direction.y, direction.x);
+
+        const beam = this.scene.add.rectangle(flashX, flashY, 34, 4, color, 0.85)
+            .setRotation(flashAngle)
+            .setDepth((this.depth ?? 20) + 6);
+        const core = this.scene.add.rectangle(flashX, flashY, 18, 2, 0xffffff, 0.95)
+            .setRotation(flashAngle)
+            .setDepth((this.depth ?? 20) + 7);
+        const burst = this.scene.add.circle(flashX, flashY, 8, glowColor, 0.38)
+            .setDepth((this.depth ?? 20) + 5);
+
+        this.scene.tweens.add({
+            targets: [beam, core, burst],
+            alpha: 0,
+            scaleX: { from: 1, to: 1.35 },
+            scaleY: { from: 1, to: 0.7 },
+            duration: 90,
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                beam.destroy();
+                core.destroy();
+                burst.destroy();
+            }
+        });
+    }
+
+    spawnSniperTelegraph(targetX, targetY) {
+        if (!this.scene?.add?.graphics) return;
+        this.destroySniperTelegraph();
+        const color = this.rangedAttackConfig?.projectileColor ?? 0x8fd7ff;
+        const telegraph = this.scene.add.graphics().setDepth((this.depth ?? 20) + 4);
+        telegraph.lineStyle(SNIPER_TELEGRAPH_LINE_WIDTH, color, SNIPER_TELEGRAPH_ALPHA);
+        telegraph.beginPath();
+        telegraph.moveTo(this.x, this.y);
+        telegraph.lineTo(targetX, targetY);
+        telegraph.strokePath();
+        telegraph.lineStyle(1, 0xffffff, SNIPER_TELEGRAPH_STROKE_ALPHA);
+        telegraph.beginPath();
+        telegraph.moveTo(this.x, this.y);
+        telegraph.lineTo(targetX, targetY);
+        telegraph.strokePath();
+        this.sniperTelegraph = telegraph;
+        this.sniperTelegraphTween = this.scene?.tweens?.add({
+            targets: telegraph,
+            alpha: { from: 0.35, to: 1 },
+            duration: this.rangedAttackConfig?.sniperWindupMs ?? 650,
+            yoyo: true,
+            repeat: -1
+        }) ?? null;
+    }
+
+    destroySniperTelegraph() {
+        this.sniperTelegraphTween?.stop?.();
+        this.sniperTelegraphTween = null;
+        this.sniperTelegraph?.destroy?.();
+        this.sniperTelegraph = null;
     }
 
     getMeleeAttackDistance(targetPlayer = null) {
@@ -796,6 +1000,7 @@ export default class Enemy extends BaseEntity {
         const directDistance = Phaser.Math.Distance.Between(this.x, this.y, dashTarget.x, dashTarget.y);
         const dashDistance = Math.max(24, this.meleeAttackConfig.dashDistance ?? directDistance);
         this.isDashAttacking = true;
+        this.setDashMapCollisionEnabled(false);
         this.dashAttackHitResolved = false;
         this.dashBackFanElapsedMs = 0;
         this.dashBackFanShotTimerMs = 0;
@@ -834,7 +1039,10 @@ export default class Enemy extends BaseEntity {
             this.finishDashAttack();
             return;
         }
-        if (this.body.blocked?.left || this.body.blocked?.right || this.body.blocked?.up || this.body.blocked?.down) {
+        if (
+            !this.ignoreMapCollisionDuringDash
+            && (this.body.blocked?.left || this.body.blocked?.right || this.body.blocked?.up || this.body.blocked?.down)
+        ) {
             this.finishDashAttack();
             return;
         }
@@ -891,6 +1099,7 @@ export default class Enemy extends BaseEntity {
 
     finishDashAttack() {
         this.isDashAttacking = false;
+        this.setDashMapCollisionEnabled(true);
         this.body?.setVelocity(0, 0);
         this.dashAttackTargetPoint = null;
         this.dashAttackRemainingDistance = 0;
@@ -910,6 +1119,18 @@ export default class Enemy extends BaseEntity {
             this.isAttacking = false;
             this.forceReturnToMoveAnimation();
         }
+    }
+
+    setDashMapCollisionEnabled(enabled = true) {
+        const shouldEnable = Boolean(enabled);
+        if (shouldEnable && !this.ignoreMapCollisionDuringDash) return;
+        if (!shouldEnable && this.ignoreMapCollisionDuringDash) return;
+        this.ignoreMapCollisionDuringDash = !shouldEnable;
+        if (shouldEnable) {
+            this.scene?.mapManager?.enableObjectCollisions?.(this);
+            return;
+        }
+        this.scene?.mapManager?.removeObjectCollisions?.(this);
     }
 
     getMeleeAttackEffectConfig() {
@@ -1045,6 +1266,7 @@ export default class Enemy extends BaseEntity {
     }
 
     finishDeath(source = null) {
+        this.setDashMapCollisionEnabled(true);
         this.deathSequenceTimer?.remove?.(false);
         this.deathSequenceTimer = null;
         this.isDeathSequenceActive = false;
@@ -1094,6 +1316,7 @@ export default class Enemy extends BaseEntity {
     }
 
     stopCombatForDeathSequence() {
+        this.setDashMapCollisionEnabled(true);
         this.setState('dead');
         this.body?.stop?.();
         if (this.body) {
@@ -1130,6 +1353,7 @@ export default class Enemy extends BaseEntity {
             this.body.enable = true;
             this.body.setVelocity(0, 0);
         }
+        this.scene?.mapManager?.enableObjectCollisions?.(this);
     }
 
     playDeathAnimation() {
@@ -1481,6 +1705,7 @@ export default class Enemy extends BaseEntity {
         this.stunTimer = null;
         this.pendingAttackTimer?.remove?.(false);
         this.pendingAttackTimer = null;
+        this.destroySniperTelegraph();
         this.destroyDashAttackTelegraph();
         this.attackSquashTween?.stop?.();
         this.attackSquashTween = null;
@@ -1493,6 +1718,8 @@ export default class Enemy extends BaseEntity {
         this.healthText?.destroy?.();
         this.healthText = null;
         this.destroyStatusEffectIndicators();
+        this.destroyBlockFreezeVisual();
+        this.setBlockFreezeArmorBonus(0);
     }
 
     setHealthVisible(visible) {
@@ -1526,6 +1753,7 @@ export default class Enemy extends BaseEntity {
         if (this.healthText) {
             this.healthText.setPosition(this.x, this.y - offsetY);
         }
+        this.updateBlockFreezeVisualPosition();
         this.updateStatusEffectIndicatorPosition();
     }
 
@@ -1566,6 +1794,58 @@ export default class Enemy extends BaseEntity {
         this.statusEffectTint = null;
         if (!this.damageTintTimer) {
             this.restorePersistentTint();
+        }
+    }
+
+    setBlockFreezeVisual(active) {
+        if (!this.scene) return;
+        const shouldShow = Boolean(active);
+        if (!shouldShow) {
+            this.destroyBlockFreezeVisual();
+            return;
+        }
+        if (!this.blockFreezeVisual || !this.blockFreezeVisual.active) {
+            const radius = Math.max(18, Math.round(Math.max(
+                this.displaySize?.width ?? this.width ?? 0,
+                this.displaySize?.height ?? this.height ?? 0
+            ) * 0.4));
+            this.blockFreezeVisual = this.scene.add.circle(this.x, this.y, radius, 0xffffff, 0.08)
+                .setStrokeStyle(2, 0xffffff, 0.35)
+                .setDepth(Math.max(1, (this.depth ?? 20) - 1));
+            this.blockFreezeVisualTween = this.scene.tweens.add({
+                targets: this.blockFreezeVisual,
+                alpha: { from: 0.18, to: 0.34 },
+                scaleX: { from: 0.9, to: 1.08 },
+                scaleY: { from: 0.9, to: 1.08 },
+                duration: 480,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+        this.updateBlockFreezeVisualPosition();
+    }
+
+    updateBlockFreezeVisualPosition() {
+        if (!this.blockFreezeVisual?.active) return;
+        this.blockFreezeVisual.setPosition(this.x, this.y);
+    }
+
+    destroyBlockFreezeVisual() {
+        this.blockFreezeVisualTween?.stop?.();
+        this.blockFreezeVisualTween = null;
+        this.blockFreezeVisual?.destroy?.();
+        this.blockFreezeVisual = null;
+    }
+
+    setBlockFreezeArmorBonus(amount = 0) {
+        const nextBonus = Math.max(0, Math.round(amount || 0));
+        const previousBonus = Math.max(0, Math.round(this.blockFreezeArmorBonus || 0));
+        if (nextBonus === previousBonus) return;
+        this.armor = Math.max(0, (this.armor ?? 0) - previousBonus + nextBonus);
+        this.blockFreezeArmorBonus = nextBonus;
+        if (this.currentStats) {
+            this.currentStats.armor = this.armor;
         }
     }
 

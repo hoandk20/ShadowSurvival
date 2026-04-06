@@ -167,13 +167,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
     spawnChestEnemyReward(player, reward) {
         const scene = this.scene;
         if (!scene?.spawnEnemyAtPosition || !reward?.enemyType) return;
-        const waveTimedOut = scene.waveSystemEnabled
-            && (scene.waveEnding
-                || scene.waveShopPending
-                || scene.isShopOpen
-                || scene.hasCurrentWaveTimedOut?.()
-                || (scene.getCurrentWaveRemainingMs?.() ?? 1) <= 0);
-        if (waveTimedOut) {
+        if (scene.canSpawnChestEnemyReward?.() === false) {
             return;
         }
         const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -183,6 +177,7 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         scene.spawnEnemyAtPosition(x, y, reward.enemyType, {
             countsTowardWave: false,
             isBoss: false,
+            ignoreSpawnCap: true,
             chestSpawned: true,
             chestSpawnHighlightTint: 0xb06cff,
             statsOverride: {

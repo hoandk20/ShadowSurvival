@@ -15,7 +15,7 @@ const SHOP_STAT_HINTS = {
     projectiles: 'Projectiles is the number of shots or spawned objects your skill creates.',
     knockback: 'Knockback increases how strongly enemies are pushed back when hit.',
     effectChance: 'Effect Chance increases the chance to apply status effects such as burn, freeze, or poison.',
-    effectDamage: 'Effect Damage increases the damage dealt by status effects.',
+    effectDamage: 'Effect Damage increases status effect damage and also boosts some support effects such as shield effects and HP buffs.',
     effectDuration: 'Effect Duration increases how long status effects remain active.',
     regen: 'Regen restores health over time each second.',
     lifesteal: 'Lifesteal restores a portion of health based on the damage you deal.',
@@ -137,6 +137,7 @@ export default class HudScene extends Phaser.Scene {
         this.shopRerollButtonShadow = null;
         this.shopRerollButtonBg = null;
         this.shopRerollButtonText = null;
+        this.shopRerollCostText = null;
         this.shopRerollCallback = null;
         this.shopContinueButton = null;
         this.shopContinueButtonShadow = null;
@@ -1077,14 +1078,20 @@ export default class HudScene extends Phaser.Scene {
         const hp = Math.max(0, Math.round(player.health ?? maxHp));
         const armor = Math.round(player.armor ?? characterStats.armor ?? 0);
         const armorPierce = Math.round((player.armorPierce ?? characterStats.armorPierce ?? 0) * 100);
-        const skillRange = Math.round(player.skillRange ?? characterStats.skillRange ?? 0);
+        const skillRangeBonus = Math.round(player.skillRange ?? characterStats.skillRange ?? 0);
         const moveSpeed = Math.round(player.speed ?? characterStats.moveSpeed ?? 0);
         const damageMul = Math.round(((characterStats.damageMultiplier ?? 1) * (player.damageMultiplier ?? 1)) * 100);
         const attackSpeed = Math.round(((characterStats.attackSpeed ?? 1) * (player.attackSpeedMultiplier ?? 1)) * 100);
-        const critChance = Math.round(Phaser.Math.Clamp((characterStats.critChance ?? 0) + (player.getSkillCritChanceBonus?.() ?? 0), 0, 1) * 100);
+        const activeSkillKey = player.getActiveSkillKey?.() ?? null;
+        const activeSkillConfig = activeSkillKey ? (player.getSkillConfig?.(activeSkillKey) ?? null) : null;
+        const critChance = Math.round((Number(player.getSkillCritChanceBonus?.(activeSkillKey) ?? 0) || 0) * 100);
         const critDamage = Math.round(((characterStats.critMultiplier ?? 1.5) + (player.getSkillCritMultiplierBonus?.() ?? 0)) * 100);
         const area = Math.round((characterStats.areaSizeMultiplier ?? 1) * (player.globalSkillAreaMultiplier ?? 1) * 100);
-        const activeSkillKey = player.getActiveSkillKey?.() ?? null;
+        const effectiveRange = Math.round(
+            activeSkillConfig?.category === 'projectile'
+                ? (activeSkillConfig.travelRange ?? skillRangeBonus)
+                : (activeSkillConfig?.meleeRange ?? skillRangeBonus)
+        );
         const projectileCount = Math.max(1, Math.round(activeSkillKey ? (player.getSkillObjectCount?.(activeSkillKey) ?? 1) : (characterStats.projectileCount ?? 1)));
         const knockback = Math.round((player.getSkillKnockbackMultiplier?.() ?? 1) * 100);
         const effectChance = Math.round(((characterStats.effectChance ?? 0) + (player.globalEffectChanceBonus ?? 0)) * 100);
@@ -1102,7 +1109,7 @@ export default class HudScene extends Phaser.Scene {
             { key: 'hp', label: `HP ${hp}/${maxHp}`, hint: SHOP_STAT_HINTS.hp },
             { key: 'armor', label: `Armor ${armor}`, hint: SHOP_STAT_HINTS.armor },
             { key: 'armorPierce', label: `Armor Pierce ${armorPierce}%`, hint: SHOP_STAT_HINTS.armorPierce },
-            { key: 'range', label: `Range ${skillRange}`, hint: SHOP_STAT_HINTS.range },
+            { key: 'range', label: `Range ${effectiveRange}`, hint: SHOP_STAT_HINTS.range },
             { key: 'speed', label: `Speed ${moveSpeed}`, hint: SHOP_STAT_HINTS.speed },
             { key: 'damage', label: `Damage ${damageMul}%`, hint: SHOP_STAT_HINTS.damage },
             { key: 'attackSpeed', label: `Atk Spd ${attackSpeed}%`, hint: SHOP_STAT_HINTS.attackSpeed },
@@ -1176,7 +1183,7 @@ export default class HudScene extends Phaser.Scene {
         this.layoutShopOverlay();
     }
 
-    showShopOverlay({ gold = 0, items = [], purchasedItems = [], onContinue = null, onReroll = null, onToggleLock = null, onPurchase = null, rerollCost = 5, debugMode = false } = {}) {
+    showShopOverlay({ gold = 0, items = [], purchasedItems = [], onContinue = null, onReroll = null, onToggleLock = null, onPurchase = null, rerollCost = 5, rerollRemaining = 0, debugMode = false } = {}) {
         this.hideShopOverlay();
         const { width, height, isMobileShopLayout, isMobileLandscape } = this.getShopLayoutFlags();
         const shopTextFontFamily = isMobileShopLayout ? 'Arial' : 'monospace';
@@ -1503,21 +1510,29 @@ export default class HudScene extends Phaser.Scene {
             strokeThickness: 3
         }).setOrigin(0.5);
         const rerollButton = this.add.container(panelWidth / 2 - 61, -panelHeight / 2 + 106);
-        const rerollButtonShadow = this.add.rectangle(3, 3, 56, 48, 0x000000, 0.45).setOrigin(0.5);
-        const rerollButtonBg = this.add.rectangle(0, 0, 56, 48, 0x25343d, 1)
+        const rerollButtonShadow = this.add.rectangle(3, 3, 92, 48, 0x000000, 0.45).setOrigin(0.5);
+        const rerollButtonBg = this.add.rectangle(0, 0, 92, 48, 0x25343d, 1)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x000000, 1)
             .setInteractive({ useHandCursor: true });
-        const rerollButtonInner = this.add.rectangle(0, 0, 40, 32, 0x30454f, 1)
+        const rerollButtonInner = this.add.rectangle(0, 0, 76, 32, 0x30454f, 1)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x7e99a8, 1);
-        const rerollButtonText = this.add.text(0, -1, '↻', {
+        const rerollButtonText = this.add.text(-22, -1, '↻', {
             fontSize: '30px',
             fontFamily: 'Arial',
             fontStyle: 'bold',
             color: '#d9f6ff',
             stroke: '#000000',
             strokeThickness: 2
+        }).setOrigin(0.5);
+        const rerollCostText = this.add.text(6, 0, `${Math.max(0, Math.floor(rerollCost))}`, {
+            fontSize: isMobileShopLayout ? '13px' : '14px',
+            fontFamily: shopTextFontFamily,
+            fontStyle: 'bold',
+            color: '#fff7dd',
+            stroke: '#000000',
+            strokeThickness: 3
         }).setOrigin(0.5);
         const statsToggleButton = this.add.rectangle(-panelWidth / 2 + 74, -panelHeight / 2 + 26, 120, 24, 0x25343d, 1)
             .setOrigin(0.5)
@@ -1554,7 +1569,7 @@ export default class HudScene extends Phaser.Scene {
             })
             .on('pointerover', () => rerollButton.setScale(1.03))
             .on('pointerout', () => rerollButton.setScale(1));
-        rerollButton.add([rerollButtonShadow, rerollButtonBg, rerollButtonInner, rerollButtonText]);
+        rerollButton.add([rerollButtonShadow, rerollButtonBg, rerollButtonInner, rerollButtonText, rerollCostText]);
         continueButton.add([continueButtonShadow, continueButtonBg, continueButtonInner, continueButtonText]);
 
         container.add([
@@ -1633,6 +1648,7 @@ export default class HudScene extends Phaser.Scene {
         this.shopRerollButtonShadow = rerollButtonShadow;
         this.shopRerollButtonBg = rerollButtonBg;
         this.shopRerollButtonText = rerollButtonText;
+        this.shopRerollCostText = rerollCostText;
         this.shopRerollCallback = typeof onReroll === 'function' ? onReroll : null;
         this.shopContinueButton = continueButton;
         this.shopContinueButtonShadow = continueButtonShadow;
@@ -1640,7 +1656,7 @@ export default class HudScene extends Phaser.Scene {
         this.shopContinueButtonText = continueButtonText;
         this.shopContinueCallback = typeof onContinue === 'function' ? onContinue : null;
         this.shopStatsVisible = false;
-        this.updateShopOverlayContent({ gold, items, purchasedItems, debugMode });
+        this.updateShopOverlayContent({ gold, items, purchasedItems, rerollRemaining, debugMode });
         this.layoutShopOverlay();
         this.shopWheelHandler = (_pointer, _gameObjects, _dx, dy) => {
             if (!this.shopOverlay?.active) return;
@@ -1706,7 +1722,7 @@ export default class HudScene extends Phaser.Scene {
         this.scene.bringToTop('HudScene');
     }
 
-    updateShopOverlayContent({ gold = 0, items = [], purchasedItems = [], rerollCost = null, debugMode = false } = {}) {
+    updateShopOverlayContent({ gold = 0, items = [], purchasedItems = [], rerollCost = null, rerollRemaining = 0, debugMode = false } = {}) {
         if (Number.isFinite(rerollCost)) {
             this.shopRerollCost = Math.max(0, Math.floor(rerollCost));
         }
@@ -1714,6 +1730,7 @@ export default class HudScene extends Phaser.Scene {
             this.shopGoldText.setText(`${Math.max(0, Math.floor(gold))}`);
         }
         this.shopRerollButtonText?.setText('↻');
+        this.shopRerollCostText?.setText(`${Math.max(0, Math.floor(this.shopRerollCost ?? 0))}`);
         const canReroll = debugMode || gold >= (this.shopRerollCost ?? 0);
         this.shopRerollButtonBg?.setFillStyle(canReroll ? 0x7d5a24 : 0x4e3d2b, 1);
         this.shopRerollButtonBg?.setStrokeStyle(2, canReroll ? 0x000000 : 0x231911, 1);
@@ -1722,6 +1739,7 @@ export default class HudScene extends Phaser.Scene {
             this.shopRerollButtonBg?.setInteractive({ useHandCursor: true });
         }
         this.shopRerollButtonText?.setColor(canReroll ? '#fff7dd' : '#c8b396');
+        this.shopRerollCostText?.setColor(canReroll ? '#fff7dd' : '#c8b396');
         this.shopRerollButton?.setAlpha(canReroll ? 1 : 0.8);
         this.refreshShopStatsPanel();
         const hasItems = Array.isArray(items) && items.some(Boolean);
@@ -2354,6 +2372,7 @@ export default class HudScene extends Phaser.Scene {
         this.shopRerollButtonShadow = null;
         this.shopRerollButtonBg = null;
         this.shopRerollButtonText = null;
+        this.shopRerollCostText = null;
         this.shopRerollCallback = null;
         this.shopContinueButton = null;
         this.shopContinueButtonShadow = null;
@@ -2717,10 +2736,10 @@ export default class HudScene extends Phaser.Scene {
 
     buildSupporterChoiceDetail(config = {}) {
         if (config.supportStyle === 'heal_aura') {
-            return `Heal aura\n+${Math.round(config.supportHealAmount ?? 0)} HP`;
+            return `Heal aura\n+${Math.round(config.supportHealAmount ?? 0)} HP base`;
         }
         if (config.supportStyle === 'armor_aura') {
-            return `Armor aura\n+${Math.round(config.supportArmorBonus ?? 0)} armor`;
+            return `Armor aura\n+${Math.round(config.supportArmorBonus ?? 0)} armor base`;
         }
         const range = Math.round(config.attackRange ?? 0);
         const damage = Math.round(config.projectileDamage ?? 0);
@@ -2744,9 +2763,13 @@ export default class HudScene extends Phaser.Scene {
         const statusEntries = Array.isArray(config.statusEffects) ? config.statusEffects : [];
 
         if (config.supportStyle === 'heal_aura') {
-            lines.push(`Heal aura: +${Math.round(config.supportHealAmount ?? 0)} HP`);
+            lines.push(`Heal aura: +${Math.round(config.supportHealAmount ?? 0)} HP base`);
+            lines.push('Buff scales with effect damage');
+            lines.push('Each hit reduces buff cooldown by 0.5s');
         } else if (config.supportStyle === 'armor_aura') {
-            lines.push(`Armor aura: +${Math.round(config.supportArmorBonus ?? 0)} armor`);
+            lines.push(`Armor aura: +${Math.round(config.supportArmorBonus ?? 0)} armor base`);
+            lines.push('Buff scales with effect damage');
+            lines.push('Each hit reduces buff cooldown by 0.5s');
         }
 
         Object.entries(passiveBonuses).forEach(([key, rawValue]) => {

@@ -3,6 +3,13 @@ import StatusSynergyResolver from './StatusSynergyResolver.js';
 
 const DEFAULT_STACKING_MODE = 'refresh';
 const VENOM_TRAIL_POISON_REAPPLY_MS = 1000;
+const BLOCK_FREEZE_TRIGGER_MS = 3000;
+const BLOCK_FREEZE_DAMAGE_WINDOW_MS = 3000;
+const BLOCK_FREEZE_DAMAGE_THRESHOLD_RATIO = 0.15;
+const BLOCK_FREEZE_DURATION_MS = 5000;
+const BLOCK_FREEZE_ARMOR_BONUS = 50;
+const BLOCK_FREEZE_SHAKE_DURATION_MS = 140;
+const BLOCK_FREEZE_SHAKE_INTENSITY = 0.0035;
 
 class StatusEffect {
     static effectKey = 'base';
@@ -602,20 +609,136 @@ class StatusEffectComponent {
         this.statusIsStunned = false;
         this.lastMoveSample = new Phaser.Math.Vector2(entity.x ?? 0, entity.y ?? 0);
         this.movedDistanceSinceTrail = 0;
+        this.freezeContinuousStartedAtMs = 0;
+        this.blockFreezeUntilMs = 0;
+        this.recentDamageSamples = [];
+        this.recentFreezeApplyTimes = [];
     }
 
     destroy() {
         this.activeEffects.forEach((effect) => effect.onExpire?.({ entity: this.entity }));
         this.activeEffects = [];
+        this.recentDamageSamples = [];
+        this.recentFreezeApplyTimes = [];
+        this.entity.setBlockFreezeArmorBonus?.(0);
+        this.entity.setBlockFreezeVisual?.(false);
         this.entity.clearStatusHighlight?.();
         this.entity.syncStatusEffectIndicators?.([]);
     }
 
+    isEnemy() {
+        return this.entityType === 'enemy';
+    }
+
+    canUseBlockFreeze() {
+        if (!this.isEnemy()) return false;
+        return Boolean(this.entity?.isBoss || this.entity?.isMiniBoss || this.entity?.isFinalBoss);
+    }
+
+    isBlockFreezeActive(timeNow = this.scene?.time?.now ?? 0) {
+        return this.canUseBlockFreeze() && (this.blockFreezeUntilMs ?? 0) > timeNow;
+    }
+
+    activateBlockFreeze(timeNow = this.scene?.time?.now ?? 0) {
+        if (!this.canUseBlockFreeze()) return;
+        this.blockFreezeUntilMs = timeNow + BLOCK_FREEZE_DURATION_MS;
+        this.freezeContinuousStartedAtMs = 0;
+        this.recentDamageSamples = [];
+        this.recentFreezeApplyTimes = [];
+        if (this.hasEffect('freeze')) {
+            this.removeEffects('freeze');
+        } else {
+            this.applyStateContributions();
+        }
+        this.entity.setBlockFreezeArmorBonus?.(BLOCK_FREEZE_ARMOR_BONUS);
+        this.entity.setBlockFreezeVisual?.(true);
+        this.scene?.cameras?.main?.shake?.(BLOCK_FREEZE_SHAKE_DURATION_MS, BLOCK_FREEZE_SHAKE_INTENSITY);
+    }
+
+    updateBlockFreezeState(timeNow = this.scene?.time?.now ?? 0) {
+        if (!this.canUseBlockFreeze()) {
+            this.blockFreezeUntilMs = 0;
+            this.freezeContinuousStartedAtMs = 0;
+            this.recentDamageSamples = [];
+            this.recentFreezeApplyTimes = [];
+            this.entity.setBlockFreezeArmorBonus?.(0);
+            this.entity.setBlockFreezeVisual?.(false);
+            return;
+        }
+        const blockFreezeActive = this.isBlockFreezeActive(timeNow);
+        if (blockFreezeActive) {
+            this.freezeContinuousStartedAtMs = 0;
+            this.recentFreezeApplyTimes = [];
+            this.entity.setBlockFreezeArmorBonus?.(BLOCK_FREEZE_ARMOR_BONUS);
+            if (this.hasEffect('freeze')) {
+                this.removeEffects('freeze');
+            } else {
+                this.entity.setBlockFreezeVisual?.(true);
+            }
+            return;
+        }
+        this.entity.setBlockFreezeArmorBonus?.(0);
+        this.entity.setBlockFreezeVisual?.(false);
+        if (!this.hasEffect('freeze')) {
+            this.freezeContinuousStartedAtMs = 0;
+            return;
+        }
+        if (this.freezeContinuousStartedAtMs <= 0) {
+            this.freezeContinuousStartedAtMs = timeNow;
+            return;
+        }
+        if ((timeNow - this.freezeContinuousStartedAtMs) >= BLOCK_FREEZE_TRIGGER_MS) {
+            this.activateBlockFreeze(timeNow);
+        }
+    }
+
+    pruneRecentDamageSamples(timeNow = this.scene?.time?.now ?? 0) {
+        const cutoff = timeNow - BLOCK_FREEZE_DAMAGE_WINDOW_MS;
+        this.recentDamageSamples = this.recentDamageSamples.filter((entry) => (entry?.timeNow ?? 0) >= cutoff);
+    }
+
+    pruneRecentFreezeApplies(timeNow = this.scene?.time?.now ?? 0) {
+        const cutoff = timeNow - BLOCK_FREEZE_TRIGGER_MS;
+        this.recentFreezeApplyTimes = this.recentFreezeApplyTimes.filter((appliedAtMs) => appliedAtMs >= cutoff);
+    }
+
+    recordFreezeApply(timeNow = this.scene?.time?.now ?? 0) {
+        if (!this.canUseBlockFreeze() || this.isBlockFreezeActive(timeNow)) return;
+        this.recentFreezeApplyTimes.push(timeNow);
+        this.pruneRecentFreezeApplies(timeNow);
+        if (this.recentFreezeApplyTimes.length >= 3) {
+            this.activateBlockFreeze(timeNow);
+        }
+    }
+
+    updateDamageTriggeredBlockFreeze(timeNow = this.scene?.time?.now ?? 0) {
+        if (!this.canUseBlockFreeze() || this.isBlockFreezeActive(timeNow)) return;
+        this.pruneRecentDamageSamples(timeNow);
+        const totalRecentDamage = this.recentDamageSamples.reduce((sum, entry) => {
+            return sum + Math.max(0, Number(entry?.damage ?? 0) || 0);
+        }, 0);
+        const maxHealth = Math.max(1, Number(this.entity?.maxHealth ?? 1) || 1);
+        if (totalRecentDamage >= (maxHealth * BLOCK_FREEZE_DAMAGE_THRESHOLD_RATIO)) {
+            this.activateBlockFreeze(timeNow);
+        }
+    }
+
     applyEffect(effectKey, options = {}) {
+        const timeNow = this.scene?.time?.now ?? 0;
+        if (effectKey === 'freeze' && this.isBlockFreezeActive(timeNow)) {
+            this.entity.setBlockFreezeVisual?.(true);
+            return null;
+        }
+        if (effectKey === 'freeze') {
+            this.recordFreezeApply(timeNow);
+            if (this.isBlockFreezeActive(timeNow)) {
+                this.entity.setBlockFreezeVisual?.(true);
+                return null;
+            }
+        }
         const effect = this.system.createEffect(this, effectKey, options);
         if (!effect) return null;
         const stackingKey = `${effect.key}::${effect.getStackingKey()}`;
-        const timeNow = this.scene?.time?.now ?? 0;
 
         if (effect.stackingMode !== 'independent') {
             const existing = this.activeEffects.find((entry) => (
@@ -727,6 +850,7 @@ class StatusEffectComponent {
         let stunned = false;
         let highlightTint = null;
         let highlightPriority = -Infinity;
+        const timeNow = this.scene?.time?.now ?? 0;
         this.activeEffects.forEach((effect) => {
             if (!effect) return;
             if (effect.expired) return;
@@ -750,6 +874,10 @@ class StatusEffectComponent {
             highlightPriority = priority;
             highlightTint = tint;
         });
+        if (this.isBlockFreezeActive(timeNow)) {
+            highlightTint = 0xffffff;
+            highlightPriority = Number.POSITIVE_INFINITY;
+        }
         this.statusSpeedMultiplier = Phaser.Math.Clamp(speedMultiplier, 0, 1);
         this.statusIsStunned = stunned;
         this.entity.isStunned = this.statusIsStunned;
@@ -766,6 +894,10 @@ class StatusEffectComponent {
 
     update(delta) {
         const timeNow = this.scene?.time?.now ?? 0;
+        this.pruneRecentDamageSamples(timeNow);
+        if (this.isBlockFreezeActive(timeNow) && this.hasEffect('freeze')) {
+            this.removeEffects('freeze');
+        }
         if (this.activeEffects.some((effect) => !effect)) {
             this.activeEffects = this.activeEffects.filter(Boolean);
         }
@@ -780,6 +912,7 @@ class StatusEffectComponent {
             effect.onExpire?.({ entity: this.entity, expired: true });
             this.activeEffects.splice(index, 1);
         }
+        this.updateBlockFreezeState(timeNow);
         this.applyStateContributions();
         this.handleMove(timeNow);
     }
@@ -825,6 +958,16 @@ class StatusEffectComponent {
     }
 
     notifyHitReceived(event = {}) {
+        const timeNow = this.scene?.time?.now ?? 0;
+        if (this.canUseBlockFreeze()) {
+            const damageTaken = Math.max(0, Number(event.damageTaken ?? event.healthDamage ?? 0) || 0);
+            if (damageTaken > 0) {
+                this.recentDamageSamples.push({ timeNow, damage: damageTaken });
+                this.updateDamageTriggeredBlockFreeze(timeNow);
+            } else {
+                this.pruneRecentDamageSamples(timeNow);
+            }
+        }
         this.activeEffects.forEach((effect) => {
             if (effect.expired) return;
             effect.onHitReceived?.(event);
@@ -1193,14 +1336,32 @@ export default class StatusEffectSystem {
     notifyHit(event = {}) {
         const targetComponent = this.getComponent(event.target);
         targetComponent?.notifyHitReceived(event);
-        const sourceOwner = event.source?.owner ?? event.source?.ownerEntity ?? event.source?.ownerPlayer ?? null;
+        this.applyLifestealFromEvent(event);
+        const sourceOwner = this.resolveEventSourceOwner(event);
         const sourceComponent = this.getComponent(sourceOwner);
         sourceComponent?.notifyHitDealt(event);
+        sourceOwner?.handleHitDealt?.(event);
     }
 
     notifyKill(event = {}) {
         const targetComponent = this.getComponent(event.target);
         targetComponent?.notifyKill(event);
+    }
+
+    shouldIgnoreArmorForOwnedDamage(options = {}) {
+        if (options.ignoreArmor === true) return true;
+        const statusKey = options.statusKey ?? options.statusEffect?.key ?? null;
+        if (statusKey === 'burn' || statusKey === 'poison' || statusKey === 'bleed') {
+            return true;
+        }
+        const tagSet = new Set(Array.isArray(options.tags) ? options.tags : []);
+        if (tagSet.has('dot')) {
+            return true;
+        }
+        if (tagSet.has('poison') && (tagSet.has('trail') || tagSet.has('cloud'))) {
+            return true;
+        }
+        return false;
     }
 
     applyOwnedDamage(target, amount, options = {}) {
@@ -1210,6 +1371,7 @@ export default class StatusEffectSystem {
             ownerEntityId: options.ownerEntityId ?? null,
             ownerSkillKey: options.ownerSkillKey ?? null
         };
+        const ignoreArmor = this.shouldIgnoreArmorForOwnedDamage(options);
         const damageResult = target.takeDamage(
             amount,
             options.force ?? 0,
@@ -1220,14 +1382,51 @@ export default class StatusEffectSystem {
                 ownerPlayerId: options.ownerPlayerId ?? source?.ownerPlayerId ?? null,
                 attackTags: options.tags ?? [],
                 fromStatusEffect: true,
+                ignoreArmor,
                 statusKey: options.statusKey ?? null,
                 statusEffect: options.statusEffect ?? null,
                 isCritical: options.isCritical ?? false
             },
             options.skillConfig ?? null
         );
+        this.applyLifestealFromDamageResult(damageResult, {
+            sourceOwner: this.resolveEventSourceOwner({
+                source,
+                sourceOwner: options.sourceOwner ?? null,
+                ownerPlayerId: options.ownerPlayerId ?? source?.ownerPlayerId ?? null
+            })
+        });
         this.showOwnedDamageText(target, damageResult, options);
         return damageResult;
+    }
+
+    resolveEventSourceOwner(event = {}) {
+        return event.sourceOwner
+            ?? event.source?.owner
+            ?? event.source?.supporter?.owner
+            ?? event.source?.ownerEntity
+            ?? event.source?.ownerPlayer
+            ?? (event.ownerPlayerId ? this.scene?.getPlayerById?.(event.ownerPlayerId) : null)
+            ?? null;
+    }
+
+    applyLifestealFromDamageResult(damageResult = {}, options = {}) {
+        const sourceOwner = options.sourceOwner ?? null;
+        if (!sourceOwner?.heal) return;
+        const lifestealRatio = Math.max(0, Number(sourceOwner.lifesteal ?? 0) || 0);
+        if (lifestealRatio <= 0) return;
+        const damageTaken = Math.max(0, Math.floor(Number(damageResult?.healthDamage ?? 0) || 0));
+        if (damageTaken <= 0) return;
+        const healAmount = Math.floor(damageTaken * lifestealRatio);
+        if (healAmount <= 0) return;
+        sourceOwner.heal(healAmount);
+    }
+
+    applyLifestealFromEvent(event = {}) {
+        this.applyLifestealFromDamageResult(
+            { healthDamage: event.damageTaken ?? event.damage ?? 0 },
+            { sourceOwner: this.resolveEventSourceOwner(event) }
+        );
     }
 
     showOwnedDamageText(target, damageResult, options = {}) {
@@ -1356,7 +1555,7 @@ export default class StatusEffectSystem {
             ? this.getEnemyTargets(entity)
             : this.getSameFactionTargets(entity);
         const targets = targetPool
-            .filter((target) => target?.active && !target?.isDead)
+            .filter((target) => target?.active && !target?.isDead && target !== entity)
             .map((target) => ({
                 target,
                 distance: Phaser.Math.Distance.Between(entity.x, entity.y, target.x, target.y)
@@ -1479,14 +1678,15 @@ export default class StatusEffectSystem {
 
         const mistLayers = isTrailProfile
             ? [
-                this.scene.add.ellipse(centerX, centerY + 2, radius * 1.3, radius * 0.6, 0x17684a, 0.18),
-                this.scene.add.ellipse(centerX + radius * 0.12, centerY, radius * 0.92, radius * 0.42, 0x2aa36f, 0.22)
+                this.scene.add.ellipse(centerX, centerY + 2, radius * 1.3, radius * 0.6, 0x17684a, 0.3),
+                this.scene.add.ellipse(centerX + radius * 0.12, centerY, radius * 0.92, radius * 0.42, 0x2aa36f, 0.36)
             ]
             : [
-                this.scene.add.circle(centerX, centerY + 2, radius * 0.64, 0x49d96a, 0.09),
-                this.scene.add.circle(centerX - radius * 0.3, centerY + radius * 0.1, radius * 0.6, 0xaaffc1, 0.14),
-                this.scene.add.circle(centerX + radius * 0.28, centerY - radius * 0.08, radius * 0.58, 0x7ef0a2, 0.15),
-                this.scene.add.circle(centerX, centerY - radius * 0.04, radius * 0.28, 0xdfffe8, 0.035)
+                this.scene.add.circle(centerX, centerY + 2, radius * 0.72, 0x1f8f4e, 0.24),
+                this.scene.add.circle(centerX - radius * 0.3, centerY + radius * 0.1, radius * 0.62, 0x49d96a, 0.3),
+                this.scene.add.circle(centerX + radius * 0.28, centerY - radius * 0.08, radius * 0.56, 0xaaffc1, 0.26),
+                this.scene.add.circle(centerX, centerY - radius * 0.04, radius * 0.34, 0xe9fff1, 0.08),
+                this.scene.add.circle(centerX, centerY + 1, radius * 0.9, 0x6dff9b, 0.06).setStrokeStyle(2, 0xb6ffcf, 0.45)
             ];
         mistLayers.forEach((layer, index) => {
             layer.setDepth(depth + index);
@@ -1526,9 +1726,9 @@ export default class StatusEffectSystem {
 
         const pulseTween = this.scene.tweens.add({
             targets: mistLayers,
-            alpha: { from: 0.08, to: 0.18 },
-            scaleX: { from: 0.98, to: 1.1 },
-            scaleY: { from: 0.98, to: 1.12 },
+            alpha: { from: 0.16, to: 0.34 },
+            scaleX: { from: 0.97, to: 1.12 },
+            scaleY: { from: 0.97, to: 1.14 },
             y: `-=${Math.max(1, Math.round(radius * 0.08))}`,
             duration: 960,
             yoyo: true,
@@ -1550,7 +1750,7 @@ export default class StatusEffectSystem {
                     puffY,
                     puffRadius,
                     Phaser.Math.RND.pick([0xcffff0, 0xaaffc1, 0x6fe88f]),
-                    0.16
+                    0.24
                 );
                 puff.setDepth(depth + 3);
                 this.scene.tweens.add({
@@ -1571,8 +1771,11 @@ export default class StatusEffectSystem {
             repeat: Math.max(0, Math.floor(durationMs / tickIntervalMs) - 1),
             callback: () => {
                 const radiusSq = radius * radius;
-                const enemyChildren = this.scene?.enemies?.getChildren?.() ?? [];
-                enemyChildren.forEach((target) => {
+                const targets = this.getTargetsForAreaEffect(entity, {
+                    targetMode: options.targetMode ?? 'auto',
+                    excludeEntity: true
+                });
+                targets.forEach((target) => {
                     if (!target?.active || target?.isDead) return;
                     const dx = target.x - centerX;
                     const dy = target.y - centerY;
@@ -1620,6 +1823,270 @@ export default class StatusEffectSystem {
                     onComplete: () => shape.destroy()
                 });
             });
+        });
+    }
+
+    spawnBurnCloud(entity, options = {}) {
+        if (!entity?.scene || !this.scene) return;
+        const radius = Math.max(12, (options.radius ?? 84) * 0.5);
+        const tickIntervalMs = Math.max(100, options.tickIntervalMs ?? 500);
+        const durationMs = Math.max(tickIntervalMs, options.durationMs ?? 1800);
+        const damage = Math.max(0, Math.round(options.damage ?? 0));
+        const burnDurationMs = Math.max(500, options.burnDurationMs ?? 2500);
+        const showDamageText = Boolean(options.showDamageText);
+        const centerX = Number.isFinite(options.x) ? options.x : entity.x;
+        const centerY = Number.isFinite(options.y) ? options.y : entity.y;
+        const depth = (entity.depth ?? 20) + 1;
+        const affectedTargets = new WeakSet();
+
+        const flameLayers = [
+            this.scene.add.circle(centerX, centerY + 2, radius * 0.7, 0xff5a1f, 0.26),
+            this.scene.add.circle(centerX - radius * 0.24, centerY + radius * 0.06, radius * 0.54, 0xff8d2f, 0.32),
+            this.scene.add.circle(centerX + radius * 0.2, centerY - radius * 0.04, radius * 0.46, 0xffc15a, 0.26),
+            this.scene.add.circle(centerX, centerY, radius * 0.88, 0xffd27a, 0.05).setStrokeStyle(2, 0xffb347, 0.5)
+        ];
+        flameLayers.forEach((layer, index) => {
+            layer.setDepth(depth + index);
+        });
+
+        const pulseTween = this.scene.tweens.add({
+            targets: flameLayers,
+            alpha: { from: 0.16, to: 0.38 },
+            scaleX: { from: 0.94, to: 1.14 },
+            scaleY: { from: 0.94, to: 1.18 },
+            y: `-=${Math.max(1, Math.round(radius * 0.06))}`,
+            duration: 320,
+            yoyo: true,
+            repeat: -1
+        });
+
+        const tickEvent = this.scene.time.addEvent({
+            delay: tickIntervalMs,
+            repeat: Math.max(0, Math.floor(durationMs / tickIntervalMs) - 1),
+            callback: () => {
+                const radiusSq = radius * radius;
+                const targets = this.getTargetsForAreaEffect(entity, {
+                    targetMode: options.targetMode ?? 'auto',
+                    excludeEntity: true
+                });
+                targets.forEach((target) => {
+                    if (!target?.active || target?.isDead) return;
+                    const dx = target.x - centerX;
+                    const dy = target.y - centerY;
+                    if ((dx * dx) + (dy * dy) > radiusSq) return;
+                    if (!affectedTargets.has(target)) {
+                        const hitDamageSnapshot = this.resolveOwnerDamageSnapshot(
+                            options.ownerPlayerId ?? null,
+                            options.source ?? null,
+                            Math.max(1, damage)
+                        );
+                        this.applyEffect(target, 'burn', {
+                            ownerPlayerId: options.ownerPlayerId ?? null,
+                            source: options.source ?? null,
+                            durationMs: burnDurationMs,
+                            hitDamageSnapshot: Math.max(1, hitDamageSnapshot),
+                            tags: ['fire', 'burn', 'cloud']
+                        });
+                        affectedTargets.add(target);
+                    }
+                    if (damage <= 0) return;
+                    this.applyOwnedDamage(target, damage, {
+                        ownerPlayerId: options.ownerPlayerId ?? null,
+                        source: options.source ?? null,
+                        tags: options.tags ?? ['fire', 'burn', 'cloud'],
+                        showDamageText,
+                        damageTextColor: '#ff9a4d',
+                        damageTextFontSize: '7px'
+                    });
+                });
+            }
+        });
+
+        this.scene.time.delayedCall(durationMs, () => {
+            tickEvent.remove(false);
+            pulseTween?.remove?.();
+            flameLayers.forEach((shape) => {
+                this.scene.tweens.add({
+                    targets: shape,
+                    alpha: 0,
+                    scaleX: 0.72,
+                    scaleY: 0.72,
+                    duration: 180,
+                    onComplete: () => shape.destroy()
+                });
+            });
+        });
+    }
+
+    spawnRitualZoneCloud(entity, options = {}) {
+        if (!entity?.scene || !this.scene) return;
+        const radius = Math.max(18, (options.radius ?? 110) * 0.5);
+        const tickIntervalMs = Math.max(100, options.tickIntervalMs ?? 450);
+        const durationMs = Math.max(tickIntervalMs, options.durationMs ?? 1800);
+        const damage = Math.max(0, Math.round(options.damage ?? 0));
+        const slowDurationMs = Math.max(150, options.slowDurationMs ?? 550);
+        const slowMultiplier = Phaser.Math.Clamp(options.slowMultiplier ?? 0.6, 0.05, 1);
+        const showDamageText = Boolean(options.showDamageText);
+        const centerX = Number.isFinite(options.x) ? options.x : entity.x;
+        const centerY = Number.isFinite(options.y) ? options.y : entity.y;
+        const depth = (options.depth ?? (entity.depth ?? 20) + 1);
+
+        // "Cursed circle" look: layered soft fills, no explicit border/stroke.
+        // Palette: heavy purple curse with subtle toxic accent.
+        const base = this.scene.add.ellipse(centerX, centerY + 2, radius * 2.05, radius * 1.32, 0x05020a, 0.32).setDepth(depth);
+        const haze = this.scene.add.circle(centerX, centerY, radius * 1.18, 0x12061d, 0.20).setDepth(depth + 1);
+        const outerVeil = this.scene.add.ellipse(centerX, centerY + 2, radius * 1.98, radius * 1.26, 0x3b0c5a, 0.16).setDepth(depth + 2);
+        const innerGlow = this.scene.add.circle(centerX, centerY, radius * 0.74, 0x8a2be2, 0.065).setDepth(depth + 3);
+        const core = this.scene.add.circle(centerX, centerY, radius * 0.42, 0xd7a0ff, 0.04).setDepth(depth + 4);
+
+        const runeContainer = this.scene.add.container(centerX, centerY).setDepth(depth + 4);
+        const runeCount = 10;
+        for (let i = 0; i < runeCount; i += 1) {
+            const angle = (Math.PI * 2 * i) / runeCount;
+            const dist = radius * Phaser.Math.FloatBetween(0.62, 0.92);
+            const rune = this.scene.add.rectangle(
+                Math.cos(angle) * dist,
+                Math.sin(angle) * dist,
+                Phaser.Math.Between(5, 9),
+                Phaser.Math.Between(2, 4),
+                Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2, 0x6c1b9a]),
+                0.24
+            );
+            rune.setRotation(angle + Phaser.Math.FloatBetween(-0.35, 0.35));
+            rune.setBlendMode(Phaser.BlendModes.ADD);
+            runeContainer.add(rune);
+        }
+
+        const arcContainer = this.scene.add.container(centerX, centerY).setDepth(depth + 5);
+        const arcCount = 3;
+        for (let i = 0; i < arcCount; i += 1) {
+            const g = this.scene.add.graphics();
+            const arcRadius = radius * Phaser.Math.FloatBetween(0.55, 0.95);
+            const arcWidth = Phaser.Math.Between(2, 4);
+            const start = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            const span = Phaser.Math.FloatBetween(Math.PI * 0.35, Math.PI * 0.7);
+            g.lineStyle(arcWidth, Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2]), 0.16);
+            g.beginPath();
+            g.arc(0, 0, arcRadius, start, start + span);
+            g.strokePath();
+            g.setBlendMode(Phaser.BlendModes.ADD);
+            g.rotation = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            arcContainer.add(g);
+        }
+
+        const pulseTween = this.scene.tweens.add({
+            targets: [base, haze, outerVeil, innerGlow, core],
+            alpha: { from: 0.08, to: 0.24 },
+            scaleX: { from: 0.975, to: 1.055 },
+            scaleY: { from: 0.97, to: 1.08 },
+            duration: 560,
+            yoyo: true,
+            repeat: -1
+        });
+        const runeSpinTween = this.scene.tweens.add({
+            targets: runeContainer,
+            rotation: { from: 0, to: Math.PI * 2 },
+            duration: 2200,
+            repeat: -1
+        });
+        const arcSpinTween = this.scene.tweens.add({
+            targets: arcContainer,
+            rotation: { from: 0, to: -Math.PI * 2 },
+            duration: 3200,
+            repeat: -1
+        });
+
+        const emberEvent = this.scene.time.addEvent({
+            delay: 110,
+            repeat: Math.max(0, Math.floor(durationMs / 110) - 1),
+            callback: () => {
+                const px = centerX + Phaser.Math.Between(-Math.round(radius * 0.8), Math.round(radius * 0.8));
+                const py = centerY + Phaser.Math.Between(-Math.round(radius * 0.3), Math.round(radius * 0.4));
+                const dot = this.scene.add.circle(px, py, Phaser.Math.Between(1, 2), Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2]), 0.26);
+                dot.setDepth(depth + 6);
+                dot.setBlendMode(Phaser.BlendModes.ADD);
+                this.scene.tweens.add({
+                    targets: dot,
+                    y: py - Phaser.Math.Between(12, 20),
+                    x: px + Phaser.Math.Between(-6, 6),
+                    alpha: 0,
+                    scaleX: 1.8,
+                    scaleY: 1.8,
+                    duration: Phaser.Math.Between(260, 420),
+                    ease: 'Cubic.easeOut',
+                    onComplete: () => dot.destroy()
+                });
+            }
+        });
+
+        const tickEvent = this.scene.time.addEvent({
+            delay: tickIntervalMs,
+            repeat: Math.max(0, Math.floor(durationMs / tickIntervalMs) - 1),
+            callback: () => {
+                const radiusSq = radius * radius;
+                const targets = this.getTargetsForAreaEffect(entity, {
+                    targetMode: options.targetMode ?? 'auto',
+                    excludeEntity: true
+                });
+                targets.forEach((target) => {
+                    if (!target?.active || target?.isDead) return;
+                    const dx = target.x - centerX;
+                    const dy = target.y - centerY;
+                    if ((dx * dx) + (dy * dy) > radiusSq) return;
+                    this.applyEffect(target, 'freeze', {
+                        ownerPlayerId: options.ownerPlayerId ?? null,
+                        source: options.source ?? null,
+                        durationMs: slowDurationMs,
+                        mode: 'slow',
+                        slowMultiplier,
+                        tags: ['ritual', 'slow']
+                    });
+                    if (damage <= 0) return;
+                    this.applyOwnedDamage(target, damage, {
+                        ownerPlayerId: options.ownerPlayerId ?? null,
+                        source: options.source ?? null,
+                        tags: options.tags ?? ['ritual', 'zone', 'dot'],
+                        showDamageText,
+                        damageTextColor: '#7dff8d',
+                        damageTextFontSize: '7px'
+                    });
+                });
+            }
+        });
+
+        this.scene.time.delayedCall(durationMs, () => {
+            tickEvent.remove(false);
+            pulseTween?.remove?.();
+            runeSpinTween?.remove?.();
+            arcSpinTween?.remove?.();
+            emberEvent?.remove?.();
+            [base, haze, outerVeil, innerGlow, core].forEach((shape) => {
+                if (!shape?.active) return;
+                this.scene.tweens.add({
+                    targets: shape,
+                    alpha: 0,
+                    scaleX: 0.82,
+                    scaleY: 0.82,
+                    duration: 200,
+                    onComplete: () => shape.destroy()
+                });
+            });
+            if (runeContainer?.active) {
+                this.scene.tweens.add({
+                    targets: runeContainer,
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => runeContainer.destroy()
+                });
+            }
+            if (arcContainer?.active) {
+                this.scene.tweens.add({
+                    targets: arcContainer,
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => arcContainer.destroy()
+                });
+            }
         });
     }
 }

@@ -1,7 +1,10 @@
 // scenes/MainScene.js
 import Player from '../entities/Player.js';
 import Enemy from '../entities/Enemy.js';
+import MiniBossEnemy from '../entities/miniboss/MiniBossEnemy.js';
 import GiantRockBoss from '../entities/boss/GiantRockBoss.js';
+import PlantBoss from '../entities/boss/PlantBoss.js';
+import BlackWidowBoss from '../entities/boss/BlackWidowBoss.js';
 import { ENEMIES } from '../config/enemies.js';
 import { SKILL_CONFIG } from '../config/skill.js';
 import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
@@ -30,6 +33,7 @@ import TargetingSystem from '../systems/TargetingSystem.js';
 import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
 import { ensureAudioSettings, installAudioUnlock, isAudioUnlocked, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
 import EnemyProjectile from '../entities/EnemyProjectile.js';
+import GhostSummon from '../entities/summons/GhostSummon.js';
 
 const SPAWN_PADDING = 50;
 const DESPAWN_MARGIN = 150;
@@ -41,14 +45,24 @@ const ENEMIES_PER_WAVE = 1;
 const INITIAL_WAVE_SPAWN_BURST = 1;
 const SHOP_REROLL_COST = 10;
 const SUPPORTER_SELECTION_REROLL_COST = 10;
-const SUPPORTER_SELECTION_MAX_REROLLS = 3;
+const SUPPORTER_SELECTION_MAX_REROLLS = 2;
 const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
-const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 3;
+const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 2;
 const WAVE_START_DELAY_MS = 2000;
 
-function createEnemyInstance(scene, x, y, enemyType) {
+function createEnemyInstance(scene, x, y, enemyType, options = {}) {
     if (enemyType === 'giant_rock') {
         return new GiantRockBoss(scene, x, y);
+    }
+    if (enemyType === 'plant') {
+        return new PlantBoss(scene, x, y);
+    }
+    if (enemyType === 'black_widow') {
+        return new BlackWidowBoss(scene, x, y);
+    }
+    const isMiniBoss = Boolean(options.isMiniBoss ?? options.waveSpawnEntry?.isMiniBoss);
+    if (isMiniBoss && (enemyType === 'ailen' || enemyType === 'skeleton')) {
+        return new MiniBossEnemy(scene, x, y, enemyType);
     }
     return new Enemy(scene, x, y, enemyType);
 }
@@ -144,6 +158,7 @@ export default class MainScene extends Phaser.Scene {
         this.isRunComplete = false;
         this.isTransitioningToMenu = false;
         this.currentWavePlan = null;
+        this.currentWaveConfig = null;
         this.currentWaveDurationSeconds = 45;
         this.currentWaveElapsedMs = 0;
         this.waveEnding = false;
@@ -156,8 +171,12 @@ export default class MainScene extends Phaser.Scene {
         this.debugSkillEffectTargetKey = null;
         this.debugSupporterEffectSelections = {};
         this.isChoosingSupporter = false;
+        this.shopRerollsRemaining = 0;
         this.supporterSelectionRerollsRemaining = 0;
         this.preShopCardSelectionRerollsRemaining = 0;
+
+        // Keep summon counts stable even if a summon expires while the owning skill is gated by range checks.
+        this.ghostSummonMaintainTimerMs = 0;
     }
 
     preload() {
@@ -216,7 +235,8 @@ export default class MainScene extends Phaser.Scene {
         const worldBounds = this.physics.world.bounds || { centerX: width / 2, centerY: height / 2 };
         const spawnX = worldBounds.centerX ?? width / 2;
         const spawnY = worldBounds.centerY ?? height / 2;
-        this.player = new Player(this, spawnX, spawnY, this.activeCharacterKey);
+        const resolvedSpawn = this.resolvePlayerSpawnPoint(spawnX, spawnY);
+        this.player = new Player(this, resolvedSpawn.x, resolvedSpawn.y, this.activeCharacterKey);
         if (this.debugMode) {
             this.player.gold = 9999;
         }
@@ -260,6 +280,7 @@ export default class MainScene extends Phaser.Scene {
         this.enemies = this.physics.add.group();
         this.separationZones = this.physics.add.group();
         this.enemyProjectiles = this.add.group();
+        this.summons = this.physics.add.group();
         this.showEnemyHP = false;
         this.despawnMargin = DESPAWN_MARGIN;
         this.respawnPool = 0;
@@ -298,6 +319,101 @@ export default class MainScene extends Phaser.Scene {
         this.shopPausedDurationMs = 0;
         this.isRunComplete = false;
         this.registry.set('hasStartedGame', true);
+    }
+
+    resolvePlayerSpawnPoint(centerX, centerY) {
+        const mapManager = this.mapManager;
+        if (!mapManager?.isCollidableAtWorldXY) {
+            return { x: centerX, y: centerY };
+        }
+
+        const isFree = (x, y) => !mapManager.isCollidableAtWorldXY(x, y);
+        if (isFree(centerX, centerY)) {
+            return { x: centerX, y: centerY };
+        }
+
+        const step = 16;
+        const maxRadiusSteps = 20;
+        for (let radius = 1; radius <= maxRadiusSteps; radius += 1) {
+            const d = radius * step;
+            const candidates = [
+                [centerX + d, centerY],
+                [centerX - d, centerY],
+                [centerX, centerY + d],
+                [centerX, centerY - d],
+                [centerX + d, centerY + d],
+                [centerX + d, centerY - d],
+                [centerX - d, centerY + d],
+                [centerX - d, centerY - d]
+            ];
+            for (const [x, y] of candidates) {
+                if (isFree(x, y)) {
+                    return { x, y };
+                }
+            }
+        }
+
+        return { x: centerX, y: centerY };
+    }
+
+    ensureGhostSummons(owner) {
+        if (!owner?.active || owner.isDead) return;
+        const desired = Math.max(0, Math.round(owner.getSkillObjectCount?.('ghost_summon') ?? 0));
+        if (desired <= 0 || !this.summons?.getChildren) return;
+        const lifetimeMs = Math.max(0, Math.round(owner.getSkillConfig?.('ghost_summon')?.summonLifetimeMs ?? 20000));
+        const existing = this.summons.getChildren().filter((s) => s?.active && s?.owner === owner);
+        const missing = desired - existing.length;
+        if (missing <= 0) return;
+        const textureKey = this.textures?.exists?.('ghost_summon_cast_0') ? 'ghost_summon_cast_0' : '__WHITE';
+        for (let i = 0; i < missing; i += 1) {
+            const idx = existing.length + i;
+            const ghost = new GhostSummon(this, owner, idx, { textureKey, skillKey: 'ghost_summon', lifetimeMs });
+            this.add.existing(ghost);
+            this.physics.add.existing(ghost);
+            ghost.body?.setAllowGravity?.(false);
+            const radius = Math.max(10, Math.round(Math.min(ghost.displayWidth ?? 20, ghost.displayHeight ?? 20) * 0.35));
+            ghost.body?.setCircle?.(radius);
+            ghost.body?.setImmovable?.(true);
+            this.summons.add(ghost);
+        }
+    }
+
+    getGhostSummonTarget(owner, summon) {
+        if (!owner?.active || owner.isDead) return null;
+        const enemies = this.enemies?.getChildren?.() ?? [];
+        const activeEnemies = enemies.filter((e) => e?.active && !e.isDead);
+        if (!activeEnemies.length) return null;
+
+        // If a boss/miniboss exists, all ghosts prioritize it.
+        const bossTarget = activeEnemies.find((e) => Boolean(e.isBoss || e.isMiniBoss || e.isFinalBoss)) ?? null;
+        if (bossTarget) return bossTarget;
+
+        const range = summon?.aggroRange ?? 180;
+        const rangeSq = range * range;
+        const candidates = activeEnemies
+            .map((enemy) => {
+                const dx = enemy.x - (summon?.x ?? 0);
+                const dy = enemy.y - (summon?.y ?? 0);
+                const distSq = (dx * dx) + (dy * dy);
+                return { enemy, distSq };
+            })
+            .filter((entry) => entry.distSq <= rangeSq)
+            .sort((a, b) => a.distSq - b.distSq)
+            .map((entry) => entry.enemy);
+
+        if (!candidates.length) return null;
+
+        // Spread targets across ghosts (when possible) for normal enemies.
+        const used = new Set();
+        const summons = this.summons?.getChildren?.() ?? [];
+        summons.forEach((s) => {
+            if (!s?.active || s === summon) return;
+            if (s.owner !== owner) return;
+            if (s.target?.active && !s.target.isDead) used.add(s.target);
+        });
+
+        const unusedCandidate = candidates.find((enemy) => !used.has(enemy));
+        return unusedCandidate ?? candidates[0] ?? null;
     }
 
     getPrimaryPlayer() {
@@ -416,6 +532,18 @@ export default class MainScene extends Phaser.Scene {
         this.player.update(time, delta);
         this.applyDebugPlayerSpeedOverride();
         this.applyDebugPlayerHealthOverride();
+
+        // Maintain ghost summons so they respawn after expiring (e.g. 20s lifetime) even if the cast is range-gated.
+        this.ghostSummonMaintainTimerMs += (delta ?? 0);
+        if (this.ghostSummonMaintainTimerMs >= 250) {
+            this.ghostSummonMaintainTimerMs = 0;
+            const players = this.getActivePlayers();
+            players.forEach((p) => {
+                const desired = p?.getSkillObjectCount?.('ghost_summon') ?? 0;
+                if (desired > 0) this.ensureGhostSummons(p);
+            });
+        }
+
         this.mapManager.ensureSegmentsAroundWorldX(this.player.x);
         this.updateCameraFollowTarget();
         if ((this.debugEnemyHealthOverride ?? 0) > 0) {
@@ -446,6 +574,12 @@ export default class MainScene extends Phaser.Scene {
         this.enemyProjectiles.children.each((projectile) => {
             projectile?.update?.(time, delta, this.getActivePlayers());
         });
+        if (this.summons?.children?.each) {
+            this.summons.children.each((summon) => {
+                const desired = summon?.owner?.getSkillObjectCount?.('ghost_summon') ?? 0;
+                summon?.update?.(time, delta, desired);
+            });
+        }
 
         this.skills.children.each(skill => {
             if (skill && typeof skill.update === 'function') {
@@ -473,17 +607,19 @@ export default class MainScene extends Phaser.Scene {
         const margin = this.despawnMargin;
         this.enemies.children.each(enemy => {
             if (!enemy || !enemy.body) return;
+            if (enemy.isBoss || enemy.isMiniBoss || enemy.isFinalBoss) return;
             const outLeft = enemy.x < view.left - margin;
             const outRight = enemy.x > view.right + margin;
             const outTop = enemy.y < view.top - margin;
             const outBottom = enemy.y > view.bottom + margin;
             if (outLeft || outRight || outTop || outBottom) {
-                if (enemy.countsTowardWave && !enemy.isDead && this.waveSystemEnabled) {
+                const shouldRespawnWaveEnemy = enemy.countsTowardWave && !enemy.isDead && this.waveSystemEnabled;
+                if (shouldRespawnWaveEnemy) {
                     this.waveSpawnRemaining += 1;
                     this.requeueWaveEnemy(enemy);
+                    this.respawnPool += 1;
                 }
                 enemy.destroy();
-                this.respawnPool += 1;
             }
         });
     }
@@ -619,7 +755,6 @@ export default class MainScene extends Phaser.Scene {
     handleEnemySeparation(enemyA, enemyB) {
         if (!enemyA || !enemyB) return true;
         if (!enemyA.body || !enemyB.body) return true;
-        console.log('separation', enemyA.type, enemyA.body.width, enemyA.body.height);
         const overlapX = enemyA.body.width / 2 + enemyB.body.width / 2 - Math.abs(enemyA.x - enemyB.x);
         const overlapY = enemyA.body.height / 2 + enemyB.body.height / 2 - Math.abs(enemyA.y - enemyB.y);
         if (overlapX <= 0 && overlapY <= 0) return true;
@@ -791,6 +926,9 @@ export default class MainScene extends Phaser.Scene {
 
         const bossActions = document.createElement('div');
         bossActions.classList.add('panel-list');
+        bossActions.style.display = 'flex';
+        bossActions.style.flexDirection = 'column';
+        bossActions.style.gap = '6px';
         bossSection.appendChild(bossActions);
 
         const spawnGiantRockButton = document.createElement('button');
@@ -806,6 +944,34 @@ export default class MainScene extends Phaser.Scene {
             this.spawnEnemyNearPlayer('giant_rock', 180, { isBoss: true });
         });
         bossActions.appendChild(spawnGiantRockButton);
+
+        const spawnPlantBossButton = document.createElement('button');
+        spawnPlantBossButton.type = 'button';
+        spawnPlantBossButton.textContent = 'Spawn Plant Boss';
+        spawnPlantBossButton.style.padding = '6px 8px';
+        spawnPlantBossButton.style.borderRadius = '4px';
+        spawnPlantBossButton.style.background = '#2f5b26';
+        spawnPlantBossButton.style.color = '#efffdb';
+        spawnPlantBossButton.style.border = '1px solid rgba(255,255,255,0.2)';
+        spawnPlantBossButton.style.cursor = 'pointer';
+        spawnPlantBossButton.addEventListener('click', () => {
+            this.spawnEnemyNearPlayer('plant', 180, { isBoss: true });
+        });
+        bossActions.appendChild(spawnPlantBossButton);
+
+        const spawnBlackWidowButton = document.createElement('button');
+        spawnBlackWidowButton.type = 'button';
+        spawnBlackWidowButton.textContent = 'Spawn Black Widow';
+        spawnBlackWidowButton.style.padding = '6px 8px';
+        spawnBlackWidowButton.style.borderRadius = '4px';
+        spawnBlackWidowButton.style.background = '#5b2631';
+        spawnBlackWidowButton.style.color = '#ffe7ee';
+        spawnBlackWidowButton.style.border = '1px solid rgba(255,255,255,0.2)';
+        spawnBlackWidowButton.style.cursor = 'pointer';
+        spawnBlackWidowButton.addEventListener('click', () => {
+            this.spawnEnemyNearPlayer('black_widow', 180, { isBoss: true });
+        });
+        bossActions.appendChild(spawnBlackWidowButton);
 
         Object.entries(ENEMIES).forEach(([type, config]) => {
             this.enemySpawnStatus[type] = this.enemySpawnStatus[type] ?? false;
@@ -1456,15 +1622,12 @@ export default class MainScene extends Phaser.Scene {
     }
 
     spawnEnemyAtPosition(x, y, enemyType, options = {}) {
-        if (!enemyType || !this.canSpawnMoreEnemies()) return null;
-        const enemy = createEnemyInstance(this, x, y, enemyType);
+        const ignoreSpawnCap = options.ignoreSpawnCap === true;
+        if (!enemyType || (!ignoreSpawnCap && !this.canSpawnMoreEnemies())) return null;
+        const enemy = createEnemyInstance(this, x, y, enemyType, options);
         enemy.isBoss = Boolean(options.isBoss ?? options.waveSpawnEntry?.isBoss ?? enemy.isBoss);
         enemy.isMiniBoss = Boolean(options.isMiniBoss ?? options.waveSpawnEntry?.isMiniBoss ?? enemy.isMiniBoss);
-        if (enemy.body) {
-            enemy.body.setImmovable?.(Boolean(enemy.isBoss || enemy.isFinalBoss));
-            enemy.body.setPushable?.(!(enemy.isBoss || enemy.isFinalBoss));
-        }
-        enemy.isChestSpawned = Boolean(options.chestSpawned);
+        enemy.syncCollisionBodyTraits?.();
         enemy.countsTowardWave = options.countsTowardWave === true;
         enemy.waveNumber = enemy.countsTowardWave ? (options.waveNumber ?? this.currentWaveNumber) : null;
         enemy.waveSpawnEntry = options.waveSpawnEntry ? {
@@ -1561,6 +1724,9 @@ export default class MainScene extends Phaser.Scene {
 
     resetWaveProgress(waveNumber = 1) {
         this.currentWaveNumber = Phaser.Math.Clamp(Math.round(waveNumber), 1, this.maxWaveCount);
+        this.currentWaveConfig = Array.isArray(this.stageScenario?.wavePlans)
+            ? (this.stageScenario.wavePlans[this.currentWaveNumber - 1] ?? null)
+            : null;
         this.currentWavePlan = this.buildWavePlanEntries(this.currentWaveNumber);
         this.currentWaveDurationSeconds = getScenarioWaveDurationSeconds(this.stageScenario, this.currentWaveNumber, 45);
         this.currentWaveElapsedMs = 0;
@@ -1616,6 +1782,12 @@ export default class MainScene extends Phaser.Scene {
         if (!Array.isArray(scenarioWavePlan) || !scenarioWavePlan.length) {
             return [];
         }
+        const hasWeightedEntries = scenarioWavePlan.some((group) => (
+            Number.isFinite(group?.weight) && (group.weight ?? 0) > 0
+        ));
+        if (hasWeightedEntries) {
+            return this.buildWeightedWavePlanEntries(scenarioWavePlan);
+        }
         const entries = [];
         scenarioWavePlan.forEach((group) => {
             const count = Math.max(0, Math.round(group?.count ?? 0));
@@ -1630,6 +1802,50 @@ export default class MainScene extends Phaser.Scene {
                 });
             }
         });
+        return entries;
+    }
+
+    buildWeightedWavePlanEntries(scenarioWavePlan = []) {
+        const weightedGroups = scenarioWavePlan
+            .map((group) => ({
+                enemyType: group?.enemyType ?? null,
+                remaining: Math.max(0, Math.round(group?.count ?? 0)),
+                weight: Math.max(0, Number(group?.weight ?? 0) || 0),
+                statsOverride: group?.statsOverride ? { ...group.statsOverride } : null,
+                isBoss: Boolean(group?.isBoss),
+                isMiniBoss: Boolean(group?.isMiniBoss)
+            }))
+            .filter((group) => group.enemyType && group.remaining > 0);
+
+        const totalEntries = weightedGroups.reduce((sum, group) => sum + group.remaining, 0);
+        const entries = [];
+
+        while (entries.length < totalEntries) {
+            const availableGroups = weightedGroups.filter((group) => group.remaining > 0);
+            if (!availableGroups.length) break;
+            const totalWeight = availableGroups.reduce((sum, group) => {
+                return sum + Math.max(0, group.weight > 0 ? group.weight : 1);
+            }, 0);
+            let roll = Math.random() * Math.max(totalWeight, 1);
+            let selectedGroup = availableGroups[availableGroups.length - 1];
+
+            for (const group of availableGroups) {
+                roll -= Math.max(0, group.weight > 0 ? group.weight : 1);
+                if (roll <= 0) {
+                    selectedGroup = group;
+                    break;
+                }
+            }
+
+            selectedGroup.remaining -= 1;
+            entries.push({
+                enemyType: selectedGroup.enemyType,
+                statsOverride: selectedGroup.statsOverride ? { ...selectedGroup.statsOverride } : null,
+                isBoss: selectedGroup.isBoss,
+                isMiniBoss: selectedGroup.isMiniBoss
+            });
+        }
+
         return entries;
     }
 
@@ -1661,12 +1877,30 @@ export default class MainScene extends Phaser.Scene {
 
     isCurrentWaveCleared() {
         if (!this.waveSystemEnabled || this.waveEnding) return false;
-        const activeEnemies = (this.enemies?.getChildren?.() ?? []).filter((enemy) => {
-            return enemy?.active && !enemy?.isDead;
+        const activeWaveEnemies = (this.enemies?.getChildren?.() ?? []).filter((enemy) => {
+            return enemy?.active
+                && !enemy?.isDead
+                && enemy?.countsTowardWave
+                && enemy?.waveNumber === this.currentWaveNumber;
         });
+        if (this.currentWaveConfig?.clearWhenBossesDefeated) {
+            const activeWaveBosses = activeWaveEnemies.filter((enemy) => enemy?.isBoss || enemy?.isMiniBoss || enemy?.isFinalBoss);
+            const queuedWaveBosses = (this.waveSpawnQueue ?? []).filter((entry) => {
+                return Boolean(entry?.isBoss || entry?.isMiniBoss);
+            });
+            return activeWaveBosses.length === 0 && queuedWaveBosses.length === 0;
+        }
         return this.waveKillCount >= this.waveEnemyCount
             && this.waveSpawnRemaining <= 0
-            && activeEnemies.length === 0;
+            && activeWaveEnemies.length === 0;
+    }
+
+    canSpawnChestEnemyReward() {
+        if (!this.waveSystemEnabled) return true;
+        if (this.waveStartPending || this.waveEnding || this.waveShopPending || this.isShopOpen || this.isRunComplete || this.isGameOver) {
+            return false;
+        }
+        return this.getCurrentWaveRemainingMs() > 5000;
     }
 
     hasCurrentWaveTimedOut() {
@@ -2255,7 +2489,7 @@ export default class MainScene extends Phaser.Scene {
         this.shopPauseStartedAt = null;
     }
 
-    clearAllActiveEnemiesAndProjectiles() {
+    clearAllActiveEnemiesAndProjectilesPass() {
         const activeEnemies = this.enemies?.getChildren?.() ?? [];
         activeEnemies.forEach((enemy) => {
             if (!enemy?.active) return;
@@ -2268,6 +2502,14 @@ export default class MainScene extends Phaser.Scene {
             projectile.destroy();
         });
         this.respawnPool = 0;
+    }
+
+    clearAllActiveEnemiesAndProjectiles() {
+        this.clearAllActiveEnemiesAndProjectilesPass();
+        this.time?.delayedCall?.(0, () => {
+            if (!this.scene.isActive('MainScene')) return;
+            this.clearAllActiveEnemiesAndProjectilesPass();
+        });
     }
 
     presentShopOverlay(reason = 'manual') {
@@ -2386,6 +2628,7 @@ export default class MainScene extends Phaser.Scene {
         resolvedRunState.shopPurchasedItems = Array.isArray(resolvedRunState.shopPurchasedItems)
             ? resolvedRunState.shopPurchasedItems
             : [];
+        resolvedRunState.shopCurrentRerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? SHOP_REROLL_COST));
         resolvedRunState.shopCurrentStockIds = Array.isArray(resolvedRunState.shopCurrentStockIds)
             ? resolvedRunState.shopCurrentStockIds
             : [];
@@ -2410,10 +2653,20 @@ export default class MainScene extends Phaser.Scene {
         return Math.max(0, Math.round(baseCost * Math.pow(1.2, purchaseCount)));
     }
 
+    hasReachedShopItemPurchaseLimit(itemConfig, runState = null) {
+        if (!itemConfig?.id) return false;
+        const maxPurchases = Number.isFinite(itemConfig.maxPurchases)
+            ? Math.max(1, Math.floor(itemConfig.maxPurchases))
+            : null;
+        if (!maxPurchases) return false;
+        return this.getShopItemPurchaseCount(itemConfig.id, runState) >= maxPurchases;
+    }
+
     prepareShopStockForNextWave(playerOrId = null, runState = null) {
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
         if (!resolvedRunState || this.debugMode) return;
+        resolvedRunState.shopCurrentRerollCost = SHOP_REROLL_COST;
         const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
         resolvedRunState.shopCurrentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
             .slice(0, 5)
@@ -2617,7 +2870,8 @@ export default class MainScene extends Phaser.Scene {
             gold: Math.max(0, Math.floor(context.player?.gold ?? 0)),
             items,
             purchasedItems,
-            rerollCost: SHOP_REROLL_COST,
+            rerollCost: Math.max(0, Math.floor(resolvedRunState?.shopCurrentRerollCost ?? SHOP_REROLL_COST)),
+            rerollRemaining: null,
             debugMode: this.debugMode === true
         };
     }
@@ -2647,7 +2901,10 @@ export default class MainScene extends Phaser.Scene {
             const extraItems = getRandomShopItemStock(missingCount, [
                 ...existingStockIds,
                 ...this.getUnlockElementShopExcludeIds(context.player),
-                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player), context.player?.characterKey ?? null)
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player), context.player?.characterKey ?? null),
+                ...SHOP_ITEM_CONFIG
+                    .filter((item) => this.hasReachedShopItemPurchaseLimit(item, resolvedRunState))
+                    .map((item) => item.id)
             ]);
             let fillIndex = 0;
             for (let i = 0; i < currentStockIds.length && fillIndex < extraItems.length; i += 1) {
@@ -2668,6 +2925,9 @@ export default class MainScene extends Phaser.Scene {
         const resolvedRunState = this.ensureShopRunState(context.runState);
         const player = context.player;
         if (!itemConfig || !resolvedRunState || !player) {
+            return this.buildShopOverlayState(player, resolvedRunState);
+        }
+        if (this.hasReachedShopItemPurchaseLimit(itemConfig, resolvedRunState)) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
         const runtimeCost = this.getShopItemRuntimeCost(itemConfig, resolvedRunState);
@@ -2728,9 +2988,11 @@ export default class MainScene extends Phaser.Scene {
         if (currentStockIds.length > 0 && lockedCount >= currentStockIds.length) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
-        if (!player.spendGold?.(SHOP_REROLL_COST)) {
+        const rerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? SHOP_REROLL_COST));
+        if (!player.spendGold?.(rerollCost)) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
+        resolvedRunState.shopCurrentRerollCost = Math.max(SHOP_REROLL_COST, rerollCost * 2);
 
         const currentStockWithSlots = (resolvedRunState.shopCurrentStockIds ?? [])
             .slice(0, 5)
@@ -2744,7 +3006,10 @@ export default class MainScene extends Phaser.Scene {
             [
                 ...preservedIds,
                 ...this.getUnlockElementShopExcludeIds(player),
-                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(player), player?.characterKey ?? null)
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(player), player?.characterKey ?? null),
+                ...SHOP_ITEM_CONFIG
+                    .filter((item) => this.hasReachedShopItemPurchaseLimit(item, resolvedRunState))
+                    .map((item) => item.id)
             ]
         );
         let nextIndex = 0;

@@ -1,3 +1,6 @@
+import { createMaprockFieldScenario } from './map/maprockFieldScenario.js';
+import { createChurchSanctuaryScenario } from './map/churchSanctuaryScenario.js';
+
 const SHARED_ENEMY_HEALTH_MILESTONES = [
     { minute: 3, setMultiplier: 1.5 },
     { minute: 5, setMultiplier: 2 },
@@ -10,204 +13,8 @@ const SHARED_ENEMY_HEALTH_MILESTONES = [
 ];
 
 export const STAGE_SCENARIOS = {
-    maprock_field: {
-        normalSpawnPerSecond: 0.5,
-        normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
-        wavePlans: [
-            {
-                durationSeconds: 45,
-                enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 20 } }
-                ]
-            },
-            {
-                durationSeconds: 45,
-                enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 22 } }
-                ]
-            },
-            {
-                durationSeconds: 45,
-                enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 23 } }
-                ]
-            },
-            {
-                durationSeconds: 45,
-                enemies: [
-                    { enemyType: 'worm', count: 999, isBoss: false, statsOverride: { maxHealth: 50 } }
-                ]
-            },
-            {
-                durationSeconds: 6000,
-                enemies: [
-                    { enemyType: 'worm', count: 35, isBoss: false, statsOverride: { maxHealth: 60 } },
-                    { enemyType: 'kitsume', count: 3, isMiniBoss: true, statsOverride: { maxHealth: 2000, damage: 50, armor: 7, scale: 1.7 } }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'worm', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 999, isBoss: false, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10, isBoss: false }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'worm', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 70 }}
-                ]
-            },
-            {
-                durationSeconds: 6000,
-                enemies: [
-                    { enemyType: 'mummy', count: 25, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'bat', count: 25, statsOverride: { maxHealth: 100 } },
-                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 70 }},
-                    { enemyType: 'skeleton', isMiniBoss: true, count: 3, statsOverride: { maxHealth: 8000, damage: 50, armor: 10, scale: 1.7 } }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 2, statsOverride: { maxHealth: 100 } }
-                ]
-            },
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'eyes', count: 15 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 100 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'eyes', count: 15 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 100 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'eyes', count: 20 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 150 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 6000,
-                enemies: [
-                    { enemyType: 'mummy', count: 25, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'bat', count: 25, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'eyes', count: 10 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 15, statsOverride: { maxHealth: 150 } },
-                    { enemyType: 'skeleton', count: 10, isMiniBoss: true, statsOverride: { maxHealth: 1000, damage: 50, armor: 10, scale: 1.7 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 60,
-                enemies: [
-                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
-                    { enemyType: 'mummy', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'bat', count: 999, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
-                ]
-            },
-            ,
-            {
-                durationSeconds: 6000,
-                enemies: [
-                    { enemyType: 'skeleton', count: 5, isMiniBoss: true, statsOverride: { maxHealth: 200, damage: 15 } },
-                    { enemyType: 'giant_rock', count: 1, isBoss: true },
-                    { enemyType: 'mummy', count: 50, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'bat', count: 50, statsOverride: { maxHealth: 200 } },
-                    { enemyType: 'eyes', count: 30 ,statsOverride: { maxHealth: 100 }},
-                    { enemyType: 'bomber', count: 30, statsOverride: { maxHealth: 200 } }
-                    
-                ]
-            }
-        ]
-    },
-    church_sanctuary: {
-        normalSpawnPerSecond: 0.5,
-        normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
-        enemyUnlockTimeline: [
-            { enemyType: 'worm', unlockAtMinute: 0 },
-            { enemyType: 'slime', unlockAtMinute: 3 },
-            { enemyType: 'bat', unlockAtMinute: 6 },
-            { enemyType: 'succubus', unlockAtMinute: 9 },
-            { enemyType: 'moth_woman', unlockAtMinute: 12 },
-            { enemyType: 'widow', unlockAtMinute: 15 },
-            { enemyType: 'kitsume', unlockAtMinute: 20 },
-            { enemyType: 'zombie_woman', unlockAtMinute: 22 }
-        ]
-    },
+    maprock_field: createMaprockFieldScenario(SHARED_ENEMY_HEALTH_MILESTONES),
+    church_sanctuary: createChurchSanctuaryScenario(SHARED_ENEMY_HEALTH_MILESTONES),
     inside_church: {
         normalSpawnPerSecond: 0.5,
         normalSpawnPerSecondPerMinute: 0.7,
@@ -246,6 +53,15 @@ export function getScenarioSpawnInterval(scenario, fallbackInterval = 500) {
 }
 
 export function getScenarioSpawnRate(scene, scenario, fallbackPerSecond = 2) {
+    const waveSpawnRateByWave = scenario?.waveSpawnRateByWave;
+    if (typeof waveSpawnRateByWave === 'function') {
+        const waveNumber = scene?.currentWaveNumber ?? 1;
+        const waveSpawnRate = Number(waveSpawnRateByWave(waveNumber, scene));
+        if (Number.isFinite(waveSpawnRate) && waveSpawnRate > 0) {
+            return waveSpawnRate;
+        }
+    }
+
     const basePerSecond = scenario?.normalSpawnPerSecond;
     if (typeof basePerSecond !== 'number' || basePerSecond <= 0) {
         return fallbackPerSecond;

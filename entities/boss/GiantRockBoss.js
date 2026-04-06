@@ -8,6 +8,10 @@ const GIANT_ROCK_ROCK_FALL_HEIGHT = 180;
 const GIANT_ROCK_ROCK_FALL_DELAY_MS = 1000;
 const GIANT_ROCK_ROCK_FALL_DURATION_MS = 420;
 const GIANT_ROCK_ROCK_FALL_RADIUS = 34;
+const GIANT_ROCK_ROCK_FALL_COUNT = 3;
+const GIANT_ROCK_ROCK_FALL_SPREAD_RADIUS = 54;
+const GIANT_ROCK_ROCK_FALL_START_SCALE = 1.1;
+const GIANT_ROCK_ROCK_FALL_END_SCALE = 1.3;
 const GIANT_ROCK_DASH_HIT_KNOCKBACK_SPEED = 360;
 const GIANT_ROCK_DASH_HIT_KNOCKBACK_DURATION_MS = 630;
 const GIANT_ROCK_DASH_HIT_KNOCKBACK_DRAG = 0.97;
@@ -20,6 +24,7 @@ const GIANT_ROCK_ROUND2_COLUMN_WARNING_MS = 900;
 const GIANT_ROCK_ROUND2_COLUMN_KNOCKBACK_SPEED = 180;
 const GIANT_ROCK_ROUND2_COLUMN_KNOCKBACK_DURATION_MS = 220;
 const GIANT_ROCK_ROUND2_COLUMN_KNOCKBACK_DRAG = 0.9;
+const GIANT_ROCK_ROUND2_COLUMN_SCALE = 1.25;
 
 export default class GiantRockBoss extends Enemy {
     constructor(scene, x, y) {
@@ -193,8 +198,22 @@ export default class GiantRockBoss extends Enemy {
         const targetPlayer = this.dashAttackTrackedPlayer;
         if (!targetPlayer?.active || targetPlayer?.isDead) return;
 
-        const impactX = targetPlayer.x;
-        const impactY = targetPlayer.y;
+        const impactPositions = this.buildGiantRockFallImpactPositions(targetPlayer.x, targetPlayer.y);
+        impactPositions.forEach(({ x, y }) => this.spawnGiantRockFallWarning(x, y));
+    }
+
+    buildGiantRockFallImpactPositions(centerX, centerY) {
+        const startAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        return Array.from({ length: GIANT_ROCK_ROCK_FALL_COUNT }, (_value, index) => {
+            const angle = startAngle + ((Math.PI * 2 * index) / GIANT_ROCK_ROCK_FALL_COUNT);
+            return {
+                x: centerX + Math.cos(angle) * GIANT_ROCK_ROCK_FALL_SPREAD_RADIUS,
+                y: centerY + Math.sin(angle) * GIANT_ROCK_ROCK_FALL_SPREAD_RADIUS
+            };
+        });
+    }
+
+    spawnGiantRockFallWarning(impactX, impactY) {
         const telegraph = this.scene.add.circle(impactX, impactY, GIANT_ROCK_ROCK_FALL_RADIUS, 0x000000, 0.28)
             .setDepth((this.depth ?? 20) + 2);
         telegraph.setStrokeStyle(2, 0x1a1a1a, 0.9);
@@ -214,7 +233,7 @@ export default class GiantRockBoss extends Enemy {
                     'image_18.png'
                 )
                     .setDepth((this.depth ?? 20) + 4)
-                    .setScale(0.85);
+                    .setScale(GIANT_ROCK_ROCK_FALL_START_SCALE);
 
                 this.scene.tweens.add({
                     targets: telegraph,
@@ -227,8 +246,8 @@ export default class GiantRockBoss extends Enemy {
                 this.scene.tweens.add({
                     targets: rock,
                     y: impactY,
-                    scaleX: 1,
-                    scaleY: 1,
+                    scaleX: GIANT_ROCK_ROCK_FALL_END_SCALE,
+                    scaleY: GIANT_ROCK_ROCK_FALL_END_SCALE,
                     duration: GIANT_ROCK_ROCK_FALL_DURATION_MS,
                     ease: 'Quad.easeIn',
                     onComplete: () => {
@@ -325,7 +344,7 @@ export default class GiantRockBoss extends Enemy {
         const column = this.scene?.add?.sprite?.(x, y, 'giant_rock_atlas', 'image_13.png');
         if (!column) return;
         column.setDepth((this.depth ?? 20) + 4);
-        column.setScale(0.95);
+        column.setScale(GIANT_ROCK_ROUND2_COLUMN_SCALE);
         column.play?.('giant_rock_stone');
         this.resolveStoneColumnImpact(x, y);
         this.scene?.time?.delayedCall(GIANT_ROCK_ROUND2_COLUMN_LIFETIME_MS, () => {

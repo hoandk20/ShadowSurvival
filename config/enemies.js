@@ -52,32 +52,117 @@ export const ENEMIES = {
     succubus: createEnemyConfig({
         name: 'Succubus',
         statsBonus: {
-            attackCooldown: 100,
+            damage: 4,
+            attackCooldown: 700,
+            attackRange: 180,
             knockbackResist: -0.2
         },
-        combatType: 'melee',
-        attackStyle: 'contact_slash',
-        behavior: 'chase',
+        combatType: 'ranged',
+        attackStyle: 'projectile_burst',
+        behavior: 'ranged',
         texture: 'succubus',
         displaySize: scaleDimension({ width: 20, height: 20 }),
         hitboxSize: scaleHitbox({ width: 20, height: 20 }),
         flashTint: 0xff0000,
-        flashDuration: 120
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 180,
+            keepDistanceRatio: 0.72,
+            projectileSpeed: 180,
+            projectileRadius: 5,
+            projectileLifetimeMs: 1400,
+            projectileColor: 0xff7cba,
+            projectileGlowColor: 0xffd5ee,
+            burstCount: 3,
+            burstSpreadDeg: 18
+        }
     }),
     lamia: createEnemyConfig({
         name: 'Lamia',
         statsBonus: {
-            attackCooldown: 100,
+            damage: 3,
+            attackCooldown: 900,
+            attackRange: 180,
             knockbackResist: -0.2
         },
-        combatType: 'melee',
-        attackStyle: 'contact_slash',
-        behavior: 'chase',
+        combatType: 'ranged',
+        attackStyle: 'trap_poison_cloud',
+        behavior: 'ranged',
         texture: 'lamia',
         displaySize: scaleDimension({ width: 20, height: 20 }),
         hitboxSize: scaleHitbox({ width: 20, height: 20 }),
         flashTint: 0xff0000,
-        flashDuration: 120
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 180,
+            keepDistanceRatio: 0.72,
+            projectileSpeed: 180,
+            projectileRadius: 5,
+            projectileLifetimeMs: 1400,
+            projectileColor: 0xff7cba,
+            projectileGlowColor: 0xffd5ee,
+            cloudRadius: 56,
+            cloudDurationMs: 2200,
+            cloudTickIntervalMs: 450,
+            poisonDurationMs: 2500,
+            cloudDamage: 0,
+            cloudTags: ['poison', 'cloud', 'lamia_trap']
+        }
+    }),
+    firer: createEnemyConfig({
+        name: 'Firer',
+        statsBonus: {
+            damage: 3,
+            attackCooldown: 900,
+            attackRange: 180,
+            knockbackResist: -0.2
+        },
+        combatType: 'ranged',
+        attackStyle: 'trap_burn_cloud',
+        behavior: 'ranged',
+        texture: 'firer',
+        displaySize: scaleDimension({ width: 20, height: 20 }),
+        hitboxSize: scaleHitbox({ width: 20, height: 20 }),
+        flashTint: 0xff7a33,
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 180,
+            keepDistanceRatio: 0.72,
+            fireRadius: 56,
+            fireDurationMs: 1800,
+            fireTickIntervalMs: 450,
+            burnDurationMs: 2500,
+            fireDamage: 0,
+            fireTags: ['fire', 'burn', 'enemy_trap']
+        }
+    }),
+    ailen: createEnemyConfig({
+        name: 'Ailen',
+        statsBonus: {
+            damage: 8,
+            attackCooldown: 1300,
+            attackRange: 260,
+            knockbackResist: -0.2
+        },
+        combatType: 'ranged',
+        attackStyle: 'projectile_sniper',
+        behavior: 'ranged',
+        texture: 'ailen',
+        displaySize: scaleDimension({ width: 20, height: 20 }),
+        hitboxSize: scaleHitbox({ width: 20, height: 20 }),
+        flashTint: 0x8fd7ff,
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 220,
+            keepDistanceRatio: 0.82,
+            projectileSpeed: 460,
+            projectileRadius: 4,
+            projectileLifetimeMs: 1800,
+            projectileColor: 0x8fd7ff,
+            projectileGlowColor: 0xe3f6ff,
+            sniperWindupMs: 650,
+            sniperRecoveryMs: 160
+        }
     }),
     moth_woman: createEnemyConfig({
         name: 'Moth Woman',
@@ -251,7 +336,7 @@ export const ENEMIES = {
         flashDuration: 120,
         explodeOnDead: {
             moveSpeedMultiplier: 1.5,
-            delayMs: 500,
+            delayMs: 200,
             damage: 50,
             radius: 36,
             triggerOnPlayerContact: true,
@@ -301,6 +386,106 @@ export const ENEMIES = {
         isBoss: true,
         finalBossKey: 'giant_rock'
     }),
+    plant: createEnemyConfig({
+        name: 'Plant Abomination',
+        statsBonus: {
+            maxHealth: 40,
+            damage: 5,
+            moveSpeed: -15,
+            armor: 6,
+            effectResist: 0.7,
+            knockbackResist: 4
+        },
+        combatType: 'melee',
+        attackStyle: 'plant_boss_cycle',
+        behavior: 'chase',
+        meleeAttack: {
+            engageDelayMs: 140,
+            windupMs: 900,
+            recoveryMs: 260,
+            rangePadding: 10,
+            dashSpeed: 320,
+            dashDistance: 220,
+            dashOvershootDistance: 150
+        },
+        texture: 'plant',
+        displaySize: { width: 64, height: 64 },
+        hitboxSize: { width: 44, height: 44 },
+        flashTint: 0xffb36b,
+        flashDuration: 120,
+        isBoss: true,
+        finalBossKey: 'plant'
+    }),
+    black_widow: createEnemyConfig({
+        name: 'Black Widow',
+        statsBonus: {
+            maxHealth: 40,
+            damage: 5,
+            moveSpeed: -15,
+            armor: 6,
+            effectResist: 0.7,
+            knockbackResist: 4
+        },
+        combatType: 'melee',
+        attackStyle: 'black_widow_cycle',
+        behavior: 'chase',
+        meleeAttack: {
+            engageDelayMs: 140,
+            windupMs: 900,
+            recoveryMs: 260,
+            rangePadding: 10,
+            dashSpeed: 320,
+            dashDistance: 220,
+            dashOvershootDistance: 150
+        },
+        texture: 'black_widow',
+        displaySize: { width: 64, height: 64 },
+        hitboxSize: { width: 44, height: 44 },
+        flashTint: 0xff7a7a,
+        flashDuration: 120,
+        isBoss: true,
+        finalBossKey: 'black_widow'
+    }),
+    plant_melee_minion: createEnemyConfig({
+        name: 'Plant Melee Minion',
+        statsBonus: {
+            maxHealth: 200
+        },
+        combatType: 'melee',
+        attackStyle: 'contact_smash',
+        behavior: 'chase',
+        texture: 'plant_melee_minion',
+        displaySize: { width: 36, height: 36 },
+        hitboxSize: { width: 26, height: 26 },
+        flashTint: 0x8ed36a,
+        flashDuration: 120
+    }),
+    plant_ranged_minion: createEnemyConfig({
+        name: 'Plant Ranged Minion',
+        statsBonus: {
+            maxHealth: 150,
+            damage: 4,
+            attackCooldown: 450,
+            attackRange: 180
+        },
+        combatType: 'ranged',
+        attackStyle: 'projectile_bolt',
+        behavior: 'ranged',
+        texture: 'plant_ranged_minion',
+        displaySize: { width: 34, height: 34 },
+        hitboxSize: { width: 24, height: 24 },
+        flashTint: 0xb5f28a,
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 180,
+            keepDistanceRatio: 0.78,
+            projectileSpeed: 140,
+            projectileRadius: 4,
+            projectileLifetimeMs: 1400,
+            projectileColor: 0xb7f06a,
+            projectileGlowColor: 0xe9ffba
+        }
+    }),
     rat: createEnemyConfig({
         name: 'Rat',
         behavior: 'chase',
@@ -348,7 +533,7 @@ export const ENEMIES = {
         rangedAttack: {
             preferredRange: 200,
             keepDistanceRatio: 0.72,
-            projectileSpeed: 230,
+            projectileSpeed: 180,
             projectileRadius: 5,
             projectileLifetimeMs: 1400,
             projectileColor: 0xff7cba,

@@ -76,6 +76,7 @@ Pickup note:
 
 - current base loot pickup radius is `50`
 - the actual pickup radius is `50 x pickupRangeMultiplier`
+- `effectDamageMultiplier` now also scales supporter buff strength such as `Fairy` heal aura and some shield-related support effects
 
 ### Loot Values
 
@@ -129,14 +130,16 @@ Current character passive note:
 
 - `Lumina`: `skillRange +40`
 - `Knight`: `dodge +20%`
+- `Witch`: `casts Ritual Zone (slow + tick damage)`
+- `Werewolf`: level growth `+5 HP`, `+2 move speed`, `+2 claw damage` per level
 
 | Character | Default skill | Style | HP | Armor | Move Speed | Crit Chance |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | Lumina | `shooting_star` | ranged | 75 | 1 | 105 | 0.1 |
 | Aqua | `nova` | ranged | 140 | 1 | 105 | 0.1 |
-| Radian | `charm` | ranged | 100 | 1 | 105 | 0.1 |
+| Radian | `ghost_summon` | ranged | 100 | 1 | 105 | 0.1 |
 | Frost | `ice` | ranged | 100 | 1 | 108 | 0.1 |
-| Witch | `avada` | ranged | 75 | 1 | 112 | 0.1 |
+| Witch | `ritual_zone` | ranged | 75 | 1 | 112 | 0.35 |
 | Asian Dragon | `flame` | ranged | 75 | 1 | 112 | 0.1 |
 | Bodoi | `mu_coi` | ranged | 75 | 1 | 112 | 0.1 |
 | Gambler | `card_toss` | ranged | 80 | 1 | 108 | 0.1 |
@@ -198,7 +201,6 @@ Source: [config/skill.js](./config/skill.js)
 | `sky_fall` | 30 | 700 | 1800 | 130 | 2000 | `40x40` | sky drop, `cometTail`, destroy on hit |
 | `astral` | 300 | 5000 | 1800 | 140 | 300 | `150x150` | sky drop, auto explode at viewport center, `cometTailAstral` |
 | `fire` | 20 | 1800 | 3000 | 110 | 200 | `20x20` | homing |
-| `avada` | 15 | 3000 | 1800 | 150 | 800 | `30x5` | auto-aim, distinct targets |
 | `flame` | 22 | 2500 | 1800 | 130 | 200 | `50x30` | auto-aim |
 | `blueflame` | 70 | 1300 | 1500 | 150 | 260 | `70x30` | auto-aim, distinct targets |
 | `code` | 15 | 3000 | 1800 | 140 | 150 | `10x10` | auto-aim, hidden sprite, `codeProjectile` |
@@ -249,7 +251,9 @@ Current shop item groups:
 Current runtime shop notes:
 
 - normal shop stock shows `5` items at a time
-- each reroll costs `10` gold
+- shop reroll has no hard limit
+- reroll cost starts at `10` gold and doubles each time inside the same shop: `10 -> 20 -> 40 -> ...`
+- reroll cost resets to `10` at the next wave shop
 - reroll is disabled when the player does not have enough gold
 - reroll type uses relative weights: `stat 0.5`, `hybrid 0.35`, `effect 0.1`, `utility 0.05`, `unlock_element 0.1`
 - current approximate per-slot odds are: `stat 45.45%`, `hybrid 31.82%`, `effect 9.09%`, `utility 4.55%`, `unlock_element 9.09%`
@@ -274,23 +278,23 @@ New armor item notes:
 
 | Item | Cost | Current modifiers |
 | --- | ---: | --- |
-| `Iron Sword` | `43` | `damageMultiplier +0.1`, `skillRange -5` |
-| `Sharpened Blade` | `43` | `critChance +0.05` |
-| `Heavy Edge` | `43` | `critMultiplier +0.1`, `skillRange -10` |
-| `Quick Gloves` | `45` | `attackSpeed +0.18`, `moveSpeed -5` |
-| `Battle Focus` | `51` | `damageMultiplier +0.1`, `critChance +0.08`, `armor -5` |
-| `Steel Armor` | `42` | `armor +3`, `hp -10` |
-| `Iron Armo` | `50` | `armor +4`, `moveSpeed -7` |
-| `Ice Armo` | `100` | `armor +8`, `attackSpeed -0.2` |
-| `Vital Ring` | `42` | `hp +30`, `armor -1` |
+| `Iron Sword` | `43` | `damageMultiplier +0.07`, `skillRange -5` |
+| `Sharpened Blade` | `43` | `critChance +0.03` |
+| `Heavy Edge` | `43` | `critMultiplier +0.08`, `skillRange -5` |
+| `Quick Gloves` | `45` | `attackSpeed +0.08`, `moveSpeed -5` |
+| `Battle Focus` | `51` | `damageMultiplier +0.08`, `critChance +0.08`, `armor -3` |
+| `Steel Armor` | `42` | `armor +2`, `hp -10` |
+| `Iron Armo` | `50` | `armor +2`, `moveSpeed -5` |
+| `Ice Armo` | `100` | `armor +3`, `attackSpeed -0.15` |
+| `Vital Ring` | `42` | `hp +20`, `armor -1` |
 | `Regeneration Charm` | `42` | `healthRegenPerSecond +1`, `hp -10` |
 | `Blood Pendant` | `45` | `lifesteal +0.05`, `attackSpeed -0.1` |
 | `Guardian Core` | `60` | `shield +25`, `xpGainMultiplier +0.2`, `armor -1` |
-| `Swift Boots` | `40` | `moveSpeed +15`, `attackSpeed -0.05` |
+| `Swift Boots` | `40` | `moveSpeed +1`, `attackSpeed -0.05` |
 | `Wide Grip` | `42` | `effectDamageMultiplier +0.1`, `damageMultiplier -0.05` |
 | `Extended Core` | `47` | `skillRange +10`, `moveSpeed -5` |
 | `Extra Barrel` | `70` | `projectileCount +1`, `+1 projectile, but lowers damage per shot` |
-| `Cooldown Module` | `40` | `attackSpeed +0.15`, `healthRegenPerSecond -0.5` |
+| `Cooldown Module` | `40` | `attackSpeed +0.08`, `healthRegenPerSecond -0.3` |
 | `Combat Injector` | `47` | `attackSpeed +0.08`, `damageMultiplier +0.08`, `effectDamageMultiplier -0.1` |
 | `Force Core` | `47` | `knockbackMultiplier +0.4`, `damageMultiplier +0.05`, `hp -10` |
 
@@ -298,23 +302,23 @@ New armor item notes:
 
 | Item | Cost | Current modifiers |
 | --- | ---: | --- |
-| `Glass Cannon` | `40` | `damageMultiplier +0.2`, `armor -10` |
+| `Glass Cannon` | `40` | `damageMultiplier +0.1`, `armor -5` |
 | `Berserker Blood` | `40` | `dodge +15%`, `hp -20` |
-| `Sniper Scope` | `40` | `critChance +0.15`, `attackSpeed -0.25` |
-| `Heavy Payload` | `40` | `projectileCount +1`, `damageMultiplier +0.1`, `attackSpeed -0.15` |
+| `Sniper Scope` | `40` | `critChance +0.1`, `attackSpeed -0.15` |
+| `Heavy Payload` | `40` | `projectileCount +1`, `attackSpeed -0.15` |
 | `Overcharged Reactor` | `40` | `skillRange +10`, `attackSpeed -0.15` |
 | `Unstable Shield` | `40` | `shield +30`, `armor -2` |
-| `Speed Injector` | `40` | `moveSpeed +20`, `damageMultiplier -0.15` |
+| `Speed Injector` | `40` | `moveSpeed +10`, `damageMultiplier -0.1` |
 | `Overgrowth Engine` | `40` | `areaSizeMultiplier +0.2`, `attackSpeed -0.1` |
 | `Time Distorter` | `40` | `armor -2`, `dodge +10%` |
-| `Abyssal Catalyst` | `40` | `damageMultiplier +0.35`, `effectDamageMultiplier +0.25`, `healthRegenPerSecond -4` |
+| `Abyssal Catalyst` | `40` | `damageMultiplier +0.8`, `effectDamageMultiplier +0.8`, `healthRegenPerSecond -1.5` |
 | `Singularity Field` | `40` | `areaSizeMultiplier +0.5`, `knockbackMultiplier +0.5`, `damageMultiplier -0.15` |
-| `Phantom Stride` | `40` | `moveSpeed +30`, `pickupRangeMultiplier +0.4`, `armor -4` |
-| `Rotheart Sigil` | `40` | `effectChance +0.25`, `effectDamageMultiplier +0.3`, `damageMultiplier -0.2` |
-| `Fractured Tempo` | `40` | `attackSpeed +0.4`, `damageMultiplier -0.25`, `knockbackMultiplier -0.3` |
-| `Vampire Pact` | `40` | `lifesteal +0.1`, `hp -50` |
-| `Reckless Core` | `40` | `critMultiplier +0.2`, `hp -15` |
-| `Impact Engine` | `50` | `knockbackMultiplier +0.3`, `damageMultiplier +0.1` |
+| `Phantom Stride` | `40` | `moveSpeed +10`, `pickupRangeMultiplier +0.15`, `armor -2` |
+| `Rotheart Sigil` | `40` | `effectChance +0.15`, `effectDamageMultiplier +0.1`, `damageMultiplier -0.1` |
+| `Fractured Tempo` | `40` | `attackSpeed +0.15`, `damageMultiplier -0.05`, `knockbackMultiplier -0.2` |
+| `Vampire Pact` | `40` | `lifesteal +0.05`, `hp -20` |
+| `Reckless Core` | `40` | `critMultiplier +0.15`, `hp -15` |
+| `Impact Engine` | `50` | `knockbackMultiplier +0.3`, `damageMultiplier +0.05` |
 
 ### Effect Items
 
@@ -324,15 +328,14 @@ New effect item note:
 
 | Item | Cost | Current modifiers / bonuses |
 | --- | ---: | --- |
-| `Toxic Catalyst` | `56` | `effectChance +0.2`, `effectDamageMultiplier +0.15`, `dodge -7%` |
-| `Lingering Curse` | `73` | `attackSpeed +0.2`, `effectDurationMultiplier +0.25` |
-| `Chain Amplifier` | `59` | `shockChainCount +1`, only rolls if `shock` is active |
+| `Toxic Catalyst` | `56` | `effectChance +0.1`, `effectDamageMultiplier +0.1`, `dodge -7%` |
+| `Lingering Curse` | `73` | `attackSpeed +0.8`, `effectDurationMultiplier +0.8` |
+| `Chain Amplifier` | `79` | `shockChainCount +1`, only rolls if `shock` is active |
 | `Flame` | `56` | `burn.explodeOnMaxStacks = true`, only rolls if `burn` is active |
-| `Frozen Edge` | `56` | `freeze.bonusCritDamageToFrozen +0.35`, only rolls if `freeze` is active |
-| `Venom Trail` | `55` | `hp -20`, `poison.spawnTrail = true`, leaves a poison trail even without `Poison Core` |
-| `Fire Coat` | `100` | `hp +70`, every `1s` pulses fire in `radius 70`, deals damage equal to `20%` of owner max HP, and applies `burn` on each pulse |
-| `Elemental Overload` | `58` | `effectChance +0.12`, `effectDamageMultiplier +0.12`, `damageMultiplier -0.12` |
-| `Shockwave Core` | `50` | `shock.chainDamageBonus +0.15`, only rolls if `shock` is active |
+| `Venom Trail` | `55` | `hp -20`, `effectDamageMultiplier +0.1`, `poison.spawnTrail = true`, leaves a poison trail even without `Poison Core` |
+| `Fire Coat` | `100` | `hp +20`, `armor -2`, every `1s` pulses fire in `radius 70`, deals damage equal to `15%` of owner max HP, and applies `burn` on each pulse |
+| `Elemental Overload` | `58` | `effectChance +0.1`, `effectDamageMultiplier +0.1`, `damageMultiplier -0.1` |
+| `Shockwave Core` | `50` | `shock.chainDamageBonus +0.05`, only rolls if `shock` is active |
 
 ### Unlock Element Items
 
@@ -344,15 +347,15 @@ New effect item note:
 | `Shock Core` | `70` | unlock `shock` on the current skill, `50%` effect chance |
 | `Aim Core` | `70` | unlock `mark` on the current skill, `50%` effect chance |
 | `Afang` | `70` | unlock `bleed` on the current skill, `50%` effect chance |
-| `Explore Core` | `70` | add `explosion` as a bonus on-hit effect without replacing the current main status effect |
+| `Explore Core` | `70` | add `explosion` as a bonus on-hit effect without replacing the current main status effect, explosion radius `59` |
 
 ### Utility Items
 
 | Item | Cost | Current modifiers |
 | --- | ---: | --- |
-| `Magnet Core` | `50` | `pickupRangeMultiplier +0.5` |
-| `Golden Idol` | `72` | `goldGainMultiplier +0.25`, `damageMultiplier -0.1` |
-| `Greed Engine` | `72` | `goldGainMultiplier +0.35`, `hp -20` |
+| `Magnet Core` | `70` | `pickupRangeMultiplier +0.15` |
+| `Golden Idol` | `72` | `goldGainMultiplier +0.1`, `damageMultiplier -0.1` |
+| `Greed Engine` | `72` | `goldGainMultiplier +0.1`, `hp -20` |
 
 Armor note:
 
@@ -367,7 +370,7 @@ Source: [config/statusEffects.js](./config/statusEffects.js)
 | Effect | Current default stats |
 | --- | --- |
 | `burn` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `reapplyDelayMs: 400`, `maxStacks: 6` |
-| `shock` | `durationMs: 2000`, `slowDurationMs: 2000`, `slowMultiplier: 0.7`, `chainCount: 3`, `chainRadius: 120`, `chainDamageRatios: [0.75, 0.5, 0.25]`, `chainStepDelayMs: 90`, `maxStacks: 4` |
+| `shock` | `durationMs: 2000`, `slowDurationMs: 2000`, `slowMultiplier: 0.7`, `chainCount: 2`, `chainRadius: 120`, `chainDamageRatios: [0.75, 0.5, 0.25]`, `chainStepDelayMs: 90`, `maxStacks: 4` |
 | `freeze` | `durationMs: 1500`, `mode: 'stun'`, `slowMultiplier: 0`, `maxStacks: 1` |
 | `poison` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `trailIntervalMs: 700`, `trailDamage: 4`, `antiHealMultiplier: 0.35`, `reapplyDelayMs: 400`, `maxStacks: 6` |
 | `shield` | `durationMs: 0`, `capacity: 50`, `refillIntervalMs: 10000`, `maxStacks: 1` |
@@ -401,23 +404,26 @@ Current supporter mechanics:
 - attack styles include normal `orb`, `claw_slash`, and `chain_lightning`
 - support styles include `heal_aura` and `armor_aura`
 - supporter damage, attack speed, effect duration, and effect damage now scale from the player stats/items
+- support-style supporters can also attack while keeping their buff behavior
+- support-style supporter hits currently reduce their own buff cooldown by `0.5s`
+- multi-projectile effect supporters now try to split shots across different nearby enemies before reusing the same target
 - melee supporters use `movementStyle: 'melee_follow'` instead of orbiting while engaging enemies
 - melee supporters use `attackArea` around the player to decide when to chase and when to return
 - `blood_wolf` and `rock` currently use melee follow with `attackArea: 100`
 
 | Supporter | Style | Range / Interval | Damage / Support | Passive |
 | --- | --- | --- | --- | --- |
-| `blackcat` | orb | range `140`, cooldown `1350` | damage `25`, speed `300` | `goldGainMultiplier +0.15`, `critChance +0.05` |
-| `blood_wolf` | claw slash | range `20`, cooldown `900`, attack area `100` | damage `30` | `lifesteal +0.1`, melee characters gain `attackSpeed +0.3` |
-| `fairy` | heal aura | interval `15000` | heal `35` | `healthRegenPerSecond +1`, `maxHealthPercent +0.1` |
+| `blackcat` | orb | range `140`, cooldown `1350` | damage `25`, speed `300` | `goldGainMultiplier +0.2`, `critChance +0.05` |
+| `blood_wolf` | claw slash | range `20`, cooldown `1500`, attack area `100` | damage `30`, always applies `bleed` | `lifesteal +0.1`, melee characters gain `attackSpeed +0.3` |
+| `fairy` | heal aura | interval `15000` | heal `25` base, scales with `effectDamageMultiplier`, each hit reduces buff cooldown by `0.5s` | `healthRegenPerSecond +1`, `maxHealthPercent +0.1` |
 | `bluebird` | orb | range `150`, cooldown `1250` | damage `26`, speed `340` | `projectileSpeedPercent +0.2`, `armorPierce +0.2` |
 | `eye_monster` | orb | range `130`, cooldown `1500` | damage `28`, speed `260` | `skillRange +30`, `critMultiplier +0.1`, `mark on hit 100%` |
 | `dragon_ice` | orb | range `145`, cooldown `1300` | damage `29`, speed `320` | `freeze on hit 100%`, `effectDurationMultiplier +0.3` |
 | `fire_spirite` | orb | range `135`, cooldown `1100` | damage `27`, speed `360` | `burn on hit 100%`, `effectDamageMultiplier +0.3` |
 | `shock_mouse` | chain lightning | range `150`, cooldown `1150` | damage `31`, speed `380` | `shock on hit 100%`, `shockChainCountBonus +1`, `attackSpeed +0.1` |
 | `poison_ball` | orb | range `140`, cooldown `1200` | damage `27`, speed `320` | `poison on hit 100%`, `effectDurationMultiplier +0.2`, `effectDamageMultiplier +0.1` |
-| `shield_drone` | armor aura | interval `2200` | armor `+8` | `armor +1`, `shieldResetAmount 20` every `10s` |
-| `rock` | claw slash | range `20`, cooldown `2000`, attack area `100` | damage `35` | `knockbackMultiplier +0.1`, `armor +5`, gray explosion on hit `30%` |
+| `shield_drone` | armor aura | interval `2200` | armor `+8` base, scales with `effectDamageMultiplier`, each hit reduces buff cooldown by `0.5s` | `armor +1`, `shieldResetAmount 20` every `15s` |
+| `rock` | claw slash | range `20`, cooldown `2000`, attack area `100` | damage `35` | `knockbackMultiplier +0.3`, `armor +5`, gray explosion on hit `30%` |
 
 ## Enemy Config
 
@@ -437,8 +443,14 @@ Current important notes:
 - `dash_lunge` enemies now telegraph, dash through other enemies, and can still damage the player while passing through
 - current runtime no longer uses `spawnWeight`
 - `maprock_field` now uses a scripted wave plan instead of unlocked-enemy random spawn
+- `church_sanctuary` now also uses a scripted wave plan in the same style as `maprock_field`
 - enemy hit feedback is still active via damage tint and damage text
 - health number text above enemies is hidden by default
+- `succubus` now uses a `burst shooter` ranged style
+- `lamia` uses a poison trap cloud ranged style
+- `firer` uses a fire trap cloud ranged style
+- `ailen` uses a sniper ranged style, and `ailen` miniboss can summon `bomber`
+- `bomber` is configured as `explode on contact` with a `200ms` contact fuse
 
 Current notable per-enemy overrides from [config/enemies.js](./config/enemies.js):
 
@@ -455,24 +467,25 @@ Current notable per-enemy overrides from [config/enemies.js](./config/enemies.js
 
 Current runtime flow:
 
-- `maprock_field` now runs a scripted `10`-wave plan
-- other maps can still use scenario unlock timelines
-- there is no weighted spawn system anymore
+- `maprock_field` now runs a scripted `20`-wave plan
+- `church_sanctuary` now also runs a scripted `20`-wave plan with a different enemy roster
+- weighted wave spawn is supported inside scripted wave plans
 - each wave shows a `WAVE N` banner and waits about `2s` before enemies start spawning
 - each wave also shows a centered countdown timer at the top of the screen
 - a wave ends when either its timer expires or all wave enemies are killed
 - when a wave ends by timeout, remaining enemies from that wave are cleared
-- map rock wave composition is currently:
-  - wave `1`: `45s`, `worm` up to `999`, `20 HP`
-  - wave `2`: `45s`, `worm` up to `999`, `22 HP`
-  - wave `3`: `45s`, `worm` up to `999`, `23 HP`
-  - wave `4`: `45s`, `worm` up to `999`, `50 HP`
-  - wave `5`: open-ended boss clear, `35 worm`, `60 HP` plus `3 kitsume`, `2000 HP / 50 damage / 5 armor / scale 1.7`
-  - wave `6`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
-  - wave `7`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
-  - wave `8`: `45s`, `worm` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
-  - wave `9`: `45s`, `mummy` up to `999`, `100 HP` plus `bat` up to `999`, `100 HP` and `10 eyes`
-  - wave `10`: `45s`, `25 mummy`, `100 HP` plus `25 bat`, `100 HP`, `10 eyes`, and `3 skeleton`, `8000 HP / 50 damage / 10 armor / scale 1.7`
+- `maprock_field` progression is:
+  - waves `1-5`: `worm`, wave `5` miniboss `kitsume`
+  - waves `6-10`: add `bat` and `eyes`, wave `10` miniboss `skeleton`
+  - waves `11-15`: add `bomber`, wave `15` miniboss mix `kitsume + skeleton`
+  - waves `16-20`: add `mummy`, wave `20` includes `giant_rock`
+- `church_sanctuary` mirrors the same 20-wave structure with roster swaps:
+  - `kitsume -> ailen`
+  - `giant_rock -> plant`
+  - `worm -> slime`
+  - `bat -> widow`
+  - `eyes -> succubus + lamia`
+  - `mummy -> bugmonster`
 - the maximum number of enemies alive on the map at once is currently `25`
 - about `2s` after a wave ends, the shop flow begins
 - before the shop opens, the game now rolls `4` stat cards and the player picks `1`
@@ -488,7 +501,7 @@ Current runtime flow:
 - when the shop opens, all active enemies and enemy projectiles are cleared
 - after leaving the shop, the next wave begins
 - normal shop shows `5` items
-- reroll costs `10` gold
+- reroll cost doubles during the same shop and resets on the next wave
 - locked shop items persist across rerolls and across wave transitions
 - elite spawn system is removed
 

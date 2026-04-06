@@ -1,4 +1,4 @@
-import { CHARACTER_CONFIG, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
+import { CHARACTER_CONFIG, CHARACTER_KEYS, DEFAULT_CHARACTER_KEY } from '../config/characters/characters.js';
 import { CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { DEFAULT_MAP_KEY, getAvailableMaps, getMapDefinition } from '../config/map.js';
 import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, installAudioUnlock, updateAudioSetting } from '../utils/audioSettings.js';
@@ -230,7 +230,9 @@ export default class MainMenuScene extends Phaser.Scene {
             color: SHOP_HUB_COLORS.title
         }));
 
-        const entries = Object.entries(CHARACTER_CONFIG);
+        const entries = CHARACTER_KEYS
+            .filter((key) => Boolean(CHARACTER_CONFIG[key]))
+            .map((key) => [key, CHARACTER_CONFIG[key]]);
         const contentTop = -panelHeight / 2 + 68;
         const footerHeight = isCompact ? 108 : 92;
         const previewScale = isMobileDevice ? 0.7 : 1;

@@ -59,19 +59,37 @@ export default class SupporterSystem {
         if (config.attackStyle === 'chain_lightning') {
             return this.spawnChainLightning(supporter, target, config);
         }
-        const orb = new SupporterOrb(this.scene, supporter, target, {
-            speed: config.projectileSpeed,
-            damage: supporter.getScaledAttackDamage?.(config.projectileDamage ?? 8) ?? config.projectileDamage,
-            radius: config.projectileRadius,
-            lifetimeMs: config.projectileLifetimeMs,
-            color: config.projectileColor,
-            glowColor: config.projectileGlowColor,
-            trailColor: config.projectileTrailColor,
-            burstColor: config.projectileBurstColor,
-            tags: config.tags ?? []
-        });
-        this.orbs.add(orb);
-        return orb;
+        const projectileCount = Math.max(1, Math.round(config.projectileCount ?? 1));
+        const projectileTargets = this.getNearestEnemiesToPoint(
+            supporter.x,
+            supporter.y,
+            config.attackRange ?? 240,
+            projectileCount
+        );
+        const spawnedOrbs = [];
+        for (let index = 0; index < projectileCount; index += 1) {
+            const orbTarget = projectileTargets[index] ?? target;
+            const orb = new SupporterOrb(this.scene, supporter, orbTarget, {
+                speed: config.projectileSpeed,
+                damage: supporter.getScaledAttackDamage?.(config.projectileDamage ?? 8) ?? config.projectileDamage,
+                radius: config.projectileRadius,
+                lifetimeMs: config.projectileLifetimeMs,
+                color: config.projectileColor,
+                glowColor: config.projectileGlowColor,
+                trailColor: config.projectileTrailColor,
+                burstColor: config.projectileBurstColor,
+                tags: config.tags ?? []
+            });
+            const spreadOffsetX = projectileCount > 1
+                ? (index - (projectileCount - 1) / 2) * 8
+                : 0;
+            if (spreadOffsetX !== 0) {
+                orb.x += spreadOffsetX;
+            }
+            this.orbs.add(orb);
+            spawnedOrbs.push(orb);
+        }
+        return spawnedOrbs[0] ?? null;
     }
 
     applySupportEffect(supporter, config = {}) {
@@ -88,7 +106,8 @@ export default class SupporterSystem {
     }
 
     applyHealAura(supporter, owner, config = {}) {
-        const healAmount = Math.max(1, Math.round(config.supportHealAmount ?? 25));
+        const healAmount = supporter?.getScaledSupportValue?.(config.supportHealAmount ?? 25, 1)
+            ?? Math.max(1, Math.round(config.supportHealAmount ?? 25));
         owner.heal?.(healAmount);
         this.spawnSupportPulse(owner.x, owner.y - 8, {
             color: config.supportPulseColor ?? 0xa6ffcb,
@@ -104,7 +123,8 @@ export default class SupporterSystem {
             glowColor: config.supportGlowColor ?? 0xe8fbff,
             radius: config.supportPulseRadius ?? 10
         });
-        const armorBonus = Math.max(0, Math.round(config.supportArmorBonus ?? 0));
+        const armorBonus = supporter?.getScaledSupportValue?.(config.supportArmorBonus ?? 0, 0)
+            ?? Math.max(0, Math.round(config.supportArmorBonus ?? 0));
         return { kind: 'armor_aura', supporter, owner, value: armorBonus };
     }
 
@@ -307,20 +327,28 @@ export default class SupporterSystem {
         };
     }
 
-    getNearestEnemyToPoint(x, y, range = 240) {
+    getNearestEnemiesToPoint(x, y, range = 240, limit = 1) {
         const enemies = this.scene?.enemies?.getChildren?.() ?? [];
-        let nearest = null;
-        let nearestDistanceSq = range * range;
-        enemies.forEach((enemy) => {
-            if (!enemy?.active || enemy?.isDead) return;
-            const dx = enemy.x - x;
-            const dy = enemy.y - y;
-            const distanceSq = (dx * dx) + (dy * dy);
-            if (distanceSq >= nearestDistanceSq) return;
-            nearest = enemy;
-            nearestDistanceSq = distanceSq;
-        });
-        return nearest;
+        const maxCount = Math.max(1, Math.round(limit || 1));
+        return enemies
+            .filter((enemy) => {
+                if (!enemy?.active || enemy?.isDead) return false;
+                const dx = enemy.x - x;
+                const dy = enemy.y - y;
+                return ((dx * dx) + (dy * dy)) < (range * range);
+            })
+            .sort((enemyA, enemyB) => {
+                const dxA = enemyA.x - x;
+                const dyA = enemyA.y - y;
+                const dxB = enemyB.x - x;
+                const dyB = enemyB.y - y;
+                return ((dxA * dxA) + (dyA * dyA)) - ((dxB * dxB) + (dyB * dyB));
+            })
+            .slice(0, maxCount);
+    }
+
+    getNearestEnemyToPoint(x, y, range = 240) {
+        return this.getNearestEnemiesToPoint(x, y, range, 1)[0] ?? null;
     }
 
     clearGroupSafely(group) {

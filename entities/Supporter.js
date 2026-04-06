@@ -75,12 +75,13 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
             return;
         }
 
-        const target = this.config.supportStyle
+        const combatTarget = this.getCombatTarget();
+        const movementTarget = this.config.supportStyle
             ? null
-            : this.getCombatTarget();
-        const isMoving = this.updateMovement(target, delta);
+            : combatTarget;
+        const isMoving = this.updateMovement(movementTarget, delta);
         this.syncMovementAnimation(isMoving);
-        this.syncSupportBonuses({ targetInRange: Boolean(target) });
+        this.syncSupportBonuses({ targetInRange: Boolean(combatTarget) });
 
         if (this.config.supportStyle) {
             if ((time - this.lastSupportAt) >= this.getActionCooldownMs(this.config.supportIntervalMs ?? 1500)) {
@@ -88,14 +89,13 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
                 this.scene?.supporterSystem?.applySupportEffect?.(this, this.config);
                 this.pulseShot();
             }
-            return;
         }
 
-        if (!target) return;
-        this.setFlipX(target.x < this.x);
+        if (!combatTarget) return;
+        this.setFlipX(combatTarget.x < this.x);
         if ((time - this.lastFireAt) < this.getActionCooldownMs(this.config.fireCooldownMs ?? 1200)) return;
         this.lastFireAt = time;
-        this.scene?.supporterSystem?.spawnOrb?.(this, target, this.config);
+        this.scene?.supporterSystem?.spawnOrb?.(this, combatTarget, this.config);
         this.pulseShot();
     }
 
@@ -226,6 +226,28 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
         return Math.max(0.01, this.owner?.globalEffectDamageMultiplier ?? 1);
     }
 
+    getScaledSupportValue(baseValue = 0, minimum = 0) {
+        const scaledValue = Math.round((Number(baseValue) || 0) * this.getEffectDamageMultiplier());
+        return Math.max(minimum, scaledValue);
+    }
+
+    reduceSupportCooldownMs(amountMs = 0, time = 0) {
+        if (!this.config.supportStyle) return;
+        const reductionMs = Math.max(0, Math.round(amountMs || 0));
+        if (reductionMs <= 0) return;
+        const supportCooldownMs = this.getActionCooldownMs(this.config.supportIntervalMs ?? 1500);
+        const earliestLastSupportAt = Number(time) - supportCooldownMs;
+        this.lastSupportAt = Math.max(
+            earliestLastSupportAt,
+            Number(this.lastSupportAt ?? -Infinity) - reductionMs
+        );
+    }
+
+    handleAttackHit(time) {
+        if (!this.config.supportStyle) return;
+        this.reduceSupportCooldownMs(500, time);
+    }
+
     pulseShot() {
         this.scene?.tweens?.killTweensOf?.(this);
         this.setScale(this.baseScaleX, this.baseScaleY);
@@ -256,7 +278,7 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
             this.clearArmorAuraBonus();
             return;
         }
-        const nextBonus = Math.max(0, Math.round(this.config.supportArmorBonus ?? 0));
+        const nextBonus = this.getScaledSupportValue(this.config.supportArmorBonus ?? 0, 0);
         if (!owner) {
             this.clearArmorAuraBonus();
             return;

@@ -43,7 +43,12 @@ export function preloadAllAssets(scene) {
     // Load entity assets (per-frame)
     for (const entityType in ASSET_CONFIG) {
         const entityConfig = ASSET_CONFIG[entityType];
-        if (entityConfig.atlas) {
+        if (entityConfig.image) {
+            const image = entityConfig.image;
+            if (!scene.textures.exists(image.key)) {
+                scene.load.image(image.key, image.path);
+            }
+        } else if (entityConfig.atlas) {
             const atlas = entityConfig.atlas;
             scene.load.atlas(atlas.key, atlas.texture, atlas.atlasJSON);
         } else if (entityConfig.spritesheet) {
@@ -134,8 +139,9 @@ export function createAllAnimations(scene) {
         const entityConfig = ASSET_CONFIG[entityType];
         const sheetConfig = entityConfig.spritesheet;
         const atlasConfig = entityConfig.atlas;
-        for (const animName in entityConfig.animations) {
-            const animConfig = entityConfig.animations[animName];
+        const animations = entityConfig.animations ?? {};
+        for (const animName in animations) {
+            const animConfig = animations[animName];
             const animKey = `${entityType}_${animName}`;
             if (scene.anims.exists(animKey)) continue;
             let frames = [];

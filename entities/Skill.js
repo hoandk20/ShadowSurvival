@@ -102,7 +102,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         this.visibleDuringEffect = config.visibleDuringEffect ?? true;
         this.critChance = Phaser.Math.Clamp((config.critChance ?? 0) + (owner.getSkillCritChanceBonus?.(skillType) ?? 0), 0, 1);
         this.critMultiplier = (config.critMultiplier ?? 1.5) + (owner.getSkillCritMultiplierBonus?.(skillType) ?? 0);
-        this.critColor = config.critColor ?? '#ffde59';
+        this.critColor = '#ff3b30';
         this.tags = Array.isArray(config.tags) ? [...config.tags] : [];
         this.behaviorEntries = resolveSkillBehaviorEntries(config);
         const baseStunDuration = (config.stunDuration ?? 0) * (owner.getSkillStunDurationMultiplier?.(skillType) ?? 1);
@@ -320,6 +320,14 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             this.castChainLightningStrike();
             return;
         }
+        if (this.config?.attackStyle === 'ritual_zone') {
+            this.castRitualZone();
+            return;
+        }
+        if (this.config?.attackStyle === 'summon_ghosts') {
+            this.castSummonGhosts();
+            return;
+        }
 
         const effectDefinition = this.effectKey ? EFFECT_CONFIG[this.effectKey] : null;
         if (this.effectKey && EFFECT_CLASS_MAP[this.effectKey]) {
@@ -421,7 +429,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         ) ?? { healthDamage: roll.value, absorbedDamage: 0, didKill: false };
 
         effectRunner?.showDamageText(primaryTarget, roll.value, {
-            color: roll.isCritical ? (this.critColor ?? '#ffde59') : '#ffde59',
+            color: roll.isCritical ? '#ff3b30' : '#ffde59',
             fontSize: '7px'
         });
 
@@ -482,6 +490,48 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             targetMode: 'enemies'
         });
 
+        this.destroy();
+    }
+
+    castRitualZone() {
+        const anchorTarget = this.getNearestEnemyTarget?.() ?? null;
+        const centerX = anchorTarget?.active ? anchorTarget.x : (this.owner?.x ?? this.x);
+        const centerY = anchorTarget?.active ? anchorTarget.y : (this.owner?.y ?? this.y);
+        const ownerPlayerId = this.ownerPlayerId ?? null;
+        const tickRatio = Math.max(0, Number(this.config?.zoneDamageRatio ?? 0.25) || 0);
+        const baseTickDamage = Math.max(1, Math.round((this.baseDamage ?? 1) * tickRatio));
+        const characterEffectMul = Math.max(0.01, this.owner?.resolveCharacterStats?.()?.effectDamageMultiplier ?? 1);
+        const globalEffectMul = Math.max(0.01, this.owner?.globalEffectDamageMultiplier ?? 1);
+        const tickDamage = Math.max(1, Math.round(baseTickDamage * characterEffectMul * globalEffectMul));
+
+        const depth = Math.max(this.owner?.depth ?? 0, anchorTarget?.depth ?? 0, this.depth ?? 20) + 8;
+        const areaMultiplier = Math.max(0.1, this.owner?.getSkillAreaMultiplier?.(this.skillType) ?? 1);
+        this.scene?.statusEffectSystem?.spawnRitualZoneCloud?.(this.owner ?? this, {
+            x: centerX,
+            y: centerY,
+            depth,
+            radius: Math.max(18, Math.round((this.config?.zoneRadius ?? 120) * areaMultiplier)),
+            durationMs: this.config?.zoneDurationMs ?? this.duration ?? 1800,
+            tickIntervalMs: this.config?.zoneTickIntervalMs ?? 450,
+            slowDurationMs: this.config?.zoneSlowDurationMs ?? 550,
+            slowMultiplier: this.config?.zoneSlowMultiplier ?? 0.6,
+            damage: tickDamage,
+            ownerPlayerId,
+            source: this,
+            targetMode: 'enemies',
+            tags: ['ritual', 'zone', 'dot'],
+            showDamageText: false
+        });
+
+        this.destroy();
+    }
+
+    castSummonGhosts() {
+        // Ensure persistent ghost summons exist up to the current skill object count.
+        const owner = this.owner ?? null;
+        if (owner?.scene?.ensureGhostSummons) {
+            owner.scene.ensureGhostSummons(owner);
+        }
         this.destroy();
     }
 
@@ -715,6 +765,16 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             this.startMeleeVisualTravel(target);
         }
         this.scene?.onSkillHitEnemy?.(this, target);
+
+        const maxTargets = this.meleeMaxTargets;
+        if (Number.isFinite(maxTargets) && maxTargets > 1) {
+            for (let i = 1; i < Math.floor(maxTargets); i += 1) {
+                if (!this.active) break;
+                const nextTarget = this.getNearestEnemyInRange();
+                if (!nextTarget) break;
+                this.scene?.onSkillHitEnemy?.(this, nextTarget);
+            }
+        }
         if (this.active && !this.meleeVisualProjectile) {
             this.destroy();
         }

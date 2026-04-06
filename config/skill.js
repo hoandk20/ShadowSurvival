@@ -64,8 +64,11 @@ function normalizeSkillConfig(config = {}) {
     if (typeof knockback.distance === 'number') normalized.knockbackDistance = knockback.distance;
     if (typeof knockback.dragFactor === 'number') normalized.knockbackDragFactor = knockback.dragFactor;
     if (typeof knockback.dragDuration === 'number') normalized.knockbackDragDuration = knockback.dragDuration;
+    if (typeof knockback.speedMultiplier === 'number') normalized.knockbackSpeedMultiplier = knockback.speedMultiplier;
     if (typeof knockback.count === 'number' || knockback.count === Infinity) normalized.numberKnockback = knockback.count;
-    normalized.knockback = 30;
+    // Default knockback force for skills unless explicitly configured per-skill.
+    normalized.knockback = 100;
+    normalized.knockbackSpeedMultiplier = normalized.knockbackSpeedMultiplier ?? 1.35;
 
     if (typeof critical.chance === 'number') normalized.critChance = critical.chance;
     if (typeof critical.multiplier === 'number') normalized.critMultiplier = critical.multiplier;
@@ -78,6 +81,64 @@ function normalizeSkillConfig(config = {}) {
 }
 
 const RAW_SKILL_CONFIG = {
+    ritual_zone: {
+        label: 'Ritual Zone',
+        category: 'projectile',
+        attackStyle: 'ritual_zone',
+        targeting: {
+            autoAim: true
+        },
+        projectile: {
+            // Used by Player.hasEnemyInSkillRange() gating for projectile-category skills.
+            range: 160
+        },
+        // No sprite needed; zone visuals are spawned by StatusEffectSystem.
+        playAnimation: false,
+        visibleDuringEffect: false,
+        hitboxWidth: 1,
+        hitboxHeight: 1,
+        // Base damage is used as the snapshot for zone tick damage (via zoneDamageRatio).
+        damage: 240,
+        duration: 1500,
+        cooldown: 2000,
+        zoneRadius: 130,
+        zoneDurationMs: 1600,
+        zoneTickIntervalMs: 400,
+        zoneDamageRatio: 0.25,
+        zoneSlowMultiplier: 0.65,
+        zoneSlowDurationMs: 650,
+        tags: ['ritual', 'zone']
+    },
+    ghost_summon: {
+        label: 'Ghost',
+        category: 'projectile',
+        attackStyle: 'summon_ghosts',
+        objects: {
+            multiple: true,
+            maxCount: 8,
+            defaultCount: 2
+        },
+        projectile: {
+            range: 170
+        },
+        basePath: 'assets/skills/ghost/',
+        animations: {
+            cast: {
+                frames: ['frame0.png'],
+                frameRate: 1,
+                loop: false
+            }
+        },
+        damage: 11,
+        duration: 300,
+        cooldown: 1200,
+        summonLifetimeMs: 20000,
+        hitboxWidth: 10,
+        hitboxHeight: 10,
+        playAnimation: false,
+        visibleDuringEffect: false,
+        tags: ['summon', 'ghost']
+    },
     thunder: {
         label: 'Thunder',
         category: 'projectile',
@@ -459,55 +520,6 @@ const RAW_SKILL_CONFIG = {
             chance: 0.3,
             multiplier: 1.4,
             color: '#ff7043'
-        }
-    },
-    avada: {
-        label: 'Avada',
-        category: 'projectile',
-        targeting: {
-            homing: false,
-            autoAim: {
-                enabled: true,
-                distinctTargets: true,
-                burstInterval: 300
-            }
-        },
-        objects: {
-            multiple: true,
-            maxCount: 8
-        },
-        projectile: {
-            speed: 800,
-            range: 150,
-            alignWithMovement: true,
-            destroyOnHit: true
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 10,
-            force: 140,
-            dragFactor: 0.35,
-            dragDuration: 300,
-            count: 1
-        },
-        basePath: 'assets/skills/avada/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        damage: 15,
-        duration: 1800,
-        cooldown: 3000,
-        hitboxWidth: 30,
-        hitboxHeight: 5,
-        critical: {
-            chance: 0.15,
-            multiplier: 2,
-            color: '#B2BEB5'
         }
     },
     flame: {

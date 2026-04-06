@@ -58,7 +58,7 @@ export const CHARACTER_CONFIG = {
         description: 'An eastern exorcist, sealing demons with talismans and barriers.',
         assetKey: 'radian',
         assetFormat: 'spritesheet',
-        defaultSkill: 'charm',
+        defaultSkill: 'ghost_summon',
         statsBonus: {},
         size: { width: 20, height: 20 }
     }),
@@ -76,12 +76,17 @@ export const CHARACTER_CONFIG = {
     witch: createCharacterConfig({
         label: 'Witch',
         description: 'An ancient sorceress using forbidden magic to bend the battlefield.',
+        passiveDescription: 'Casts Ritual Zone: periodically places a magic circle that slows and damages enemies standing inside.',
         assetKey: 'witch',
         assetFormat: 'spritesheet',
-        defaultSkill: 'avada',
+        defaultSkill: 'ritual_zone',
         statsBonus: {
             hp: -25,
-            moveSpeed: 7
+            moveSpeed: 7,
+            critChance: 0.25,
+            critMultiplier: 0.3,
+            effectChance: 0.2,
+            effectDamageMultiplier: 0.3
         },
         size: { width: 20, height: 20 }
     }),
@@ -148,6 +153,7 @@ export const CHARACTER_CONFIG = {
     werewolf: createCharacterConfig({
         label: 'Werewolf',
         description: 'A feral melee hunter that tears through enemies with oversized claw strikes.',
+        passiveDescription: 'Below 50% HP: +15% attack speed, +10 move speed, +8% lifesteal.\nHits against bleeding targets heal 1.5% max HP.',
         assetKey: 'werewolf',
         assetFormat: 'spritesheet',
         defaultSkill: 'claw',
@@ -162,7 +168,7 @@ export const CHARACTER_CONFIG = {
             hp: 35,
             armor: 1,
             moveSpeed: 2,
-            critChance: 0.08
+            critChance: -0.6
         },
         size: { width: 25, height: 25 }
     }),
@@ -198,7 +204,9 @@ export const DEFAULT_CHARACTER_KEY = 'lumina';
 export const CHARACTER_KEYS = [
     'lumina',
     'knight',
-    ...Object.keys(CHARACTER_CONFIG).filter((key) => key !== 'lumina' && key !== 'knight')
+    'werewolf',
+    'witch',
+    ...Object.keys(CHARACTER_CONFIG).filter((key) => !['lumina', 'knight', 'werewolf', 'witch'].includes(key))
 ];
 
 export function getCharacterConfig(key) {

@@ -18,7 +18,7 @@ export const STATUS_EFFECT_CONFIG = {
             durationMs: 2000,
             slowDurationMs: 2000,
             slowMultiplier: 0.7,
-            chainCount: 3,
+            chainCount: 2,
             chainRadius: 120,
             chainDamageRatios: [0.75, 0.5, 0.25],
             chainStepDelayMs: 90,
