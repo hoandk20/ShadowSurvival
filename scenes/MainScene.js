@@ -358,6 +358,8 @@ export default class MainScene extends Phaser.Scene {
 
     ensureGhostSummons(owner) {
         if (!owner?.active || owner.isDead) return;
+        // Ghost summons are a Radian-only mechanic.
+        if ((owner.characterKey ?? null) !== 'radian') return;
         const desired = Math.max(0, Math.round(owner.getSkillObjectCount?.('ghost_summon') ?? 0));
         if (desired <= 0 || !this.summons?.getChildren) return;
         const lifetimeMs = Math.max(0, Math.round(owner.getSkillConfig?.('ghost_summon')?.summonLifetimeMs ?? 20000));
@@ -376,6 +378,17 @@ export default class MainScene extends Phaser.Scene {
             ghost.body?.setImmovable?.(true);
             this.summons.add(ghost);
         }
+    }
+
+    clearGhostSummons(owner) {
+        if (!owner || !this.summons?.getChildren) return;
+        const children = this.summons.getChildren();
+        children.forEach((s) => {
+            if (!s?.active) return;
+            if (s.owner !== owner) return;
+            this.summons.remove?.(s, false, false);
+            s.destroy?.();
+        });
     }
 
     getGhostSummonTarget(owner, summon) {
@@ -1560,6 +1573,13 @@ export default class MainScene extends Phaser.Scene {
         Object.entries(this.characterInputs ?? {}).forEach(([key, input]) => {
             input.checked = key === characterKey;
         });
+        if (this.player) {
+            if (characterKey !== 'radian') {
+                this.clearGhostSummons(this.player);
+            } else {
+                this.ensureGhostSummons(this.player);
+            }
+        }
         if (this.debugMode) {
             this.setupDebugMenu();
         }

@@ -97,8 +97,8 @@ const RAW_SKILL_CONFIG = {
         visibleDuringEffect: false,
         hitboxWidth: 1,
         hitboxHeight: 1,
-        // Base damage is used as the snapshot for zone tick damage (via zoneDamageRatio).
-        damage: 240,
+        // Base damage is distributed across ticks (via zoneDamageRatio and zoneTickIntervalMs).
+        damage: 24,
         duration: 1500,
         cooldown: 2000,
         zoneRadius: 130,

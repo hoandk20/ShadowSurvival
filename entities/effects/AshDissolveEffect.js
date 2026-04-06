@@ -42,6 +42,7 @@ export default class AshDissolveEffect {
                 ...(options.particleRise ?? {})
             }
         };
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
 
         const textureKey = target.texture.key;
         const frameName = target.frame?.name ?? null;
@@ -54,7 +55,7 @@ export default class AshDissolveEffect {
             target.displayWidth || target.width || 32,
             target.displayHeight || target.height || 32
         );
-        clone.setAlpha(config.minAlpha);
+        clone.setAlpha(config.minAlpha * alphaMul);
         clone.setTint(0x7d746c);
 
         const glow = this.scene.add.circle(
@@ -62,7 +63,7 @@ export default class AshDissolveEffect {
             target.y - Math.max(2, config.riseDistance * 0.2),
             config.glowRadius,
             config.glowColor,
-            config.glowAlpha
+            config.glowAlpha * alphaMul
         );
         glow.setDepth(depth - 1);
 
@@ -72,7 +73,7 @@ export default class AshDissolveEffect {
             Math.max(8, (target.displayWidth || target.width || 18) * 0.32),
             Math.max(14, (target.displayHeight || target.height || 24) * 0.58),
             config.spiritColor,
-            config.spiritAlpha
+            config.spiritAlpha * alphaMul
         );
         spirit.setDepth(depth);
         spirit.setScale(config.spiritScale);
@@ -122,7 +123,7 @@ export default class AshDissolveEffect {
                 size,
                 size,
                 Phaser.Math.RND.pick(config.ashColors),
-                0.95
+                0.95 * alphaMul
             );
             particle.setDepth(depth + 1);
             particle.setRotation(Phaser.Math.FloatBetween(-0.4, 0.4));

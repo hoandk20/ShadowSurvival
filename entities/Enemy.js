@@ -177,6 +177,12 @@ export default class Enemy extends BaseEntity {
             this.scene?.time?.delayedCall(16, () => {
                 if (!this.active || !this.scene) return;
                 this.setVisible(true);
+                // Visual clarity: keep bosses brightest, regular enemies slightly dimmer than the player.
+                if (this.isBoss || this.isMiniBoss || this.isFinalBoss) {
+                    this.setAlpha(1);
+                } else {
+                    this.setAlpha(0.85);
+                }
             });
         });
     }
@@ -1348,6 +1354,7 @@ export default class Enemy extends BaseEntity {
         this.dashAttackRemainingDistance = 0;
         this.knockbackTimer = 0;
         this.knockbackVelocity.set(0, 0);
+        // Bosses stay bright for readability.
         this.setAlpha(1);
         if (this.body) {
             this.body.enable = true;

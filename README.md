@@ -19,11 +19,15 @@ Implemented now:
 - pre-shop stat card choice before each shop
 - shop stock, reroll, and lock persistence flow
 - runtime debug panel for gameplay iteration
+- hit feedback juice: screen shake and brief slow-motion / freeze-frame style timeScale moments on key events (not on every hit)
 
 Not implemented as a shipped feature:
 
 - real multiplayer / co-op
 - active in-run level-up card roll flow on level-up in the current build
+- deeper UI polish pass (transitions, more juice, consistency across overlays)
+- late-game visual clarity pass (stacked VFX readability, telegraph contrast, effect density controls)
+- richer audio layering/mix pass (currently music defaults to OFF; SFX is ON)
 
 See [COOP_DECISION.md](./COOP_DECISION.md) for co-op planning notes.
 
@@ -235,6 +239,12 @@ Source: [config/skill.js](./config/skill.js)
 - default explosion is not assigned to any skill right now
 - `explosion` exists as a status effect config, ready to be attached later
 - normalized skill knockback currently defaults to `30`
+
+### Summon Skills
+
+- `ghost_summon` is a Radian-only summon skill (default spawns `2` ghosts and scales with `projectileCount`)
+- ghosts are melee summons that try to spread targets (but prioritize bosses when present)
+- ghosts expire after `20s` and are re-summoned in a loop
 
 ## Shop Items
 
@@ -469,6 +479,7 @@ Current runtime flow:
 
 - `maprock_field` now runs a scripted `20`-wave plan
 - `church_sanctuary` now also runs a scripted `20`-wave plan with a different enemy roster
+- maps can define an `atmosphere` overlay in [config/map.js](./config/map.js) to darken just the tilemap background while keeping players/enemies/telegraphs bright (fixed-screen `MULTIPLY` rectangle with a low depth)
 - weighted wave spawn is supported inside scripted wave plans
 - each wave shows a `WAVE N` banner and waits about `2s` before enemies start spawning
 - each wave also shows a centered countdown timer at the top of the screen

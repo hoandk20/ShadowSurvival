@@ -27,14 +27,14 @@ export default class SkillEffectRunner {
     }
 
     spawnExplosion(x, y, depth = 40, options = {}) {
-        this.explosionEffect?.spawn(x, y, depth, options);
+        this.explosionEffect?.spawn(x, y, depth, { alphaMultiplier: 0.6, ...options });
     }
 
     spawnAshDissolve(target, depth = 40, options = {}) {
-        this.ashDissolveEffect?.spawn(target, depth, options);
+        this.ashDissolveEffect?.spawn(target, depth, { alphaMultiplier: 0.6, ...options });
     }
 
     spawnChainLightning(fromPoint, toPoint, depth = 40, options = {}) {
-        this.chainLightningEffect?.spawn(fromPoint, toPoint, depth, options);
+        this.chainLightningEffect?.spawn(fromPoint, toPoint, depth, { alphaMultiplier: 0.6, ...options });
     }
 }

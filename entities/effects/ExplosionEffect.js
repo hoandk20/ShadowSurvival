@@ -43,13 +43,14 @@ export default class ExplosionEffect {
     }
 
     spawnDefault(x, y, depth, config) {
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
         const flash = this.scene.add.graphics({ x, y });
         flash.setDepth(depth);
-        flash.fillStyle(config.outerColor, 0.3);
+        flash.fillStyle(config.outerColor, 0.3 * alphaMul);
         flash.fillCircle(0, 0, config.outerRadius);
-        flash.fillStyle(config.coreColor, 0.92);
+        flash.fillStyle(config.coreColor, 0.92 * alphaMul);
         flash.fillCircle(0, 0, config.coreRadius);
-        flash.lineStyle(2, config.ringColor, 0.85);
+        flash.lineStyle(2, config.ringColor, 0.85 * alphaMul);
         flash.strokeCircle(0, 0, config.coreRadius + 4);
 
         this.scene.tweens.add({
@@ -63,8 +64,9 @@ export default class ExplosionEffect {
         });
 
         const ring = this.scene.add.circle(x, y, config.ringRadius, config.outerColor, 0);
-        ring.setStrokeStyle(2, config.ringColor, 0.9);
+        ring.setStrokeStyle(2, config.ringColor, 0.9 * alphaMul);
         ring.setDepth(depth - 1);
+        ring.setAlpha(alphaMul);
 
         this.scene.tweens.add({
             targets: ring,
@@ -77,7 +79,7 @@ export default class ExplosionEffect {
         });
 
         for (let i = 0; i < config.emberCount; i += 1) {
-            const ember = this.scene.add.rectangle(x, y, 3, 3, config.emberColor, 0.95);
+            const ember = this.scene.add.rectangle(x, y, 3, 3, config.emberColor, 0.95 * alphaMul);
             const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
             const distance = Phaser.Math.Between(
                 config.emberDistance.min,
@@ -104,14 +106,17 @@ export default class ExplosionEffect {
     }
 
     spawnPixelFlame(x, y, depth, config) {
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
         const pixelSize = config.pixelSize ?? 4;
         const burst = this.scene.add.container(x, y);
         burst.setDepth(depth);
+        burst.setAlpha(alphaMul);
 
         if ((config.ringRadius ?? 0) > 0) {
             const shockwave = this.scene.add.circle(x, y, config.ringRadius, config.outerColor ?? config.ringColor ?? 0xff8c42, 0);
-            shockwave.setStrokeStyle(Math.max(2, Math.round(pixelSize * 0.75)), config.ringColor ?? 0xff5a36, 0.95);
+            shockwave.setStrokeStyle(Math.max(2, Math.round(pixelSize * 0.75)), config.ringColor ?? 0xff5a36, 0.95 * alphaMul);
             shockwave.setDepth(depth - 1);
+            shockwave.setAlpha(alphaMul);
 
             this.scene.tweens.add({
                 targets: shockwave,
@@ -144,6 +149,7 @@ export default class ExplosionEffect {
                 const size = layer.size + ((i + layerIndex) % 2 === 0 ? 0 : pixelSize);
                 const block = this.scene.add.rectangle(offsetX, offsetY, size, size, layer.color, 1)
                     .setOrigin(0.5);
+                block.setAlpha(alphaMul);
                 burst.add(block);
                 blocks.push(block);
             }
@@ -151,6 +157,7 @@ export default class ExplosionEffect {
 
         const core = this.scene.add.rectangle(0, 0, pixelSize * 4, pixelSize * 4, config.coreColor, 1)
             .setOrigin(0.5);
+        core.setAlpha(alphaMul);
         burst.add(core);
         blocks.push(core);
 

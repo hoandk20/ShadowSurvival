@@ -30,12 +30,14 @@ export default class ChainLightningEffect {
     spawn(fromPoint, toPoint, depth = 50, options = {}) {
         if (!this.scene || !fromPoint || !toPoint) return;
         const config = { ...this.config, ...options };
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
         const fromX = fromPoint.x ?? 0;
         const fromY = fromPoint.y ?? 0;
         const toX = toPoint.x ?? 0;
         const toY = toPoint.y ?? 0;
         const graphics = this.scene.add.graphics();
         graphics.setDepth(depth);
+        graphics.setAlpha(alphaMul);
 
         const points = this.buildBoltPoints(fromX, fromY, toX, toY);
         this.drawBolt(graphics, points, config);
@@ -73,7 +75,8 @@ export default class ChainLightningEffect {
     }
 
     drawBolt(graphics, points, config) {
-        graphics.lineStyle(config.glowThickness, config.glowColor, config.alpha * 0.45);
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
+        graphics.lineStyle(config.glowThickness, config.glowColor, config.alpha * 0.45 * alphaMul);
         graphics.beginPath();
         graphics.moveTo(points[0].x, points[0].y);
         for (let index = 1; index < points.length; index += 1) {
@@ -81,7 +84,7 @@ export default class ChainLightningEffect {
         }
         graphics.strokePath();
 
-        graphics.lineStyle(config.thickness, config.color, config.alpha);
+        graphics.lineStyle(config.thickness, config.color, config.alpha * alphaMul);
         graphics.beginPath();
         graphics.moveTo(points[0].x, points[0].y);
         for (let index = 1; index < points.length; index += 1) {
@@ -91,6 +94,7 @@ export default class ChainLightningEffect {
     }
 
     spawnParticles(points, depth, config) {
+        const alphaMul = Phaser.Math.Clamp(config.alphaMultiplier ?? 1, 0, 1);
         for (let index = 0; index < config.particleCount; index += 1) {
             const t = index / Math.max(1, config.particleCount - 1);
             const pointIndex = Math.min(points.length - 1, Math.round(t * (points.length - 1)));
@@ -104,6 +108,7 @@ export default class ChainLightningEffect {
             particle.setTint(index % 2 === 0 ? config.color : config.glowColor);
             particle.setBlendMode(Phaser.BlendModes.ADD);
             particle.setScale(Phaser.Math.FloatBetween(0.8, 1.8));
+            particle.setAlpha(alphaMul);
 
             this.scene.tweens.add({
                 targets: particle,

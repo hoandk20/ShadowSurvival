@@ -12,6 +12,12 @@ const MAP_DEFINITIONS = {
         label: 'MapRock Plateau',
         description: 'A ruined stone field layered with broken ground, props, and blocking terrain.',
         mapKey: MAPROCK_KEY,
+        atmosphere: {
+            overlayColor: 0x0c0f12,
+            alpha: 0.18,
+            blendMode: 'MULTIPLY',
+            overlayDepth: 5
+        },
         infiniteHorizontal: true,
         alternatingMirroredChunks: true,
         activeSegmentRadius: 2,
@@ -47,6 +53,13 @@ const MAP_DEFINITIONS = {
         label: 'Church Sanctuary',
         description: 'The Church Sanctuary has fallen. After the Shadow Collapse, the graves opened—and the dead rose.Nothing here rests anymore.',
         mapKey: CHURCH_KEY,
+        atmosphere: {
+            // Darken the scene without affecting HUD (HUD is a separate scene).
+            overlayColor: 0x0b0f1a,
+            alpha: 0.32,
+            blendMode: 'MULTIPLY',
+            overlayDepth: 5
+        },
         infiniteHorizontal: true,
         alternatingMirroredChunks: true,
         activeSegmentRadius: 2,
@@ -81,6 +94,12 @@ const MAP_DEFINITIONS = {
         label: 'Inside Church',
         description: 'A once-sacred church now consumed by decay. Sealed during the plague, it became the birthplace of something far darker.',
         mapKey: INSIDE_CHURCH_KEY,
+        atmosphere: {
+            overlayColor: 0x05070c,
+            alpha: 0.42,
+            blendMode: 'MULTIPLY',
+            overlayDepth: 5
+        },
         infiniteHorizontal: true,
         activeSegmentRadius: 2,
         preloadSegmentRadius: 2,

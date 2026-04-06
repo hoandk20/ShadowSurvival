@@ -15,6 +15,7 @@ export default class MapManager {
         this.segmentWidth = 0;
         this.segmentHeight = 0;
         this.segmentRange = { min: 0, max: 0 };
+        this.atmosphereOverlay = null;
     }
 
     preloadMaps() {
@@ -65,6 +66,7 @@ export default class MapManager {
         }
         this.normalizeLayerDepths();
         this.ensureBackgroundLayer();
+        this.ensureAtmosphereOverlay();
         this.applyWorldBounds();
         return definition;
     }
@@ -96,6 +98,10 @@ export default class MapManager {
             this.backgroundRect.destroy();
             this.backgroundRect = null;
         }
+        if (this.atmosphereOverlay) {
+            this.atmosphereOverlay.destroy();
+            this.atmosphereOverlay = null;
+        }
         this.currentDefinition = null;
         this.currentMapKey = null;
         this.segmentWidth = 0;
@@ -113,6 +119,33 @@ export default class MapManager {
         const { width, height } = this.getMapSize();
         if (!width || !height) return;
         this.backgroundRect = this.scene.add.rectangle(0, 0, width, height, 0x51554e, 1).setOrigin(0).setDepth(-10);
+    }
+
+    ensureAtmosphereOverlay() {
+        const definition = this.getCurrentMap();
+        const atmosphere = definition?.atmosphere ?? null;
+        if (this.atmosphereOverlay) {
+            this.atmosphereOverlay.destroy();
+            this.atmosphereOverlay = null;
+        }
+        if (!atmosphere) return;
+
+        const scene = this.scene;
+        const w = scene?.scale?.width ?? 0;
+        const h = scene?.scale?.height ?? 0;
+        if (!w || !h || !scene?.add?.rectangle) return;
+
+        const color = atmosphere.overlayColor ?? 0x000000;
+        const alpha = Phaser.Math.Clamp(atmosphere.alpha ?? 0.35, 0, 1);
+        const blend = atmosphere.blendMode ?? 'MULTIPLY';
+        const blendMode = Phaser.BlendModes?.[blend] ?? Phaser.BlendModes.MULTIPLY;
+        const overlayDepth = Math.max(-1000, Math.round(atmosphere.overlayDepth ?? 5));
+
+        this.atmosphereOverlay = scene.add
+            .rectangle(w / 2, h / 2, w, h, color, alpha)
+            .setScrollFactor(0)
+            .setDepth(overlayDepth);
+        this.atmosphereOverlay.setBlendMode(blendMode);
     }
 
     getMapSize() {
