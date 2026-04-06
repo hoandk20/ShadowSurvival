@@ -505,16 +505,24 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const ownerPlayerId = this.ownerPlayerId ?? null;
         const tickRatio = Math.max(0, Number(this.config?.zoneDamageRatio ?? 0.25) || 0);
         const tickIntervalMs = this.config?.zoneTickIntervalMs ?? 450;
-        const zoneDurationMs = this.config?.zoneDurationMs ?? this.duration ?? 1800;
-        const tickCount = Math.max(1, Math.floor(zoneDurationMs / tickIntervalMs));
+        const baseZoneDurationMs = this.config?.zoneDurationMs ?? this.duration ?? 1800;
+        const effectDurationMul = Math.max(0.1, this.owner?.resolveCharacterStats?.()?.effectDurationMultiplier ?? 1)
+            * Math.max(0.1, this.owner?.globalEffectDurationMultiplier ?? 1);
+        // effectDurationMultiplier should increase the total zone time (more ticks happen over a longer duration).
+        const zoneDurationMs = Math.max(tickIntervalMs, Math.round(baseZoneDurationMs * effectDurationMul));
+        const baseTickCount = Math.max(1, Math.floor(baseZoneDurationMs / tickIntervalMs));
 
         // Damage model: base ritual damage is distributed across ticks.
         // This avoids each tick dealing the full snapshot damage.
-        const baseTotalDamage = Math.max(1, Math.round((this.baseDamage ?? 1) * tickRatio));
+        const baseDamageSnapshot = Math.max(1, Number(this.baseDamage ?? 1) || 1);
+        const baseExponent = Phaser.Math.Clamp(Number(this.config?.zoneBaseDamageExponent ?? 1) || 1, 0.25, 1);
+        // Compress base damage so effect damage scaling is relatively more valuable.
+        const baseTotalDamage = Math.max(1, Math.round((baseDamageSnapshot ** baseExponent) * tickRatio));
         const characterEffectMul = Math.max(0.01, this.owner?.resolveCharacterStats?.()?.effectDamageMultiplier ?? 1);
         const globalEffectMul = Math.max(0.01, this.owner?.globalEffectDamageMultiplier ?? 1);
         const totalDamage = Math.max(1, Math.round(baseTotalDamage * characterEffectMul * globalEffectMul));
-        const tickDamage = Math.max(1, Math.round(totalDamage / tickCount));
+        // Keep per-tick damage stable as duration scales; longer duration increases total damage naturally.
+        const tickDamage = Math.max(1, Math.round(totalDamage / baseTickCount));
 
         const depth = Math.max(this.owner?.depth ?? 0, anchorTarget?.depth ?? 0, this.depth ?? 20) + 8;
         const areaMultiplier = Math.max(0.1, this.owner?.getSkillAreaMultiplier?.(this.skillType) ?? 1);
@@ -525,7 +533,7 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             radius: Math.max(18, Math.round((this.config?.zoneRadius ?? 120) * areaMultiplier)),
             durationMs: zoneDurationMs,
             tickIntervalMs,
-            slowDurationMs: this.config?.zoneSlowDurationMs ?? 550,
+            slowDurationMs: Math.max(150, Math.round((this.config?.zoneSlowDurationMs ?? 550) * effectDurationMul)),
             slowMultiplier: this.config?.zoneSlowMultiplier ?? 0.6,
             damage: tickDamage,
             ownerPlayerId,

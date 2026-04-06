@@ -129,6 +129,36 @@ export function createPixelToggle(scene, x, y, label, value, onToggle) {
     return container;
 }
 
+export function createPixelCycle(scene, x, y, label, options = [], value, onChange) {
+    const container = scene.add.container(x, y);
+    const labelText = createPixelText(scene, -60, 0, label, {
+        fontSize: '14px',
+        originX: 0,
+        color: UI_COLORS.text
+    });
+    const safeOptions = Array.isArray(options) ? options.filter(Boolean) : [];
+    const initialIndex = Math.max(0, safeOptions.indexOf(value));
+    const state = { index: initialIndex };
+    const button = createPixelButton(scene, 88, 0, 110, 28, String(safeOptions[state.index] ?? value ?? ''), () => {
+        if (!safeOptions.length) return;
+        state.index = (state.index + 1) % safeOptions.length;
+        const next = safeOptions[state.index];
+        button.getData('text')?.setText(String(next));
+        onChange?.(next);
+    }, {
+        fontSize: '13px',
+        fill: 0x222a34,
+        inner: 0x2f3d4a,
+        activeFill: 0x2a3642,
+        activeInner: 0x3b4d5e,
+        border: UI_COLORS.border,
+        activeBorder: UI_COLORS.goldBright,
+        textColor: '#d9f6ff'
+    });
+    container.add([labelText, button]);
+    return container;
+}
+
 export function createSparkField(scene, x, y, width, height, count = 12, tint = UI_COLORS.ember) {
     const container = scene.add.container(x, y);
     const tweens = [];

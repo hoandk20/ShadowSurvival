@@ -43,6 +43,30 @@ export const STATUS_EFFECT_CONFIG = {
         iconFrame: 'image_3.png',
         showStack: false
     },
+    petrify: {
+        defaultStats: {
+            durationMs: 700,
+            mode: 'stun',
+            slowMultiplier: 0,
+            maxStacks: 1
+        },
+        // Stone-ish tint. No icon yet to avoid confusion with freeze.
+        highlightTint: 0xbab3a5,
+        highlightPriority: 55,
+        showStack: false
+    },
+    ritual_slow: {
+        defaultStats: {
+            durationMs: 650,
+            slowMultiplier: 0.65,
+            maxStacks: 1
+        },
+        highlightTint: 0x8a2be2,
+        highlightPriority: 35,
+        iconPriority: 75,
+        iconTextureKey: 'ritual_zone_icon',
+        showStack: false
+    },
     poison: {
         defaultStats: {
             durationMs: 4000,

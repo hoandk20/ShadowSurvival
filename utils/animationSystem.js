@@ -16,6 +16,9 @@ const STATUS_EFFECT_ATLAS = {
     texture: 'assets/statuseffect/spritesheet.png',
     atlasJSON: 'assets/statuseffect/spritesheet.json'
 };
+const EXTRA_UI_TEXTURES = [
+    { key: 'ritual_zone_icon', path: 'assets/skills/ritual_zone/frame0.png' }
+];
 
 const buildAtlasFrames = (scene, atlasKey, frameNames = []) => {
     if (!scene.textures.exists(atlasKey)) return [];
@@ -69,6 +72,14 @@ export function preloadAllAssets(scene) {
             }
         }
     }
+
+    // Extra single-image textures (status icons, misc UI).
+    EXTRA_UI_TEXTURES.forEach((entry) => {
+        if (!entry?.key || !entry?.path) return;
+        if (!scene.textures.exists(entry.key)) {
+            scene.load.image(entry.key, entry.path);
+        }
+    });
 
     // Load skill assets (per-frame or spritesheet)
     for (const skillType in SKILL_CONFIG) {

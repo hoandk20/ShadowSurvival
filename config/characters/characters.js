@@ -86,7 +86,7 @@ export const CHARACTER_CONFIG = {
             critChance: 0.25,
             critMultiplier: 0.3,
             effectChance: 0.2,
-            effectDamageMultiplier: 0.3
+            effectDamageMultiplier: 0.1
         },
         size: { width: 20, height: 20 }
     }),

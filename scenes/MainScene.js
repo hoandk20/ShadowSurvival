@@ -32,6 +32,7 @@ import PlayerRunState from '../systems/PlayerRunState.js';
 import TargetingSystem from '../systems/TargetingSystem.js';
 import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
 import { ensureAudioSettings, installAudioUnlock, isAudioUnlocked, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
+import { addDynamon, bootstrapMetaProgress } from '../utils/metaProgress.js';
 import EnemyProjectile from '../entities/EnemyProjectile.js';
 import GhostSummon from '../entities/summons/GhostSummon.js';
 
@@ -199,6 +200,7 @@ export default class MainScene extends Phaser.Scene {
         this.registry.set('selectedSupporterKey', null);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         ensureAudioSettings(this.registry);
+        bootstrapMetaProgress(this);
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.input.keyboard.on('keydown-ESC', this.handlePauseToggle, this);
         this.setupTouchControls();
@@ -1964,6 +1966,11 @@ export default class MainScene extends Phaser.Scene {
         this.waveSpawnRemaining = 0;
         this.waveSpawnQueue = [];
         this.waveKillCount = this.waveEnemyCount;
+        if (reason === 'cleared') {
+            // Meta currency: award dynamon on successful wave clear.
+            const gain = Phaser.Math.Between(7, 10);
+            addDynamon(this, gain, { countWaveClear: true });
+        }
         if (reason === 'timeout') {
             this.clearTimedOutWaveRemnants();
             this.time.delayedCall(0, () => {
@@ -2901,7 +2908,13 @@ export default class MainScene extends Phaser.Scene {
         const resolvedRunState = this.ensureShopRunState(context.runState);
         if (!resolvedRunState) return [];
         if (this.debugMode) {
-            resolvedRunState.shopCurrentStockIds = SHOP_ITEM_CONFIG.map((item) => item.id);
+            const blocked = new Set([
+                ...this.getUnlockElementShopExcludeIds(context.player),
+                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player), context.player?.characterKey ?? null)
+            ]);
+            resolvedRunState.shopCurrentStockIds = SHOP_ITEM_CONFIG
+                .filter((item) => !blocked.has(item.id))
+                .map((item) => item.id);
             resolvedRunState.shopLockedItemIds = [];
             return resolvedRunState.shopCurrentStockIds;
         }

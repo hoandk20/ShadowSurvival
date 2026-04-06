@@ -2,6 +2,8 @@ import { CHARACTER_CONFIG, CHARACTER_KEYS, DEFAULT_CHARACTER_KEY } from '../conf
 import { CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { DEFAULT_MAP_KEY, getAvailableMaps, getMapDefinition } from '../config/map.js';
 import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, installAudioUnlock, updateAudioSetting } from '../utils/audioSettings.js';
+import { ensureGameplaySettings, getGameplaySettings, updateGameplaySetting } from '../utils/gameplaySettings.js';
+import { bootstrapMetaProgress, getMetaProgress } from '../utils/metaProgress.js';
 import {
     UI_COLORS,
     createBackdrop,
@@ -9,10 +11,12 @@ import {
     createPixelPanel,
     createPixelText,
     createPixelToggle,
+    createPixelCycle,
     createSparkField
 } from './ui/PixelSceneHelpers.js';
 
 const MENU_BACKGROUND_KEY = 'menu_background';
+const DYNAMON_ICON_KEY = 'menu_dynamon_icon';
 const MAP_ICON_KEYS = {
     inside_church: 'map_icon_inside_church',
     maprock_field: 'map_icon_maprock',
@@ -65,6 +69,9 @@ export default class MainMenuScene extends Phaser.Scene {
         if (!this.textures.exists(MENU_BACKGROUND_KEY)) {
             this.load.image(MENU_BACKGROUND_KEY, 'assets/menu/background.png');
         }
+        if (!this.textures.exists(DYNAMON_ICON_KEY)) {
+            this.load.image(DYNAMON_ICON_KEY, 'assets/menu/dynamon.png');
+        }
         Object.entries(MAP_ICON_PATHS).forEach(([mapKey, path]) => {
             const textureKey = MAP_ICON_KEYS[mapKey];
             if (!textureKey || this.textures.exists(textureKey)) return;
@@ -81,6 +88,8 @@ export default class MainMenuScene extends Phaser.Scene {
         this.cameras.main.roundPixels = true;
         this.mode = 'main';
         this.registry.set('audioSettings', { ...DEFAULT_AUDIO_SETTINGS, ...ensureAudioSettings(this.registry) });
+        ensureGameplaySettings(this.registry);
+        bootstrapMetaProgress(this);
         const initialCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
         this.selectedCharacterKey = CHARACTER_CONFIG[initialCharacterKey] ? initialCharacterKey : DEFAULT_CHARACTER_KEY;
         const initialMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
@@ -160,6 +169,24 @@ export default class MainMenuScene extends Phaser.Scene {
             color: SHOP_HUB_COLORS.dimText,
             strokeThickness: 3
         }));
+
+        // Meta currency HUD (menu-only): Dynamon display.
+        const meta = getMetaProgress(this);
+        const dynamonContainer = this.add.container(width - metrics.safeX - 10, metrics.safeY + 22);
+        const icon = this.add.image(0, 0, DYNAMON_ICON_KEY).setOrigin(1, 0.5);
+        const iconScale = metrics.isCompact ? 0.7 : 0.8;
+        icon.setScale(iconScale);
+        const amountText = createPixelText(this, 10, 0, `${Math.max(0, Math.floor(meta.dynamon ?? 0))}`, {
+            fontSize: metrics.isCompact ? '14px' : '16px',
+            originX: 0,
+            originY: 0.5,
+            color: SHOP_HUB_COLORS.title,
+            strokeThickness: 4
+        });
+        dynamonContainer.add([icon, amountText]);
+        // Keep above spark field but below title.
+        dynamonContainer.setDepth(5);
+        this.uiRoot.add(dynamonContainer);
 
         if (this.mode === 'main') {
             this.renderMainMenu();
@@ -449,34 +476,46 @@ export default class MainMenuScene extends Phaser.Scene {
         const showFullscreenButton = true;
         const panelWidth = Math.min(width - safeX * 2, isPortrait ? 400 : 460);
         const panelHeight = showFullscreenButton
-            ? (isCompact ? 382 : 360)
-            : (isCompact ? 320 : 300);
+            ? (isCompact ? 432 : 412)
+            : (isCompact ? 372 : 352);
         const panel = createPixelPanel(this, width / 2, height / 2, panelWidth, panelHeight, {
             fill: SHOP_HUB_COLORS.panelInner,
             fillDark: SHOP_HUB_COLORS.panelOuter,
             border: SHOP_HUB_COLORS.border
         });
         this.uiRoot.add(panel);
-        panel.add(createPixelText(this, 0, -96, 'SETTINGS', {
+        const titleY = -panelHeight / 2 + 56;
+        panel.add(createPixelText(this, 0, titleY, 'SETTINGS', {
             fontSize: isCompact ? '16px' : '18px',
             color: SHOP_HUB_COLORS.title
         }));
         const settings = getAudioSettings(this);
+        const gameplay = getGameplaySettings(this);
         const toggleX = -Math.min(110, panelWidth * 0.25);
-        const musicToggle = createPixelToggle(this, toggleX, -28, 'MUSIC', settings.musicEnabled, (value) => {
+        const firstRowY = titleY + 84;
+        const rowGap = 60;
+        const musicToggle = createPixelToggle(this, toggleX, firstRowY + (rowGap * 0), 'MUSIC', settings.musicEnabled, (value) => {
             updateAudioSetting(this, 'musicEnabled', value);
         });
-        const sfxToggle = createPixelToggle(this, toggleX, 42, 'SFX', settings.sfxEnabled, (value) => {
+        const sfxToggle = createPixelToggle(this, toggleX, firstRowY + (rowGap * 1), 'SFX', settings.sfxEnabled, (value) => {
             updateAudioSetting(this, 'sfxEnabled', value);
         });
-        panel.add([musicToggle, sfxToggle]);
-        const backButtonY = height / 2 + panelHeight / 2 - 34;
+        const dmgCycle = createPixelCycle(this, toggleX, firstRowY + (rowGap * 2), 'DMG TEXT', ['full', 'reduced', 'off'], gameplay.damageNumbersMode ?? 'full', (next) => {
+            updateGameplaySetting(this, 'damageNumbersMode', next);
+        });
+        const dmgCapCycle = createPixelCycle(this, toggleX, firstRowY + (rowGap * 3), 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
+            updateGameplaySetting(this, 'damageTextCapMode', next);
+        });
+        panel.add([musicToggle, sfxToggle, dmgCycle, dmgCapCycle]);
+
+        const fullscreenButtonY = panelHeight / 2 - (isCompact ? 86 : 82);
+        const backButtonY = panelHeight / 2 - (isCompact ? 36 : 34);
         if (showFullscreenButton) {
             const isFullscreen = this.scale.isFullscreen === true;
             panel.add(createPixelButton(
                 this,
                 0,
-                panelHeight / 2 - 74,
+                fullscreenButtonY,
                 Math.min(240, panelWidth - 48),
                 isCompact ? 42 : 40,
                 isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN',
@@ -496,7 +535,7 @@ export default class MainMenuScene extends Phaser.Scene {
                 }
             ));
         }
-        this.uiRoot.add(createPixelButton(this, width / 2, backButtonY, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
+        panel.add(createPixelButton(this, 0, backButtonY, Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
             fontSize: isCompact ? '14px' : '16px',
             textColor: SHOP_HUB_COLORS.text,
             fill: SHOP_HUB_COLORS.buttonFill,

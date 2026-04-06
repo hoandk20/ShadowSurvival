@@ -100,11 +100,14 @@ const RAW_SKILL_CONFIG = {
         // Base damage is distributed across ticks (via zoneDamageRatio and zoneTickIntervalMs).
         damage: 24,
         duration: 1500,
-        cooldown: 2000,
+        cooldown: 2300,
         zoneRadius: 130,
         zoneDurationMs: 1600,
         zoneTickIntervalMs: 400,
-        zoneDamageRatio: 0.25,
+        zoneDamageRatio: 0.3,
+        // Compress base damage contribution so effect damage scaling matters more.
+        // baseTotalDamage = (baseDamage ^ exponent) * zoneDamageRatio
+        zoneBaseDamageExponent: 0.85,
         zoneSlowMultiplier: 0.65,
         zoneSlowDurationMs: 650,
         tags: ['ritual', 'zone']

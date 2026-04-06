@@ -17,6 +17,8 @@ export default class EnemyProjectile extends Phaser.GameObjects.Arc {
         this.speed = Math.max(0, options.speed ?? 220);
         this.lifeMs = Math.max(200, options.lifetimeMs ?? 1400);
         this.glowColor = options.glowColor ?? options.color ?? 0xffffff;
+        this.onHitEffectKey = options.onHitEffectKey ?? null;
+        this.onHitEffectOptions = options.onHitEffectOptions ?? null;
         this.direction = new Phaser.Math.Vector2(
             options.directionX ?? ((target?.x ?? this.x + 1) - this.x),
             options.directionY ?? ((target?.y ?? this.y) - this.y)
@@ -53,6 +55,12 @@ export default class EnemyProjectile extends Phaser.GameObjects.Arc {
             const dy = player.y - this.y;
             if ((dx * dx) + (dy * dy) > hitRadius * hitRadius) continue;
             player.takeDamage?.(this.damage, this.owner, { fromEnemyProjectile: true });
+            if (this.onHitEffectKey && this.scene?.statusEffectSystem?.applyEffect) {
+                this.scene.statusEffectSystem.applyEffect(player, this.onHitEffectKey, {
+                    ...(this.onHitEffectOptions ?? {}),
+                    source: this.owner
+                });
+            }
             this.destroy();
             return;
         }

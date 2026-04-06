@@ -190,14 +190,37 @@ export const ENEMIES = {
     medusa: createEnemyConfig({
         name: 'Medusa',
         statsBonus: {
-            effectResist: 0.6
+            effectResist: 0.6,
+            damage: 10,
+            attackCooldown: 1400,
+            attackRange: 260,
+            knockbackResist: -0.2
         },
-        behavior: 'chase',
+        combatType: 'ranged',
+        attackStyle: 'projectile_sniper',
+        behavior: 'ranged',
         texture: 'medusa',
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120
+        flashDuration: 120,
+        rangedAttack: {
+            preferredRange: 220,
+            keepDistanceRatio: 0.82,
+            projectileSpeed: 520,
+            projectileRadius: 5,
+            projectileLifetimeMs: 1900,
+            projectileColor: 0xc8f7ff,
+            projectileGlowColor: 0xf7fbff,
+            sniperWindupMs: 850,
+            sniperRecoveryMs: 220,
+            onHitEffectKey: 'petrify',
+            onHitEffectOptions: {
+                durationMs: 700,
+                mode: 'stun',
+                slowMultiplier: 0
+            }
+        }
     }),
     minotau: createEnemyConfig({
         name: 'Minotau',

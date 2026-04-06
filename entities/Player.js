@@ -1176,12 +1176,14 @@ export default class Player extends BaseEntity {
     }
 
     createStatusEffectIndicator(entry) {
-        if (!this.scene?.textures?.exists(STATUS_ICON_ATLAS_KEY)) {
+        const cfg = getStatusEffectConfig(entry.key) ?? {};
+        const textureKey = cfg.iconTextureKey ?? STATUS_ICON_ATLAS_KEY;
+        const frame = cfg.iconFrame ?? null;
+        if (!this.scene?.textures?.exists(textureKey)) {
             return null;
         }
-        const frame = getStatusEffectConfig(entry.key)?.iconFrame ?? null;
-        if (!frame) return null;
-        const icon = this.scene.add.image(this.x, this.y, STATUS_ICON_ATLAS_KEY, frame)
+        if (textureKey === STATUS_ICON_ATLAS_KEY && !frame) return null;
+        const icon = this.scene.add.image(this.x, this.y, textureKey, frame ?? undefined)
             .setDepth(1210)
             .setDisplaySize(8, 8);
         const stackText = this.scene.add.text(this.x, this.y, '', {
@@ -1209,7 +1211,10 @@ export default class Player extends BaseEntity {
 
     syncStatusEffectIndicators(entries = []) {
         if (!this.scene) return;
-        const validEntries = entries.filter((entry) => getStatusEffectConfig(entry.key)?.iconFrame);
+        const validEntries = entries.filter((entry) => {
+            const cfg = getStatusEffectConfig(entry.key) ?? {};
+            return Boolean(cfg.iconTextureKey || cfg.iconFrame);
+        });
         for (let index = this.statusEffectIndicators.length - 1; index >= validEntries.length; index -= 1) {
             const indicator = this.statusEffectIndicators[index];
             indicator?.icon?.destroy?.();
@@ -1226,7 +1231,13 @@ export default class Player extends BaseEntity {
                 this.statusEffectIndicators[index] = indicator;
             }
             indicator.key = entry.key;
-            indicator.icon.setTexture(STATUS_ICON_ATLAS_KEY, getStatusEffectConfig(entry.key)?.iconFrame).setVisible(true);
+            const cfg = getStatusEffectConfig(entry.key) ?? {};
+            const textureKey = cfg.iconTextureKey ?? STATUS_ICON_ATLAS_KEY;
+            if (textureKey === STATUS_ICON_ATLAS_KEY) {
+                indicator.icon.setTexture(textureKey, cfg.iconFrame).setVisible(true);
+            } else {
+                indicator.icon.setTexture(textureKey).setVisible(true);
+            }
             const shouldShowStack = Boolean(getStatusEffectConfig(entry.key)?.showStack);
             indicator.stackText
                 .setVisible(shouldShowStack)

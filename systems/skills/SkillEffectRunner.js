@@ -2,6 +2,7 @@ import DamageText from '../../entities/DamageText.js';
 import ExplosionEffect from '../../entities/effects/ExplosionEffect.js';
 import AshDissolveEffect from '../../entities/effects/AshDissolveEffect.js';
 import ChainLightningEffect from '../../entities/effects/ChainLightningEffect.js';
+import { getDamageNumbersMode, getDamageTextCapMode } from '../../utils/gameplaySettings.js';
 
 export default class SkillEffectRunner {
     constructor(scene) {
@@ -13,17 +14,24 @@ export default class SkillEffectRunner {
 
     showDamageText(target, value, options = {}) {
         if (!target) return null;
-        return new DamageText(
+        const mode = getDamageNumbersMode(this.scene);
+        if (mode === 'off') return null;
+        // reduced mode still uses the same cap/merge system; callers can further lower frequency separately.
+        const capMode = getDamageTextCapMode(this.scene);
+        return DamageText.createOrMerge(
             this.scene,
             target.x,
             target.y - (target.body?.height ?? 20),
             value,
-            options
+            { capMode, ...options }
         );
     }
 
     showDamageTextAt(x, y, value, options = {}) {
-        return new DamageText(this.scene, x, y, value, options);
+        const mode = getDamageNumbersMode(this.scene);
+        if (mode === 'off') return null;
+        const capMode = getDamageTextCapMode(this.scene);
+        return DamageText.createOrMerge(this.scene, x, y, value, { capMode, ...options });
     }
 
     spawnExplosion(x, y, depth = 40, options = {}) {

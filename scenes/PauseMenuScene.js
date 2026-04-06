@@ -1,7 +1,9 @@
 import { getAudioSettings, updateAudioSetting } from '../utils/audioSettings.js';
+import { getGameplaySettings, updateGameplaySetting } from '../utils/gameplaySettings.js';
 import {
     createBackdrop,
     createPixelButton,
+    createPixelCycle,
     createPixelPanel,
     createPixelText,
     createPixelToggle
@@ -60,7 +62,7 @@ export default class PauseMenuScene extends Phaser.Scene {
         const safeX = Math.max(14, Math.floor(width * 0.05));
         const panelWidth = Math.min(width - safeX * 2, 420);
         const panelHeight = this.mode === 'settings'
-            ? (isCompact ? 300 : 270)
+            ? (isCompact ? 360 : 330)
             : (isCompact ? 340 : 300);
         const buttonWidth = Math.min(panelWidth - 44, 250);
         const buttonHeight = isCompact ? 44 : 38;
@@ -112,6 +114,7 @@ export default class PauseMenuScene extends Phaser.Scene {
             }));
         } else {
             const settings = getAudioSettings(this);
+            const gameplay = getGameplaySettings(this);
             const toggleX = -Math.min(100, panelWidth * 0.24);
             panel.add(createPixelToggle(this, toggleX, -20, 'MUSIC', settings.musicEnabled, (value) => {
                 updateAudioSetting(this, 'musicEnabled', value);
@@ -119,6 +122,12 @@ export default class PauseMenuScene extends Phaser.Scene {
             }));
             panel.add(createPixelToggle(this, toggleX, 44, 'SFX', settings.sfxEnabled, (value) => {
                 updateAudioSetting(this, 'sfxEnabled', value);
+            }));
+            panel.add(createPixelCycle(this, toggleX, 108, 'DMG TEXT', ['full', 'reduced', 'off'], gameplay.damageNumbersMode ?? 'full', (next) => {
+                updateGameplaySetting(this, 'damageNumbersMode', next);
+            }));
+            panel.add(createPixelCycle(this, toggleX, 156, 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
+                updateGameplaySetting(this, 'damageTextCapMode', next);
             }));
             panel.add(createPixelButton(this, 0, panelHeight / 2 - 34, Math.min(buttonWidth, 180), isCompact ? 42 : 36, 'BACK', () => {
                 this.mode = 'pause';

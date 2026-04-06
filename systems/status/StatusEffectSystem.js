@@ -213,6 +213,54 @@ class FreezeStatusEffect extends StatusEffect {
     }
 }
 
+class PetrifyStatusEffect extends StatusEffect {
+    static effectKey = 'petrify';
+
+    static defaultDefinition = {
+        ...StatusEffect.defaultDefinition,
+        durationMs: 700,
+        maxStacks: 1,
+        stackingMode: DEFAULT_STACKING_MODE
+    };
+
+    configure(options = {}) {
+        this.mode = options.mode ?? this.definition.mode ?? 'stun';
+        this.slowMultiplier = Phaser.Math.Clamp(options.slowMultiplier ?? this.definition.slowMultiplier ?? 0, 0, 1);
+    }
+
+    getStateContribution() {
+        return {
+            stunned: this.mode === 'stun',
+            speedMultiplier: this.mode === 'stun' ? 0 : this.slowMultiplier
+        };
+    }
+
+    getDisplayTint() {
+        // Stone-like pale tint.
+        return 0xbab3a5;
+    }
+}
+
+class RitualSlowStatusEffect extends StatusEffect {
+    static effectKey = 'ritual_slow';
+
+    static defaultDefinition = {
+        ...StatusEffect.defaultDefinition,
+        durationMs: 650,
+        maxStacks: 1,
+        stackingMode: 'refresh',
+        tags: ['ritual', 'slow']
+    };
+
+    configure(options = {}) {
+        this.slowMultiplier = Phaser.Math.Clamp(options.slowMultiplier ?? 0.65, 0.05, 1);
+    }
+
+    getStateContribution() {
+        return { speedMultiplier: this.slowMultiplier };
+    }
+}
+
 class ShockStatusEffect extends StatusEffect {
     static effectKey = 'shock';
 
@@ -539,6 +587,8 @@ class MarkStatusEffect extends StatusEffect {
 const EFFECT_CLASS_MAP = {
     burn: BurnStatusEffect,
     freeze: FreezeStatusEffect,
+    petrify: PetrifyStatusEffect,
+    ritual_slow: RitualSlowStatusEffect,
     shock: ShockStatusEffect,
     poison: PoisonStatusEffect,
     bleed: BleedStatusEffect,
@@ -1070,7 +1120,7 @@ export default class StatusEffectSystem {
                 this.trailPoisonApplyTimes.set(target, timeNow);
             }
             if (cloud.damage <= 0) return;
-            this.applyOwnedDamage(target, cloud.damage, {
+            const damageResult = this.applyOwnedDamage(target, cloud.damage, {
                 ownerPlayerId: cloud.ownerPlayerId,
                 source: cloud.source,
                 tags: cloud.tags,
@@ -1078,7 +1128,56 @@ export default class StatusEffectSystem {
                 damageTextColor: '#7dff8d',
                 damageTextFontSize: '7px'
             });
+
+            this.applyDotTickStatusEffectsFromSource(target, {
+                ownerPlayerId: cloud.ownerPlayerId,
+                source: cloud.source,
+                tags: cloud.tags,
+                damage: cloud.damage
+            }, damageResult);
         });
+    }
+
+    applyDotTickStatusEffectsFromSource(target, context = {}, damageResult = null, options = {}) {
+        if (!target?.active || target?.isDead) return;
+        const source = context?.source ?? null;
+        const ownerPlayerId = context?.ownerPlayerId ?? source?.ownerPlayerId ?? source?.playerId ?? null;
+        const sourceSkillKey = source?.skillType ?? source?.ownerSkillKey ?? source?.skillKey ?? null;
+        if (!sourceSkillKey) return;
+
+        const sourceOwner = source?.owner
+            ?? (ownerPlayerId ? this.scene?.getPlayerById?.(ownerPlayerId) : null)
+            ?? null;
+        const skillConfig = sourceOwner?.getSkillConfig?.(sourceSkillKey) ?? source?.config ?? null;
+        if (!skillConfig) return;
+
+        const excludeKeys = new Set(Array.isArray(options.excludeEffectKeys) ? options.excludeEffectKeys.filter(Boolean) : []);
+        const filterEntry = (entry) => {
+            const key = entry?.key ?? entry?.effectKey ?? null;
+            return !(key && excludeKeys.has(key));
+        };
+        const primaryStatusEffects = (Array.isArray(skillConfig.statusEffects) ? skillConfig.statusEffects : []).filter(filterEntry);
+        const bonusStatusEffects = (Array.isArray(skillConfig.bonusStatusEffects) ? skillConfig.bonusStatusEffects : []).filter(filterEntry);
+        if (!primaryStatusEffects.length && !bonusStatusEffects.length) return;
+
+        const event = {
+            target,
+            sourceOwner,
+            source,
+            ownerPlayerId,
+            attackTags: Array.from(new Set([...(context?.tags ?? []), 'dot', 'tick'])),
+            isCritical: false,
+            damage: context?.damage ?? 0,
+            damageTaken: damageResult?.healthDamage ?? context?.damage ?? 0,
+            absorbedDamage: damageResult?.absorbedDamage ?? 0,
+            didKill: Boolean(damageResult?.didKill),
+            direction: null,
+            force: 0,
+            trigger: 'onHit'
+        };
+
+        this.applyConfiguredEffects(primaryStatusEffects, event);
+        this.applyConfiguredEffects(bonusStatusEffects, event);
     }
 
     updateTrailClouds(delta = 0) {
@@ -2033,16 +2132,15 @@ export default class StatusEffectSystem {
                     const dx = target.x - centerX;
                     const dy = target.y - centerY;
                     if ((dx * dx) + (dy * dy) > radiusSq) return;
-                    this.applyEffect(target, 'freeze', {
+                    this.applyEffect(target, 'ritual_slow', {
                         ownerPlayerId: options.ownerPlayerId ?? null,
                         source: options.source ?? null,
                         durationMs: slowDurationMs,
-                        mode: 'slow',
                         slowMultiplier,
                         tags: ['ritual', 'slow']
                     });
                     if (damage <= 0) return;
-                    this.applyOwnedDamage(target, damage, {
+                    const damageResult = this.applyOwnedDamage(target, damage, {
                         ownerPlayerId: options.ownerPlayerId ?? null,
                         source: options.source ?? null,
                         tags: options.tags ?? ['ritual', 'zone', 'dot'],
@@ -2050,6 +2148,14 @@ export default class StatusEffectSystem {
                         damageTextColor: '#7dff8d',
                         damageTextFontSize: '7px'
                     });
+
+                    // Ritual Zone ticks can apply the owner's configured status effects, except explosion.
+                    this.applyDotTickStatusEffectsFromSource(target, {
+                        ownerPlayerId: options.ownerPlayerId ?? null,
+                        source: options.source ?? null,
+                        tags: options.tags ?? ['ritual', 'zone', 'dot'],
+                        damage
+                    }, damageResult, { excludeEffectKeys: ['explosion'] });
                 });
             }
         });
