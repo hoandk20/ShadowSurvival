@@ -166,7 +166,24 @@ export const ENEMIES = {
     }),
     moth_woman: createEnemyConfig({
         name: 'Moth Woman',
+        combatType: 'melee',
+        attackStyle: 'contact_strike',
         behavior: 'chase',
+        meleeEvasionDash: {
+            enabled: true,
+            // Long zigzag approach: dash forward while zigzagging, then melee as normal.
+            mode: 'zigzag_approach',
+            triggerRange: 220,
+            cooldownMs: 800,
+            stepsMin: 3,
+            stepsMax: 3,
+            stepSpeed: 1400,
+            stepDistance: 500,
+            stepPauseMs: 300,
+            // remove the white streak telegraph
+            telegraphEnabled: false,
+            chance: 1
+        },
         texture: 'moth_woman',
         displaySize: scaleDimension({ width: 20, height: 20 }),
         hitboxSize: scaleHitbox({ width: 20, height: 20 }),
@@ -212,7 +229,9 @@ export const ENEMIES = {
             projectileLifetimeMs: 1900,
             projectileColor: 0xc8f7ff,
             projectileGlowColor: 0xf7fbff,
-            sniperWindupMs: 850,
+            sniperTelegraphStyle: 'gaze',
+            sniperProjectileVisual: 'flash_beam',
+            sniperWindupMs: 400,
             sniperRecoveryMs: 220,
             onHitEffectKey: 'petrify',
             onHitEffectOptions: {
@@ -225,14 +244,36 @@ export const ENEMIES = {
     minotau: createEnemyConfig({
         name: 'Minotau',
         statsBonus: {
-            effectResist: 0.6
+            effectResist: 0.6,
+            attackCooldown: 1400,
+            attackRange: 200,
+            knockbackResist: -0.2
         },
+        combatType: 'melee',
+        attackStyle: 'dash_lunge',
         behavior: 'chase',
         texture: 'minotau',
         displaySize: { width: 20, height: 20 },
         hitboxSize: { width: 20, height: 20 },
         flashTint: 0xff0000,
-        flashDuration: 120
+        flashDuration: 120,
+        dashTelegraphWidth: 8,
+        dashTelegraphAlpha: 0.32,
+        meleeAttack: {
+            engageDelayMs: 120,
+            windupMs: { min: 500, max: 700 },
+            recoveryMs: 240,
+            rangePadding: 0,
+            dashSpeed: 720,
+            dashDistance: 320,
+            dashOvershootDistance: 160,
+            stunOnWallHitMs: 650,
+            dashKnockbackOnHit: {
+                speed: 720,
+                durationMs: 160,
+                dragFactor: 0.92
+            }
+        }
     }),
     baphomet: createEnemyConfig({
         name: 'Baphomet',

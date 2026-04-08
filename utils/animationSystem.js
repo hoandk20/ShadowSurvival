@@ -17,7 +17,9 @@ const STATUS_EFFECT_ATLAS = {
     atlasJSON: 'assets/statuseffect/spritesheet.json'
 };
 const EXTRA_UI_TEXTURES = [
-    { key: 'ritual_zone_icon', path: 'assets/skills/ritual_zone/frame0.png' }
+    { key: 'ritual_zone_icon', path: 'assets/skills/ritual_zone/frame0.png' },
+    { key: 'petrify_icon', path: 'assets/statuseffect/petrify.png' },
+    { key: 'root_icon', path: 'assets/statuseffect/root.png' }
 ];
 
 const buildAtlasFrames = (scene, atlasKey, frameNames = []) => {

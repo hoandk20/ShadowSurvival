@@ -24,7 +24,7 @@ export default class GhostSummon extends Phaser.Physics.Arcade.Sprite {
         this.despawning = false;
         this.aggroRange = options.aggroRange ?? 180;
         this.attackRange = options.attackRange ?? 18;
-        this.baseAttackCooldownMs = options.attackCooldownMs ?? 750;
+        this.baseAttackCooldownMs = options.attackCooldownMs ?? 650;
         this.lastAttackAt = -Infinity;
 
         this.target = null;

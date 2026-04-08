@@ -58,11 +58,13 @@ export default class PauseMenuScene extends Phaser.Scene {
         this.children.removeAll(true);
         const width = this.scale.width;
         const height = this.scale.height;
+        const isPortrait = height >= width;
         const isCompact = width < 520 || height < 720;
+        const isMobileLandscape = !isPortrait && isCompact;
         const safeX = Math.max(14, Math.floor(width * 0.05));
-        const panelWidth = Math.min(width - safeX * 2, 420);
+        const panelWidth = Math.min(width - safeX * 2, isMobileLandscape ? 560 : 420);
         const panelHeight = this.mode === 'settings'
-            ? (isCompact ? 360 : 330)
+            ? (isMobileLandscape ? 300 : (isCompact ? 360 : 330))
             : (isCompact ? 340 : 300);
         const buttonWidth = Math.min(panelWidth - 44, 250);
         const buttonHeight = isCompact ? 44 : 38;
@@ -72,7 +74,7 @@ export default class PauseMenuScene extends Phaser.Scene {
             fillDark: SHOP_HUB_COLORS.panelOuter,
             border: SHOP_HUB_COLORS.border
         });
-        panel.add(createPixelText(this, 0, -panelHeight / 2 + 28, this.mode === 'settings' ? 'SETTINGS' : 'PAUSED', {
+        panel.add(createPixelText(this, 0, -panelHeight / 2 + (isMobileLandscape && this.mode === 'settings' ? 24 : 28), this.mode === 'settings' ? 'SETTINGS' : 'PAUSED', {
             fontSize: isCompact ? '16px' : '18px',
             color: SHOP_HUB_COLORS.title
         }));
@@ -115,21 +117,28 @@ export default class PauseMenuScene extends Phaser.Scene {
         } else {
             const settings = getAudioSettings(this);
             const gameplay = getGameplaySettings(this);
-            const toggleX = -Math.min(100, panelWidth * 0.24);
-            panel.add(createPixelToggle(this, toggleX, -20, 'MUSIC', settings.musicEnabled, (value) => {
+            const toggleX = -Math.min(isMobileLandscape ? 88 : 100, panelWidth * (isMobileLandscape ? 0.22 : 0.24));
+            const titleY = -panelHeight / 2 + (isMobileLandscape ? 24 : 28);
+            const contentTopY = titleY + (isMobileLandscape ? 42 : 54);
+            const backButtonHeight = isCompact ? 42 : 36;
+            const contentBottomY = panelHeight / 2 - backButtonHeight - (isMobileLandscape ? 18 : 24);
+            const rowGap = Math.max(isMobileLandscape ? 38 : 46, Math.floor((contentBottomY - contentTopY) / 3));
+
+            panel.add(createPixelToggle(this, toggleX, contentTopY + rowGap * 0, 'MUSIC', settings.musicEnabled, (value) => {
                 updateAudioSetting(this, 'musicEnabled', value);
-                this.scene.get('MainScene')?.syncMapMusic?.(this.scene.get('MainScene')?.mapManager?.getCurrentMap?.());
+                const mainScene = this.scene.get('MainScene');
+                mainScene?.syncMapMusic?.(mainScene?.mapManager?.getCurrentMap?.());
             }));
-            panel.add(createPixelToggle(this, toggleX, 44, 'SFX', settings.sfxEnabled, (value) => {
+            panel.add(createPixelToggle(this, toggleX, contentTopY + rowGap * 1, 'SFX', settings.sfxEnabled, (value) => {
                 updateAudioSetting(this, 'sfxEnabled', value);
             }));
-            panel.add(createPixelCycle(this, toggleX, 108, 'DMG TEXT', ['full', 'reduced', 'off'], gameplay.damageNumbersMode ?? 'full', (next) => {
+            panel.add(createPixelCycle(this, toggleX, contentTopY + rowGap * 2, 'DMG TEXT', ['full', 'reduced', 'off'], gameplay.damageNumbersMode ?? 'full', (next) => {
                 updateGameplaySetting(this, 'damageNumbersMode', next);
             }));
-            panel.add(createPixelCycle(this, toggleX, 156, 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
+            panel.add(createPixelCycle(this, toggleX, contentTopY + rowGap * 3, 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
                 updateGameplaySetting(this, 'damageTextCapMode', next);
             }));
-            panel.add(createPixelButton(this, 0, panelHeight / 2 - 34, Math.min(buttonWidth, 180), isCompact ? 42 : 36, 'BACK', () => {
+            panel.add(createPixelButton(this, 0, panelHeight / 2 - (isMobileLandscape ? 28 : 34), Math.min(buttonWidth, 180), backButtonHeight, 'BACK', () => {
                 this.mode = 'pause';
                 this.render();
             }, {

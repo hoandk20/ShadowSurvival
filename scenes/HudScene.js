@@ -38,7 +38,6 @@ export default class HudScene extends Phaser.Scene {
         this.expProgressText = null;
         this.goldIcon = null;
         this.goldText = null;
-        this.killCountText = null;
         this.waveCountdownText = null;
         this.bossBarContainer = null;
         this.bossBarBg = null;
@@ -112,6 +111,9 @@ export default class HudScene extends Phaser.Scene {
         this.shopPurchasedItems = [];
         this.shopPurchasedMaskGraphics = null;
         this.shopPurchasedMask = null;
+        this.shopPurchasedScrollTrack = null;
+        this.shopPurchasedScrollThumb = null;
+        this.shopPurchasedScrollHint = null;
         this.shopPurchasedScrollOffset = 0;
         this.shopPurchasedScrollMaxOffset = 0;
         this.shopPurchasedViewport = null;
@@ -212,14 +214,6 @@ export default class HudScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1003);
-        this.killCountText = this.add.text(10, 10, 'Kills: 0', {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 2
-        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1003);
-        this.killCountText.setVisible(false);
         this.waveCountdownText = this.add.text(0, 0, '', {
             fontSize: '18px',
             fontFamily: 'Arial',
@@ -238,7 +232,7 @@ export default class HudScene extends Phaser.Scene {
 
     update() {
         this.mainScene = this.scene.get('MainScene');
-        const { player, runState } = this.resolveHudContext();
+        const { player } = this.resolveHudContext();
         if (!player) {
             this.layoutHud();
             return;
@@ -255,18 +249,12 @@ export default class HudScene extends Phaser.Scene {
         const shield = Math.max(0, player.getTotalShield?.() ?? player.temporaryShield ?? 0);
         const level = player.level ?? 1;
         const gold = Math.max(0, Math.floor(player.gold ?? 0));
-        const kills = runState?.killCount ?? 0;
-        const showKillCount = player.hasSkill?.('flame') || player.hasSkill?.('blueflame');
         const waveDurationSeconds = Math.max(0, Math.round(this.mainScene?.currentWaveDurationSeconds ?? 0));
         const waveRemainingMs = Math.max(0, this.mainScene?.getCurrentWaveRemainingMs?.() ?? 0);
         const waveRemainingSeconds = waveRemainingMs <= 0 ? 0 : Math.ceil(waveRemainingMs / 1000);
         const waveRemainingMinutesText = String(Math.floor(waveRemainingSeconds / 60)).padStart(2, '0');
         const waveRemainingSecondsText = String(waveRemainingSeconds % 60).padStart(2, '0');
 
-        if (this.killCountText) {
-            this.killCountText.setVisible(Boolean(showKillCount));
-            this.killCountText.setText(`Kills: ${kills}`);
-        }
         if (this.goldText) {
             this.goldText.setText(`${gold}`);
         }
@@ -345,10 +333,6 @@ export default class HudScene extends Phaser.Scene {
             hpBarY
         };
 
-        if (this.killCountText) {
-            const pauseOffset = width < 640 ? 58 : 64;
-            this.killCountText.setPosition(pauseOffset, 14);
-        }
         if (this.waveCountdownText) {
             const bossOffset = this.bossBarVisible ? 42 : 18;
             this.waveCountdownText.setPosition(width / 2, bossOffset);
@@ -619,7 +603,6 @@ export default class HudScene extends Phaser.Scene {
         if (containsPoint(this.pauseButtonHitArea)) return true;
         if (containsPoint(this.inventoryPanel)) return true;
         if (this.inventoryExpanded && this.inventoryPreviewOverlay?.visible) return true;
-        if (containsPoint(this.killCountText)) return true;
         if (containsPoint(this.waveCountdownText)) return true;
 
         if (this.hudLayout) {
@@ -1332,6 +1315,20 @@ export default class HudScene extends Phaser.Scene {
         const purchasedFrameInner = this.add.rectangle(0, panelHeight / 2 - 62, panelWidth - 76, 28, 0x213039, 1)
             .setOrigin(0.5)
             .setStrokeStyle(1, 0x000000, 0.9);
+        const purchasedScrollTrack = this.add.rectangle(0, panelHeight / 2 - 40, panelWidth - 104, 4, 0x10171c, 0.85)
+            .setOrigin(0.5)
+            .setStrokeStyle(1, 0x38505f, 0.9);
+        const purchasedScrollThumb = this.add.rectangle(0, panelHeight / 2 - 40, 42, 4, 0x8cc4dc, 0.95)
+            .setOrigin(0.5)
+            .setVisible(false);
+        const purchasedScrollHint = this.add.text(0, panelHeight / 2 - 18, 'DRAG < >', {
+            fontSize: isMobileShopLayout ? '8px' : '9px',
+            fontFamily: shopTextFontFamily,
+            fontStyle: 'bold',
+            color: '#a9d7ea',
+            stroke: '#000000',
+            strokeThickness: isMobileShopLayout ? 3 : 2
+        }).setOrigin(0.5).setVisible(false);
         const purchasedStrip = this.add.container(0, panelHeight / 2 - 50);
         const purchasedMaskGraphics = this.make.graphics({ x: 0, y: 0, add: false });
         const purchasedMask = purchasedMaskGraphics.createGeometryMask();
@@ -1443,12 +1440,12 @@ export default class HudScene extends Phaser.Scene {
                 stroke: '#000000',
                 strokeThickness: isMobileShopLayout ? 4 : 2
             }).setOrigin(0.5);
-            const lockButtonBg = this.add.rectangle(0, isMobileShopLayout ? 152 : 150, isMobileShopLayout ? 42 : 34, isMobileShopLayout ? 24 : 20, 0x25343d, 1)
+            const lockButtonBg = this.add.rectangle(0, isMobileShopLayout ? 152 : 150, isMobileShopLayout ? 52 : 42, isMobileShopLayout ? 24 : 20, 0x25343d, 1)
                 .setOrigin(0.5)
-                .setStrokeStyle(isMobileShopLayout ? 2 : 1, 0x8cc4dc, 1)
+                .setStrokeStyle(2, 0x8cc4dc, 1)
                 .setInteractive({ useHandCursor: true });
             const lockButtonText = this.add.text(0, isMobileShopLayout ? 152 : 150, '🔓', {
-                fontSize: isMobileShopLayout ? '14px' : '11px',
+                fontSize: isMobileShopLayout ? '13px' : '10px',
                 fontFamily: 'Arial',
                 fontStyle: 'bold',
                 color: '#d9f6ff',
@@ -1587,6 +1584,9 @@ export default class HudScene extends Phaser.Scene {
             purchasedLabel,
             purchasedFrame,
             purchasedFrameInner,
+            purchasedScrollTrack,
+            purchasedScrollThumb,
+            purchasedScrollHint,
             purchasedStrip,
             ...emptySlots,
             ...itemSlots.map((slot) => slot.container),
@@ -1633,6 +1633,9 @@ export default class HudScene extends Phaser.Scene {
         this.shopPurchasedItems = [];
         this.shopPurchasedMaskGraphics = purchasedMaskGraphics;
         this.shopPurchasedMask = purchasedMask;
+        this.shopPurchasedScrollTrack = purchasedScrollTrack;
+        this.shopPurchasedScrollThumb = purchasedScrollThumb;
+        this.shopPurchasedScrollHint = purchasedScrollHint;
         this.shopBodyText = bodyText;
         this.shopEmptySlots = emptySlots;
         this.shopItemSlots = itemSlots;
@@ -1801,7 +1804,7 @@ export default class HudScene extends Phaser.Scene {
             slot.lockButtonText?.setText(isLocked ? '🔒' : '🔓');
             slot.lockButtonText?.setColor(isLocked ? '#ffe7ab' : '#d9f6ff');
             slot.lockButtonBg?.setFillStyle(isLocked ? 0x4a5f28 : 0x25343d, 1);
-            slot.lockButtonBg?.setStrokeStyle(1, isLocked ? 0xe0b55a : 0x8cc4dc, 1);
+            slot.lockButtonBg?.setStrokeStyle(2, isLocked ? 0xe0b55a : 0x8cc4dc, 1);
             slot.rarityBar?.setFillStyle(isLocked ? 0xb99948 : 0x7e99a8, 1);
             slot.selectText?.setText('');
             slot.selectText?.setColor(canAfford ? '#9db1bb' : '#ff8a8a');
@@ -2012,7 +2015,7 @@ export default class HudScene extends Phaser.Scene {
         if (this.shopStatsVisible && this.shopStatsPopupContainer) {
             this.children.bringToTop(this.shopStatsPopupContainer);
         }
-        const goldPanelWidth = useMobileCompactTopBar ? 96 : 118;
+        const goldPanelWidth = useMobileCompactTopBar ? 92 : 118;
         const goldPanelHeight = useMobileCompactTopBar ? 22 : 28;
         const goldCenterX = useMobileCompactTopBar ? (panelWidth / 2 - 72) : panelWidth / 2 - 92;
         const goldCenterY = -panelHeight / 2 + (useMobileCompactTopBar ? 16 : 26);
@@ -2107,15 +2110,16 @@ export default class HudScene extends Phaser.Scene {
         this.shopBodyText?.setPosition(gridCenterX, viewportTop + 70);
         if (this.shopPurchasedLabel) {
             this.shopPurchasedLabel.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 34 : panelHeight / 2 - 98);
-            this.shopPurchasedLabel.setVisible(!useMobileCompactTopBar && (this.shopPurchasedItems?.length ?? 0) > 0);
+            this.shopPurchasedLabel.setVisible((this.shopPurchasedItems?.length ?? 0) > 0);
+            this.shopPurchasedLabel.setFontSize(useMobileCompactTopBar ? '8px' : '11px');
         }
-        this.shopPurchasedFrame?.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 18 : panelHeight / 2 - 62);
-        this.shopPurchasedFrame?.setDisplaySize(useMobileCompactTopBar ? panelWidth - 20 : panelWidth - 70, useMobileCompactTopBar ? 24 : 34);
+        this.shopPurchasedFrame?.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 20 : panelHeight / 2 - 62);
+        this.shopPurchasedFrame?.setDisplaySize(useMobileCompactTopBar ? panelWidth - 24 : panelWidth - 70, useMobileCompactTopBar ? 28 : 34);
         if (this.shopPurchasedStrip) {
-            this.shopPurchasedStrip.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 18 : panelHeight / 2 - 62);
+            this.shopPurchasedStrip.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 20 : panelHeight / 2 - 62);
             const purchasedSlots = this.shopPurchasedItems ?? [];
             const slotSpacing = compact ? 34 : 36;
-            const stripWidth = Math.max(1, useMobileCompactTopBar ? panelWidth - 20 : panelWidth - 70);
+            const stripWidth = Math.max(1, useMobileCompactTopBar ? panelWidth - 24 : panelWidth - 70);
             const contentWidth = Math.max(stripWidth, purchasedSlots.length > 0 ? 30 + Math.max(0, purchasedSlots.length - 1) * slotSpacing : 0);
             this.shopPurchasedScrollMaxOffset = Math.max(0, contentWidth - stripWidth);
             this.shopPurchasedScrollOffset = Phaser.Math.Clamp(this.shopPurchasedScrollOffset ?? 0, 0, this.shopPurchasedScrollMaxOffset);
@@ -2125,7 +2129,7 @@ export default class HudScene extends Phaser.Scene {
                 left: width / 2 + stripLeft,
                 right: width / 2 + stripRight,
                 top: height / 2 + (useMobileCompactTopBar ? panelHeight / 2 - 30 : panelHeight / 2 - 80),
-                bottom: height / 2 + (useMobileCompactTopBar ? panelHeight / 2 - 6 : panelHeight / 2 - 44)
+                bottom: height / 2 + (useMobileCompactTopBar ? panelHeight / 2 - 10 : panelHeight / 2 - 44)
             };
             this.shopPurchasedMaskGraphics?.clear();
             this.shopPurchasedMaskGraphics?.fillStyle(0xffffff, 1);
@@ -2143,12 +2147,35 @@ export default class HudScene extends Phaser.Scene {
                 slot.setPosition(x, 0);
                 slot.setScale(useMobileCompactTopBar ? 0.82 : compact ? 0.92 : 1);
             });
+            const hasHorizontalOverflow = this.shopPurchasedScrollMaxOffset > 0;
+            const trackWidth = Math.max(32, stripWidth - (useMobileCompactTopBar ? 44 : 70));
+            const trackY = useMobileCompactTopBar ? panelHeight / 2 - 4 : panelHeight / 2 - 28;
+            this.shopPurchasedScrollTrack?.setPosition(0, trackY);
+            this.shopPurchasedScrollTrack?.setDisplaySize(trackWidth, 4);
+            this.shopPurchasedScrollTrack?.setVisible(hasHorizontalOverflow);
+            this.shopPurchasedScrollHint?.setPosition(0, useMobileCompactTopBar ? panelHeight / 2 - 36 : panelHeight / 2 - 98);
+            this.shopPurchasedScrollHint?.setVisible(hasHorizontalOverflow);
+            if (this.shopPurchasedScrollThumb) {
+                const thumbWidth = Math.max(18, trackWidth * (stripWidth / Math.max(contentWidth, stripWidth)));
+                const availableTrack = Math.max(0, trackWidth - thumbWidth);
+                const thumbOffset = hasHorizontalOverflow
+                    ? (availableTrack * ((this.shopPurchasedScrollOffset ?? 0) / this.shopPurchasedScrollMaxOffset))
+                    : 0;
+                const thumbX = -trackWidth / 2 + thumbWidth / 2 + thumbOffset;
+                this.shopPurchasedScrollThumb.setPosition(thumbX, trackY);
+                this.shopPurchasedScrollThumb.setDisplaySize(thumbWidth, 4);
+                this.shopPurchasedScrollThumb.setVisible(hasHorizontalOverflow);
+            }
         }
+        const compactRerollScale = isMobileLandscape ? 0.58 : 0.68;
+        const compactRerollHalfWidth = (92 * compactRerollScale) / 2;
+        const compactRerollGap = isMobileLandscape ? 12 : 8;
+        const compactRerollX = (goldCenterX - goldPanelWidth / 2) - compactRerollHalfWidth - compactRerollGap;
         this.shopRerollButton?.setPosition(
-            useMobileCompactTopBar ? (panelWidth / 2 - 134) : panelWidth / 2 - 61,
+            useMobileCompactTopBar ? compactRerollX : panelWidth / 2 - 61,
             -panelHeight / 2 + (useMobileCompactTopBar ? 16 : 106)
         );
-        this.shopRerollButton?.setScale(useMobileCompactTopBar ? 0.68 : 1);
+        this.shopRerollButton?.setScale(useMobileCompactTopBar ? compactRerollScale : 1);
         this.shopContinueButton?.setPosition(
             panelWidth / 2 - (useMobileCompactTopBar ? 68 : 88),
             useMobileCompactTopBar ? (panelHeight / 2 - 24) : (panelHeight / 2 - 32)
@@ -2348,6 +2375,9 @@ export default class HudScene extends Phaser.Scene {
         this.shopPurchasedItems = [];
         this.shopPurchasedMaskGraphics = null;
         this.shopPurchasedMask = null;
+        this.shopPurchasedScrollTrack = null;
+        this.shopPurchasedScrollThumb = null;
+        this.shopPurchasedScrollHint = null;
         this.shopPurchasedScrollOffset = 0;
         this.shopPurchasedScrollMaxOffset = 0;
         this.shopPurchasedViewport = null;
@@ -2564,6 +2594,7 @@ export default class HudScene extends Phaser.Scene {
         const height = this.scale.height;
         const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
         const isMobile = isMobileDevice || Math.min(width, height) < 640;
+        const isMobileLandscape = isMobile && width > height;
         const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0)
             .setOrigin(0)
             .setScrollFactor(0)
@@ -2571,34 +2602,37 @@ export default class HudScene extends Phaser.Scene {
             .setInteractive();
         const container = this.add.container(width / 2, height / 2).setDepth(202).setScrollFactor(0);
         const panelWidth = Math.min(isMobile ? width - 28 : width - 72, isMobile ? 390 : 1080);
-        const panelHeight = Math.min(isMobile ? height - 70 : 380, height - 48);
+        const panelHeight = Math.min(isMobileLandscape ? height - 28 : (isMobile ? height - 70 : 380), height - 24);
         const panel = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x11171b, 0.97)
             .setOrigin(0.5)
             .setStrokeStyle(3, 0x000000, 1);
         const inner = this.add.rectangle(0, 0, panelWidth - 12, panelHeight - 12, 0x1b252b, 0.98)
             .setOrigin(0.5)
             .setStrokeStyle(2, 0x7e99a8, 1);
-        const title = this.add.text(0, -panelHeight / 2 + 26, 'CHOOSE A CARD', {
-            fontSize: isMobile ? '16px' : '20px',
+        const title = this.add.text(0, -panelHeight / 2 + (isMobileLandscape ? 18 : 26), 'CHOOSE A CARD', {
+            fontSize: isMobileLandscape ? '14px' : (isMobile ? '16px' : '20px'),
             fontFamily: 'monospace',
             fontStyle: 'bold',
             color: '#e7f4ff',
             stroke: '#000000',
             strokeThickness: 4
         }).setOrigin(0.5);
-        const subtitle = this.add.text(0, -panelHeight / 2 + 52, 'Pick 1 bonus before the shop opens', {
-            fontSize: isMobile ? '11px' : '13px',
+        const subtitle = this.add.text(0, -panelHeight / 2 + (isMobileLandscape ? 38 : 52), 'Pick 1 bonus before the shop opens', {
+            fontSize: isMobileLandscape ? '9px' : (isMobile ? '11px' : '13px'),
             fontFamily: 'monospace',
             color: '#b7d0db',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
+        if (isMobileLandscape) {
+            subtitle.setAlpha(0.9);
+        }
         const canReroll = gold >= rerollCost && rerollRemaining > 0;
-        const rerollButton = this.add.rectangle(panelWidth / 2 - 76, -panelHeight / 2 + 28, 72, 32, 0x25343d, 1)
+        const rerollButton = this.add.rectangle(panelWidth / 2 - 76, -panelHeight / 2 + (isMobileLandscape ? 20 : 28), 72, 32, 0x25343d, 1)
             .setOrigin(0.5)
             .setStrokeStyle(2, canReroll ? 0x8cc4dc : 0x55646d, 1);
-        const rerollText = this.add.text(panelWidth / 2 - 76, -panelHeight / 2 + 28, `↻ ${Math.max(0, Math.floor(rerollRemaining))}`, {
-            fontSize: isMobile ? '14px' : '16px',
+        const rerollText = this.add.text(panelWidth / 2 - 76, -panelHeight / 2 + (isMobileLandscape ? 20 : 28), `↻ ${Math.max(0, Math.floor(rerollRemaining))}`, {
+            fontSize: isMobileLandscape ? '12px' : (isMobile ? '14px' : '16px'),
             fontFamily: 'monospace',
             fontStyle: 'bold',
             color: canReroll ? '#d9f6ff' : '#7f9299',
@@ -2621,16 +2655,21 @@ export default class HudScene extends Phaser.Scene {
         container.add([panel, inner, title, subtitle, rerollButton, rerollText]);
         const columns = isMobile ? Math.min(2, validCards.length) : Math.min(4, validCards.length);
         const rows = Math.ceil(validCards.length / columns);
-        const mobileCardScale = 0.8;
-        const mobileBaseCardWidth = Math.floor((panelWidth - 52) / Math.max(1, columns));
-        const cardWidth = isMobile ? Math.floor(mobileBaseCardWidth * mobileCardScale) : 188;
-        const cardHeight = isMobile ? Math.floor(172 * mobileCardScale) : 190;
-        const gapX = isMobile ? 10 : 16;
-        const gapY = isMobile ? 12 : 16;
+        const gapX = isMobileLandscape ? 8 : (isMobile ? 10 : 16);
+        const gapY = isMobileLandscape ? 10 : (isMobile ? 12 : 16);
+        const mobileBaseCardWidth = Math.floor((panelWidth - (isMobileLandscape ? 42 : 52)) / Math.max(1, columns));
+        const availableCardAreaHeight = panelHeight - (isMobileLandscape ? 88 : 118);
+        const maxCardHeightByViewport = Math.floor((availableCardAreaHeight - gapY * Math.max(0, rows - 1)) / Math.max(1, rows));
+        const cardWidth = isMobile
+            ? Math.floor(mobileBaseCardWidth * (isMobileLandscape ? 0.76 : 0.8))
+            : 188;
+        const cardHeight = isMobile
+            ? Math.max(isMobileLandscape ? 106 : 122, Math.min(isMobileLandscape ? 132 : 138, maxCardHeightByViewport))
+            : 190;
         const totalWidth = columns * cardWidth + (columns - 1) * gapX;
         const totalHeight = rows * cardHeight + (rows - 1) * gapY;
         const startX = -totalWidth / 2 + cardWidth / 2;
-        const startY = -totalHeight / 2 + cardHeight / 2 + 26;
+        const startY = -totalHeight / 2 + cardHeight / 2 + (isMobileLandscape ? 18 : 26);
 
         this.preShopCardOptions = validCards.map((cardConfig, index) => {
             const col = index % columns;
@@ -2650,7 +2689,7 @@ export default class HudScene extends Phaser.Scene {
             const rarityBar = this.add.rectangle(0, -cardHeight / 2 + 18, cardWidth - 24, 24, rarityColor, 1)
                 .setOrigin(0.5);
             const rarityText = this.add.text(0, -cardHeight / 2 + 18, String(cardConfig.rarityLabel ?? '').toUpperCase(), {
-                fontSize: '11px',
+                fontSize: isMobileLandscape ? '9px' : '11px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
                 color: '#0b0d0f',
@@ -2658,7 +2697,7 @@ export default class HudScene extends Phaser.Scene {
                 strokeThickness: 1
             }).setOrigin(0.5);
             const valueText = this.add.text(0, -18, cardConfig.valueText ?? '', {
-                fontSize: isMobile ? '26px' : '30px',
+                fontSize: isMobileLandscape ? '22px' : (isMobile ? '26px' : '30px'),
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
                 color: Phaser.Display.Color.IntegerToColor(rarityAccentColor).rgba,
@@ -2666,7 +2705,7 @@ export default class HudScene extends Phaser.Scene {
                 strokeThickness: 4
             }).setOrigin(0.5);
             const name = this.add.text(0, 22, cardConfig.label ?? 'Card', {
-                fontSize: '16px',
+                fontSize: isMobileLandscape ? '13px' : '16px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
                 color: '#f2f7fa',
@@ -2676,7 +2715,7 @@ export default class HudScene extends Phaser.Scene {
                 wordWrap: { width: cardWidth - 24 }
             }).setOrigin(0.5);
             const desc = this.add.text(0, 62, '', {
-                fontSize: '11px',
+                fontSize: isMobileLandscape ? '9px' : '11px',
                 fontFamily: 'monospace',
                 color: '#c8d6dc',
                 stroke: '#000000',
@@ -2685,7 +2724,7 @@ export default class HudScene extends Phaser.Scene {
                 wordWrap: { width: cardWidth - 24 }
             }).setOrigin(0.5);
             const selectText = this.add.text(0, cardHeight / 2 - 18, '', {
-                fontSize: '10px',
+                fontSize: isMobileLandscape ? '9px' : '10px',
                 fontFamily: 'monospace',
                 fontStyle: 'bold',
                 color: '#9db1bb',
@@ -2977,8 +3016,6 @@ export default class HudScene extends Phaser.Scene {
         this.goldIcon = null;
         this.goldText?.destroy();
         this.goldText = null;
-        this.killCountText?.destroy();
-        this.killCountText = null;
         this.waveCountdownText?.destroy();
         this.waveCountdownText = null;
         this.pauseButton?.destroy(true);

@@ -1,5 +1,6 @@
 import { createMaprockFieldScenario } from './map/maprockFieldScenario.js';
 import { createChurchSanctuaryScenario } from './map/churchSanctuaryScenario.js';
+import { createInsideChurchScenario } from './map/insideChurchScenario.js';
 
 const SHARED_ENEMY_HEALTH_MILESTONES = [
     { minute: 3, setMultiplier: 1.5 },
@@ -15,22 +16,7 @@ const SHARED_ENEMY_HEALTH_MILESTONES = [
 export const STAGE_SCENARIOS = {
     maprock_field: createMaprockFieldScenario(SHARED_ENEMY_HEALTH_MILESTONES),
     church_sanctuary: createChurchSanctuaryScenario(SHARED_ENEMY_HEALTH_MILESTONES),
-    inside_church: {
-        normalSpawnPerSecond: 0.5,
-        normalSpawnPerSecondPerMinute: 0.7,
-        enemyHealthMilestones: SHARED_ENEMY_HEALTH_MILESTONES,
-        enemyUnlockTimeline: [
-            { enemyType: 'bat', unlockAtMinute: 0 },
-            { enemyType: 'slime', unlockAtMinute: 3 },
-            { enemyType: 'medusa', unlockAtMinute: 6 },
-            { enemyType: 'rat', unlockAtMinute: 9 },
-            { enemyType: 'skeleton', unlockAtMinute: 12 },
-            { enemyType: 'succubus', unlockAtMinute: 15 },
-            { enemyType: 'widow', unlockAtMinute: 20 },
-            { enemyType: 'worm', unlockAtMinute: 22 },
-            { enemyType: 'minotau', unlockAtMinute: 24 }
-        ]
-    }
+    inside_church: createInsideChurchScenario(SHARED_ENEMY_HEALTH_MILESTONES)
 };
 
 export function getStageScenario(mapKey) {

@@ -43,7 +43,14 @@ export default class VictoryScene extends Phaser.Scene {
             }));
         });
 
-        panel.add(createPixelButton(this, 0, 86, buttonWidth, buttonHeight, 'RETRY', () => {
+        if (data.unlockedCharacterLabel) {
+            panel.add(createPixelText(this, 0, isCompact ? 90 : 88, `UNLOCKED: ${data.unlockedCharacterLabel}`, {
+                fontSize: isCompact ? '12px' : '13px',
+                color: '#ffd79a'
+            }));
+        }
+
+        panel.add(createPixelButton(this, 0, data.unlockedCharacterLabel ? 120 : 86, buttonWidth, buttonHeight, 'RETRY', () => {
             this.scene.stop('HudScene');
             this.scene.stop('MainScene');
             this.scene.stop('VictoryScene');
@@ -51,7 +58,7 @@ export default class VictoryScene extends Phaser.Scene {
         }, {
             fontSize: isCompact ? '15px' : '16px'
         }));
-        panel.add(createPixelButton(this, 0, 144, buttonWidth, buttonHeight, 'BACK TO MENU', () => {
+        panel.add(createPixelButton(this, 0, data.unlockedCharacterLabel ? 178 : 144, buttonWidth, buttonHeight, 'BACK TO MENU', () => {
             this.scene.stop('HudScene');
             this.scene.stop('MainScene');
             this.scene.stop('VictoryScene');

@@ -19,6 +19,8 @@ export default class EnemyProjectile extends Phaser.GameObjects.Arc {
         this.glowColor = options.glowColor ?? options.color ?? 0xffffff;
         this.onHitEffectKey = options.onHitEffectKey ?? null;
         this.onHitEffectOptions = options.onHitEffectOptions ?? null;
+        this.invisible = options.invisible === true;
+        this.flashBeam = options.flashBeam ?? null;
         this.direction = new Phaser.Math.Vector2(
             options.directionX ?? ((target?.x ?? this.x + 1) - this.x),
             options.directionY ?? ((target?.y ?? this.y) - this.y)
@@ -35,8 +37,33 @@ export default class EnemyProjectile extends Phaser.GameObjects.Arc {
         this.body.setAllowGravity(false);
         this.body.setCircle(this.radius);
         this.body.setVelocity(this.direction.x * this.speed, this.direction.y * this.speed);
-        this.setStrokeStyle(2, this.glowColor, 0.95);
+        if (this.invisible) {
+            this.setFillStyle(this.fillColor, 0);
+            this.setStrokeStyle(0, this.glowColor, 0);
+        } else {
+            this.setStrokeStyle(2, this.glowColor, 0.95);
+        }
         this.setDepth((owner?.depth ?? 20) + 3);
+
+        if (this.flashBeam && this.scene?.add && this.scene?.tweens) {
+            const length = Math.max(40, Math.round(this.flashBeam.length ?? 140));
+            const thickness = Math.max(2, Math.round(this.flashBeam.thickness ?? 4));
+            const color = this.flashBeam.color ?? 0xffffff;
+            const alpha = Phaser.Math.Clamp(this.flashBeam.alpha ?? 0.55, 0, 1);
+            const duration = Math.max(40, Math.round(this.flashBeam.duration ?? 120));
+            const angle = Math.atan2(this.direction.y, this.direction.x);
+            const beam = this.scene.add.rectangle(this.x + (this.direction.x * (length * 0.5)), this.y + (this.direction.y * (length * 0.5)), length, thickness, color, alpha)
+                .setRotation(angle)
+                .setDepth((owner?.depth ?? 20) + 6);
+            this.scene.tweens.add({
+                targets: beam,
+                alpha: 0,
+                scaleX: { from: 1, to: 1.15 },
+                duration,
+                ease: 'Cubic.easeOut',
+                onComplete: () => beam.destroy()
+            });
+        }
     }
 
     update(_time, delta, players = []) {

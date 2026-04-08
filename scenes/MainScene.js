@@ -32,9 +32,10 @@ import PlayerRunState from '../systems/PlayerRunState.js';
 import TargetingSystem from '../systems/TargetingSystem.js';
 import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
 import { ensureAudioSettings, installAudioUnlock, isAudioUnlocked, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
-import { addDynamon, bootstrapMetaProgress } from '../utils/metaProgress.js';
+import { addDynamon, bootstrapMetaProgress, getMetaProgress, isCharacterUnlocked, unlockCharacter } from '../utils/metaProgress.js';
 import EnemyProjectile from '../entities/EnemyProjectile.js';
 import GhostSummon from '../entities/summons/GhostSummon.js';
+import { getMetaUpgradeBonuses } from '../config/metaUpgrades.js';
 
 const SPAWN_PADDING = 50;
 const DESPAWN_MARGIN = 150;
@@ -49,6 +50,7 @@ const SUPPORTER_SELECTION_REROLL_COST = 10;
 const SUPPORTER_SELECTION_MAX_REROLLS = 2;
 const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
 const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 2;
+const MIN_META_SHOP_REROLL_COST = 6;
 const WAVE_START_DELAY_MS = 2000;
 
 function createEnemyInstance(scene, x, y, enemyType, options = {}) {
@@ -201,6 +203,7 @@ export default class MainScene extends Phaser.Scene {
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         ensureAudioSettings(this.registry);
         bootstrapMetaProgress(this);
+        this.registry.events?.on?.('changedata-audioSettings', this.handleAudioSettingsChanged, this);
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.input.keyboard.on('keydown-ESC', this.handlePauseToggle, this);
         this.setupTouchControls();
@@ -242,6 +245,7 @@ export default class MainScene extends Phaser.Scene {
         if (this.debugMode) {
             this.player.gold = 9999;
         }
+        this.applyMetaUpgradesToPlayer(this.player);
         this.player.selectedSupporterKey = this.selectedSupporterKey;
         const primaryRunState = new PlayerRunState({
             playerId: this.player.playerId,
@@ -857,7 +861,14 @@ export default class MainScene extends Phaser.Scene {
         const charList = document.createElement('div');
         charList.classList.add('panel-list');
         characterSection.appendChild(charList);
-        Object.entries(CHARACTER_CONFIG).forEach(([key, config]) => {
+        Object.entries(CHARACTER_CONFIG)
+            .slice()
+            .sort(([keyA, cfgA], [keyB, cfgB]) => {
+                const nameA = String(cfgA?.label ?? keyA);
+                const nameB = String(cfgB?.label ?? keyB);
+                return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+            })
+            .forEach(([key, config]) => {
             const label = document.createElement('label');
             const input = document.createElement('input');
             input.type = 'radio';
@@ -988,7 +999,14 @@ export default class MainScene extends Phaser.Scene {
         });
         bossActions.appendChild(spawnBlackWidowButton);
 
-        Object.entries(ENEMIES).forEach(([type, config]) => {
+        Object.entries(ENEMIES)
+            .slice()
+            .sort(([typeA, cfgA], [typeB, cfgB]) => {
+                const nameA = String(cfgA?.name ?? typeA);
+                const nameB = String(cfgB?.name ?? typeB);
+                return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+            })
+            .forEach(([type, config]) => {
             this.enemySpawnStatus[type] = this.enemySpawnStatus[type] ?? false;
             const label = document.createElement('label');
             const input = document.createElement('input');
@@ -2031,6 +2049,18 @@ export default class MainScene extends Phaser.Scene {
             enemiesKilled: this.killCount ?? 0,
             levelReached: this.player?.level ?? 1
         };
+        const selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
+        Object.entries(CHARACTER_CONFIG).forEach(([characterKey, characterConfig]) => {
+            const requirement = characterConfig?.unlockRequirement ?? null;
+            if (characterConfig?.unlockType !== 'challenge') return;
+            if (requirement?.type !== 'clear_map') return;
+            if (requirement.mapKey !== selectedMapKey) return;
+            if (isCharacterUnlocked(this, characterKey)) return;
+            unlockCharacter(this, characterKey);
+            if (!victoryPayload.unlockedCharacterLabel) {
+                victoryPayload.unlockedCharacterLabel = String(characterConfig?.label ?? characterKey).toUpperCase();
+            }
+        });
         this.time.delayedCall(800, () => {
             if (!this.scene.isActive('MainScene')) return;
             this.scene.launch('VictoryScene', victoryPayload);
@@ -2125,6 +2155,11 @@ export default class MainScene extends Phaser.Scene {
         this.currentMapMusicKey = nextMusicKey;
     }
 
+    handleAudioSettingsChanged() {
+        if (!this.scene.isActive('MainScene')) return;
+        this.syncMapMusic(this.mapManager?.getCurrentMap?.());
+    }
+
     shutdown() {
         this.waveShopDelayTimer?.remove?.(false);
         this.waveShopDelayTimer = null;
@@ -2137,6 +2172,7 @@ export default class MainScene extends Phaser.Scene {
         this.input.off('pointermove', this.handleTouchPointerMove, this);
         this.input.off('pointerup', this.handleTouchPointerUp, this);
         this.input.off('pointerupoutside', this.handleTouchPointerUp, this);
+        this.registry.events?.off?.('changedata-audioSettings', this.handleAudioSettingsChanged, this);
         this.events.off('enemy-dead', this.handleEnemyDeath, this);
         this.audioUnlockCleanup?.();
         this.audioUnlockCleanup = null;
@@ -2331,7 +2367,7 @@ export default class MainScene extends Phaser.Scene {
 
     presentSupporterSelection() {
         if (this.isChoosingSupporter || this.isGameOver) return;
-        this.supporterSelectionRerollsRemaining = SUPPORTER_SELECTION_MAX_REROLLS;
+        this.supporterSelectionRerollsRemaining = this.getSupporterSelectionMaxRerolls();
         const choices = this.getRandomSupporterChoices(4);
         if (!choices.length) {
             this.presentShopOverlay('wave_clear');
@@ -2343,10 +2379,11 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.pause();
         this.resetTouchMoveState();
         const hudScene = this.scene.get('HudScene');
+        const rerollCost = this.getSupporterSelectionRerollCost();
         hudScene?.showSupporterSelection?.({
             supporterKeys: choices,
             gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
-            rerollCost: SUPPORTER_SELECTION_REROLL_COST,
+            rerollCost,
             rerollRemaining: this.supporterSelectionRerollsRemaining,
             onSelect: (supporterKey) => this.onSupporterSelected(supporterKey),
             onReroll: () => this.rerollSupporterSelection()
@@ -2356,14 +2393,15 @@ export default class MainScene extends Phaser.Scene {
     rerollSupporterSelection() {
         if (!this.isChoosingSupporter || !this.player) return;
         if ((this.supporterSelectionRerollsRemaining ?? 0) <= 0) return;
-        if (!this.player.spendGold?.(SUPPORTER_SELECTION_REROLL_COST)) return;
+        const rerollCost = this.getSupporterSelectionRerollCost();
+        if (!this.player.spendGold?.(rerollCost)) return;
         this.supporterSelectionRerollsRemaining = Math.max(0, (this.supporterSelectionRerollsRemaining ?? 0) - 1);
         const choices = this.getRandomSupporterChoices(4);
         const hudScene = this.scene.get('HudScene');
         hudScene?.showSupporterSelection?.({
             supporterKeys: choices,
             gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
-            rerollCost: SUPPORTER_SELECTION_REROLL_COST,
+            rerollCost,
             rerollRemaining: this.supporterSelectionRerollsRemaining,
             onSelect: (supporterKey) => this.onSupporterSelected(supporterKey),
             onReroll: () => this.rerollSupporterSelection()
@@ -2399,7 +2437,7 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
         this.isChoosingCard = true;
-        this.preShopCardSelectionRerollsRemaining = PRE_SHOP_CARD_SELECTION_MAX_REROLLS;
+        this.preShopCardSelectionRerollsRemaining = this.getPreShopCardSelectionMaxRerolls();
         this.beginLevelUpTimerPause();
         this.player?.setVelocity?.(0, 0);
         this.lootSystem?.clearGroundItems?.();
@@ -2407,10 +2445,11 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.pause();
         this.resetTouchMoveState();
         const hudScene = this.scene.get('HudScene');
+        const rerollCost = this.getPreShopCardSelectionRerollCost();
         hudScene?.showPreShopCardSelection?.({
             cards,
             gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
-            rerollCost: PRE_SHOP_CARD_SELECTION_REROLL_COST,
+            rerollCost,
             rerollRemaining: this.preShopCardSelectionRerollsRemaining,
             onSelect: (cardConfig) => this.onPreShopCardSelected(cardConfig),
             onReroll: () => this.rerollPreShopCardSelection()
@@ -2420,14 +2459,15 @@ export default class MainScene extends Phaser.Scene {
     rerollPreShopCardSelection() {
         if (!this.isChoosingCard || !this.player) return;
         if ((this.preShopCardSelectionRerollsRemaining ?? 0) <= 0) return;
-        if (!this.player.spendGold?.(PRE_SHOP_CARD_SELECTION_REROLL_COST)) return;
+        const rerollCost = this.getPreShopCardSelectionRerollCost();
+        if (!this.player.spendGold?.(rerollCost)) return;
         this.preShopCardSelectionRerollsRemaining = Math.max(0, (this.preShopCardSelectionRerollsRemaining ?? 0) - 1);
         const cards = this.getRandomPreShopCardChoices(4);
         const hudScene = this.scene.get('HudScene');
         hudScene?.showPreShopCardSelection?.({
             cards,
             gold: Math.max(0, Math.floor(this.player?.gold ?? 0)),
-            rerollCost: PRE_SHOP_CARD_SELECTION_REROLL_COST,
+            rerollCost,
             rerollRemaining: this.preShopCardSelectionRerollsRemaining,
             onSelect: (cardConfig) => this.onPreShopCardSelected(cardConfig),
             onReroll: () => this.rerollPreShopCardSelection()
@@ -2655,7 +2695,7 @@ export default class MainScene extends Phaser.Scene {
         resolvedRunState.shopPurchasedItems = Array.isArray(resolvedRunState.shopPurchasedItems)
             ? resolvedRunState.shopPurchasedItems
             : [];
-        resolvedRunState.shopCurrentRerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? SHOP_REROLL_COST));
+        resolvedRunState.shopCurrentRerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? this.getBaseShopRerollCost()));
         resolvedRunState.shopCurrentStockIds = Array.isArray(resolvedRunState.shopCurrentStockIds)
             ? resolvedRunState.shopCurrentStockIds
             : [];
@@ -2693,7 +2733,7 @@ export default class MainScene extends Phaser.Scene {
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
         if (!resolvedRunState || this.debugMode) return;
-        resolvedRunState.shopCurrentRerollCost = SHOP_REROLL_COST;
+        resolvedRunState.shopCurrentRerollCost = this.getBaseShopRerollCost();
         const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
         resolvedRunState.shopCurrentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
             .slice(0, 5)
@@ -2897,7 +2937,7 @@ export default class MainScene extends Phaser.Scene {
             gold: Math.max(0, Math.floor(context.player?.gold ?? 0)),
             items,
             purchasedItems,
-            rerollCost: Math.max(0, Math.floor(resolvedRunState?.shopCurrentRerollCost ?? SHOP_REROLL_COST)),
+            rerollCost: Math.max(0, Math.floor(resolvedRunState?.shopCurrentRerollCost ?? this.getBaseShopRerollCost())),
             rerollRemaining: null,
             debugMode: this.debugMode === true
         };
@@ -3021,11 +3061,11 @@ export default class MainScene extends Phaser.Scene {
         if (currentStockIds.length > 0 && lockedCount >= currentStockIds.length) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
-        const rerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? SHOP_REROLL_COST));
+        const rerollCost = Math.max(0, Math.floor(resolvedRunState.shopCurrentRerollCost ?? this.getBaseShopRerollCost()));
         if (!player.spendGold?.(rerollCost)) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
-        resolvedRunState.shopCurrentRerollCost = Math.max(SHOP_REROLL_COST, rerollCost * 2);
+        resolvedRunState.shopCurrentRerollCost = Math.max(this.getBaseShopRerollCost(), rerollCost * 2);
 
         const currentStockWithSlots = (resolvedRunState.shopCurrentStockIds ?? [])
             .slice(0, 5)
@@ -3055,6 +3095,43 @@ export default class MainScene extends Phaser.Scene {
             return nextItem?.id ?? null;
         });
         return this.buildShopOverlayState(player, resolvedRunState);
+    }
+
+    getMetaRunBonuses() {
+        return getMetaUpgradeBonuses(getMetaProgress(this).upgrades ?? {});
+    }
+
+    applyMetaUpgradesToPlayer(player = null) {
+        const resolvedPlayer = player ?? this.player;
+        if (!resolvedPlayer?.applyEffect) return;
+        const bonuses = this.getMetaRunBonuses();
+        bonuses.playerEffects.forEach((effect) => resolvedPlayer.applyEffect(effect));
+    }
+
+    getBaseShopRerollCost() {
+        const bonuses = this.getMetaRunBonuses();
+        return Math.max(
+            MIN_META_SHOP_REROLL_COST,
+            SHOP_REROLL_COST - Math.max(0, Math.floor(bonuses.shopRerollDiscount ?? 0))
+        );
+    }
+
+    getPreShopCardSelectionRerollCost() {
+        return PRE_SHOP_CARD_SELECTION_REROLL_COST;
+    }
+
+    getSupporterSelectionRerollCost() {
+        return SUPPORTER_SELECTION_REROLL_COST;
+    }
+
+    getPreShopCardSelectionMaxRerolls() {
+        const bonuses = this.getMetaRunBonuses();
+        return PRE_SHOP_CARD_SELECTION_MAX_REROLLS + Math.max(0, Math.floor(bonuses.preShopExtraRerolls ?? 0));
+    }
+
+    getSupporterSelectionMaxRerolls() {
+        const bonuses = this.getMetaRunBonuses();
+        return SUPPORTER_SELECTION_MAX_REROLLS + Math.max(0, Math.floor(bonuses.supporterExtraRerolls ?? 0));
     }
 
     toggleShopItemLock(itemId, playerOrId = null, runState = null) {

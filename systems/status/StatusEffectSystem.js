@@ -261,6 +261,25 @@ class RitualSlowStatusEffect extends StatusEffect {
     }
 }
 
+class RootStatusEffect extends StatusEffect {
+    static effectKey = 'root';
+
+    static defaultDefinition = {
+        ...StatusEffect.defaultDefinition,
+        durationMs: 550,
+        maxStacks: 1,
+        stackingMode: 'refresh',
+        tags: ['root', 'detain']
+    };
+
+    getStateContribution() {
+        return {
+            stunned: false,
+            speedMultiplier: 0
+        };
+    }
+}
+
 class ShockStatusEffect extends StatusEffect {
     static effectKey = 'shock';
 
@@ -589,6 +608,7 @@ const EFFECT_CLASS_MAP = {
     freeze: FreezeStatusEffect,
     petrify: PetrifyStatusEffect,
     ritual_slow: RitualSlowStatusEffect,
+    root: RootStatusEffect,
     shock: ShockStatusEffect,
     poison: PoisonStatusEffect,
     bleed: BleedStatusEffect,
@@ -2025,18 +2045,34 @@ export default class StatusEffectSystem {
         const damage = Math.max(0, Math.round(options.damage ?? 0));
         const slowDurationMs = Math.max(150, options.slowDurationMs ?? 550);
         const slowMultiplier = Phaser.Math.Clamp(options.slowMultiplier ?? 0.6, 0.05, 1);
+        const applySlow = options.applySlow !== false;
+        const freezeHitThreshold = Math.max(0, Math.round(options.freezeHitThreshold ?? 0));
+        const freezeDurationMs = Math.max(0, Math.round(options.freezeDurationMs ?? 0));
         const showDamageText = Boolean(options.showDamageText);
         const centerX = Number.isFinite(options.x) ? options.x : entity.x;
         const centerY = Number.isFinite(options.y) ? options.y : entity.y;
         const depth = (options.depth ?? (entity.depth ?? 20) + 1);
+        const hitCounterByTarget = new Map();
+        const visualColors = options.visualColors ?? {};
+        const baseColor = visualColors.base ?? 0x05020a;
+        const hazeColor = visualColors.haze ?? 0x12061d;
+        const outerVeilColor = visualColors.outerVeil ?? 0x3b0c5a;
+        const innerGlowColor = visualColors.innerGlow ?? 0x8a2be2;
+        const coreColor = visualColors.core ?? 0xd7a0ff;
+        const runeColors = Array.isArray(visualColors.runeColors) && visualColors.runeColors.length
+            ? visualColors.runeColors
+            : [0xd7a0ff, 0xb36bff, 0x8a2be2, 0x6c1b9a];
+        const arcColors = Array.isArray(visualColors.arcColors) && visualColors.arcColors.length
+            ? visualColors.arcColors
+            : [0xd7a0ff, 0xb36bff, 0x8a2be2];
 
         // "Cursed circle" look: layered soft fills, no explicit border/stroke.
         // Palette: heavy purple curse with subtle toxic accent.
-        const base = this.scene.add.ellipse(centerX, centerY + 2, radius * 2.05, radius * 1.32, 0x05020a, 0.32).setDepth(depth);
-        const haze = this.scene.add.circle(centerX, centerY, radius * 1.18, 0x12061d, 0.20).setDepth(depth + 1);
-        const outerVeil = this.scene.add.ellipse(centerX, centerY + 2, radius * 1.98, radius * 1.26, 0x3b0c5a, 0.16).setDepth(depth + 2);
-        const innerGlow = this.scene.add.circle(centerX, centerY, radius * 0.74, 0x8a2be2, 0.065).setDepth(depth + 3);
-        const core = this.scene.add.circle(centerX, centerY, radius * 0.42, 0xd7a0ff, 0.04).setDepth(depth + 4);
+        const base = this.scene.add.ellipse(centerX, centerY + 2, radius * 2.05, radius * 1.32, baseColor, 0.32).setDepth(depth);
+        const haze = this.scene.add.circle(centerX, centerY, radius * 1.18, hazeColor, 0.20).setDepth(depth + 1);
+        const outerVeil = this.scene.add.ellipse(centerX, centerY + 2, radius * 1.98, radius * 1.26, outerVeilColor, 0.16).setDepth(depth + 2);
+        const innerGlow = this.scene.add.circle(centerX, centerY, radius * 0.74, innerGlowColor, 0.065).setDepth(depth + 3);
+        const core = this.scene.add.circle(centerX, centerY, radius * 0.42, coreColor, 0.04).setDepth(depth + 4);
 
         const runeContainer = this.scene.add.container(centerX, centerY).setDepth(depth + 4);
         const runeCount = 10;
@@ -2048,7 +2084,7 @@ export default class StatusEffectSystem {
                 Math.sin(angle) * dist,
                 Phaser.Math.Between(5, 9),
                 Phaser.Math.Between(2, 4),
-                Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2, 0x6c1b9a]),
+                Phaser.Utils.Array.GetRandom(runeColors),
                 0.24
             );
             rune.setRotation(angle + Phaser.Math.FloatBetween(-0.35, 0.35));
@@ -2064,7 +2100,7 @@ export default class StatusEffectSystem {
             const arcWidth = Phaser.Math.Between(2, 4);
             const start = Phaser.Math.FloatBetween(0, Math.PI * 2);
             const span = Phaser.Math.FloatBetween(Math.PI * 0.35, Math.PI * 0.7);
-            g.lineStyle(arcWidth, Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2]), 0.16);
+            g.lineStyle(arcWidth, Phaser.Utils.Array.GetRandom(arcColors), 0.16);
             g.beginPath();
             g.arc(0, 0, arcRadius, start, start + span);
             g.strokePath();
@@ -2101,7 +2137,7 @@ export default class StatusEffectSystem {
             callback: () => {
                 const px = centerX + Phaser.Math.Between(-Math.round(radius * 0.8), Math.round(radius * 0.8));
                 const py = centerY + Phaser.Math.Between(-Math.round(radius * 0.3), Math.round(radius * 0.4));
-                const dot = this.scene.add.circle(px, py, Phaser.Math.Between(1, 2), Phaser.Utils.Array.GetRandom([0xd7a0ff, 0xb36bff, 0x8a2be2]), 0.26);
+                const dot = this.scene.add.circle(px, py, Phaser.Math.Between(1, 2), Phaser.Utils.Array.GetRandom(runeColors), 0.26);
                 dot.setDepth(depth + 6);
                 dot.setBlendMode(Phaser.BlendModes.ADD);
                 this.scene.tweens.add({
@@ -2132,13 +2168,30 @@ export default class StatusEffectSystem {
                     const dx = target.x - centerX;
                     const dy = target.y - centerY;
                     if ((dx * dx) + (dy * dy) > radiusSq) return;
-                    this.applyEffect(target, 'ritual_slow', {
-                        ownerPlayerId: options.ownerPlayerId ?? null,
-                        source: options.source ?? null,
-                        durationMs: slowDurationMs,
-                        slowMultiplier,
-                        tags: ['ritual', 'slow']
-                    });
+                    if (applySlow) {
+                        this.applyEffect(target, 'ritual_slow', {
+                            ownerPlayerId: options.ownerPlayerId ?? null,
+                            source: options.source ?? null,
+                            durationMs: slowDurationMs,
+                            slowMultiplier,
+                            tags: ['ritual', 'slow']
+                        });
+                    }
+                    if (freezeHitThreshold > 0 && freezeDurationMs > 0) {
+                        const nextHitCount = (hitCounterByTarget.get(target) ?? 0) + 1;
+                        if (nextHitCount >= freezeHitThreshold) {
+                            this.applyEffect(target, 'freeze', {
+                                ownerPlayerId: options.ownerPlayerId ?? null,
+                                source: options.source ?? null,
+                                durationMs: freezeDurationMs,
+                                slowMultiplier: 0,
+                                tags: ['ice', 'zone', 'freeze']
+                            });
+                            hitCounterByTarget.set(target, 0);
+                        } else {
+                            hitCounterByTarget.set(target, nextHitCount);
+                        }
+                    }
                     if (damage <= 0) return;
                     const damageResult = this.applyOwnedDamage(target, damage, {
                         ownerPlayerId: options.ownerPlayerId ?? null,

@@ -13,6 +13,7 @@ const EFFECT_CLASS_MAP = {
     aquaStreamTrail: WaterParticleEffect,
     cometTail: CometTailEffect,
     cometTailAstral: CometTailEffect,
+    muCoiTrail: WaterParticleEffect,
 };
 const TARGET_VIEW_MARGIN = 100;
 
@@ -535,6 +536,10 @@ export default class Skill extends Phaser.GameObjects.Sprite {
             tickIntervalMs,
             slowDurationMs: Math.max(150, Math.round((this.config?.zoneSlowDurationMs ?? 550) * effectDurationMul)),
             slowMultiplier: this.config?.zoneSlowMultiplier ?? 0.6,
+            applySlow: this.config?.zoneApplySlow !== false,
+            freezeHitThreshold: Math.max(0, Math.round(this.config?.zoneFreezeHitsRequired ?? 0)),
+            freezeDurationMs: Math.max(0, Math.round((this.config?.zoneFreezeDurationMs ?? 0) * effectDurationMul)),
+            visualColors: this.config?.zoneVisualColors ?? null,
             damage: tickDamage,
             ownerPlayerId,
             source: this,
@@ -903,7 +908,22 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         }
         if (!candidates.length) return null;
 
-        const targetPool = candidates;
+        let targetPool = candidates;
+        if (this.config?.prioritizeDetentionMarkedTargets) {
+            const detentionMarkKey = this.config?.detentionMark?.markEffectKey ?? 'mark';
+            const detentionTargets = candidates.filter((enemy) => {
+                const markEffects = enemy?.statusEffects?.getEffects?.(detentionMarkKey) ?? [];
+                return markEffects.some((effect) => (
+                    (effect?.ownerPlayerId ?? null) === (this.ownerPlayerId ?? null)
+                    && Array.isArray(effect?.tags)
+                    && effect.tags.includes('detention')
+                    && !effect.expired
+                ));
+            });
+            if (detentionTargets.length) {
+                targetPool = detentionTargets;
+            }
+        }
         let nearest = null;
         let minDist = Number.POSITIVE_INFINITY;
         for (const enemy of targetPool) {
@@ -923,6 +943,10 @@ export default class Skill extends Phaser.GameObjects.Sprite {
         const nextTarget = this.getNearestEnemyTarget(this.hitTargets);
         if (!nextTarget) return false;
         this.remainingChainTargets -= 1;
+        this.startX = this.x;
+        this.startY = this.y;
+        this.prevX = this.x;
+        this.prevY = this.y;
         this.direction.set(nextTarget.x - this.x, nextTarget.y - this.y).normalize();
         this.setRotation(this.getFacingRotation(Math.atan2(this.direction.y, this.direction.x)));
         return true;

@@ -12,7 +12,8 @@ const DEFAULT_CONFIG = {
     frequency: 18,
     quantity: 4,
     followOffset: 18,
-    spread: 8
+    spread: 8,
+    rotateToDirection: false
 };
 
 function ensureCometParticleTexture(scene) {
@@ -62,6 +63,18 @@ export default class CometTailEffect {
         const emitX = this.skill.x + offset.x;
         const emitY = this.skill.y + offset.y;
         this.emitter.setPosition(emitX, emitY);
+        const trailAngle = Phaser.Math.RadToDeg(Math.atan2(offset.y, offset.x));
+        this.emitter.setAngle({
+            min: trailAngle - 8,
+            max: trailAngle + 8
+        });
+        if (this.config.rotateToDirection && typeof this.emitter.setRotate === 'function') {
+            const spriteRotation = Phaser.Math.RadToDeg(Math.atan2(dir.y, dir.x)) + 90;
+            this.emitter.setRotate({
+                min: spriteRotation - 6,
+                max: spriteRotation + 6
+            });
+        }
         this.emitter.setParticleSpeed(
             {
                 min: offset.x - this.config.speed.max,

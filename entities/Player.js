@@ -83,6 +83,11 @@ export default class Player extends BaseEntity {
         this.levelGrowthMaxHealthBonus = 0;
         this.levelGrowthArmorBonus = 0;
         this.levelGrowthSpeedBonus = 0;
+        this.levelGrowthCritChanceBonus = 0;
+        this.levelGrowthEffectChanceBonus = 0;
+        this.levelGrowthEffectDamageBonus = 0;
+        this.levelGrowthProjectileSpeedBonus = 0;
+        this.levelGrowthAreaSizeBonus = 0;
         this.characterPassive = null;
         this.characterPassiveState = {};
         this.bonusArmor = 0;
@@ -119,6 +124,8 @@ export default class Player extends BaseEntity {
         this.statusEffectIndicators = [];
         this.globalProjectileSpeedMultiplier = 1;
         this.globalSkillAreaMultiplier = 1;
+        this.characterPassiveProjectileSpeedMultiplier = 1;
+        this.characterPassiveAreaMultiplier = 1;
         this.globalSkillDurationMultiplier = 1;
         this.globalSkillDurationOffsetMs = 0;
         this.skillDamageBonusPercent = {};
@@ -343,8 +350,19 @@ export default class Player extends BaseEntity {
             : [];
         const autoAimTarget = autoAimTargets[0] ?? null;
 
+        const passiveCastContext = this.characterPassive?.onBeforeSkillCast?.(this, {
+            skillType,
+            skillDefinition,
+            desiredCount,
+            isSummonSkill,
+            now
+        }) ?? null;
+
         const spawnSkillObject = (index) => {
             const skill = new Skill(this.scene, this, skillType);
+            if (passiveCastContext?.skillObjectData && typeof passiveCastContext.skillObjectData === 'object') {
+                Object.assign(skill, passiveCastContext.skillObjectData);
+            }
             if (isSummonSkill) {
                 skill.summonDesiredCount = desiredCount;
             }
@@ -370,8 +388,8 @@ export default class Player extends BaseEntity {
                     skill.startX = spawnX;
                     skill.startY = spawnY;
                     skill.direction.set(
-                        projectileTarget.x - spawnX,
-                        projectileTarget.y - spawnY
+                        Math.cos(projectileAngle),
+                        Math.sin(projectileAngle)
                     ).normalize();
                     skill.setRotation(skill.getFacingRotation(projectileAngle));
                     skill.setFlipX(false);
@@ -1734,7 +1752,9 @@ export default class Player extends BaseEntity {
     }
 
     getSkillProjectileSpeedMultiplier(skillKey) {
-        return (this.skillProjectileSpeedMultipliers[skillKey] ?? 1) * (this.globalProjectileSpeedMultiplier ?? 1);
+        return (this.skillProjectileSpeedMultipliers[skillKey] ?? 1)
+            * (this.globalProjectileSpeedMultiplier ?? 1)
+            * (this.characterPassiveProjectileSpeedMultiplier ?? 1);
     }
 
     getSkillExplosionRadiusMultiplier(skillKey) {
@@ -1751,7 +1771,9 @@ export default class Player extends BaseEntity {
         const supportsGlobalArea = category === 'projectile';
         const baseAreaMultiplier = this.resolveCharacterStats()?.areaSizeMultiplier ?? 1;
         const skillMultiplier = this.skillAreaMultipliers[skillKey] ?? 1;
-        const effective = skillMultiplier * (supportsGlobalArea ? (baseAreaMultiplier * (this.globalSkillAreaMultiplier ?? 1)) : 1);
+        const effective = skillMultiplier * (supportsGlobalArea
+            ? (baseAreaMultiplier * (this.globalSkillAreaMultiplier ?? 1) * (this.characterPassiveAreaMultiplier ?? 1))
+            : 1);
         return Math.max(0.1, effective);
     }
 
@@ -1801,11 +1823,14 @@ export default class Player extends BaseEntity {
             this.updateSpeedFromConfig();
             return this.runtimeDefaultSkillKey;
         }
+        this.characterPassive?.onCleanup?.(this, { nextCharacterKey: resolvedKey });
         this.characterKey = resolvedKey;
         this.characterConfig = config;
         this.characterStats = stats;
         this.characterPassive = getCharacterPassive(resolvedKey);
         this.characterPassiveState = {};
+        this.characterPassiveProjectileSpeedMultiplier = 1;
+        this.characterPassiveAreaMultiplier = 1;
         this.assetKey = assetKey;
         this.type = assetKey;
         const charSize = config.size ?? ENTITY_SIZE_CONFIG[assetKey] ?? { width: 42, height: 48 };
@@ -1864,6 +1889,26 @@ export default class Player extends BaseEntity {
             this.bonusSpeedFlat -= this.levelGrowthSpeedBonus;
         }
         this.levelGrowthSpeedBonus = 0;
+        if ((this.levelGrowthCritChanceBonus ?? 0) !== 0) {
+            this.globalCritChanceBonus -= this.levelGrowthCritChanceBonus;
+        }
+        this.levelGrowthCritChanceBonus = 0;
+        if ((this.levelGrowthEffectChanceBonus ?? 0) !== 0) {
+            this.globalEffectChanceBonus -= this.levelGrowthEffectChanceBonus;
+        }
+        this.levelGrowthEffectChanceBonus = 0;
+        if ((this.levelGrowthEffectDamageBonus ?? 0) !== 0) {
+            this.globalEffectDamageMultiplier -= this.levelGrowthEffectDamageBonus;
+        }
+        this.levelGrowthEffectDamageBonus = 0;
+        if ((this.levelGrowthProjectileSpeedBonus ?? 0) !== 0) {
+            this.globalProjectileSpeedMultiplier -= this.levelGrowthProjectileSpeedBonus;
+        }
+        this.levelGrowthProjectileSpeedBonus = 0;
+        if ((this.levelGrowthAreaSizeBonus ?? 0) !== 0) {
+            this.globalSkillAreaMultiplier -= this.levelGrowthAreaSizeBonus;
+        }
+        this.levelGrowthAreaSizeBonus = 0;
 
         Object.entries(this.levelGrowthSkillDamageBonuses ?? {}).forEach(([skillKey, value]) => {
             if (!skillKey || !value) return;
@@ -1893,6 +1938,36 @@ export default class Player extends BaseEntity {
             if (speedBonus > 0) {
                 this.levelGrowthSpeedBonus = speedBonus;
                 this.bonusSpeedFlat += speedBonus;
+            }
+
+            const critChanceBonus = Math.max(0, Number(growthConfig.critChancePerLevel) || 0) * gainedLevels;
+            if (critChanceBonus > 0) {
+                this.levelGrowthCritChanceBonus = critChanceBonus;
+                this.globalCritChanceBonus += critChanceBonus;
+            }
+
+            const effectChanceBonus = Math.max(0, Number(growthConfig.effectChancePerLevel) || 0) * gainedLevels;
+            if (effectChanceBonus > 0) {
+                this.levelGrowthEffectChanceBonus = effectChanceBonus;
+                this.globalEffectChanceBonus += effectChanceBonus;
+            }
+
+            const effectDamageBonus = Math.max(0, Number(growthConfig.effectDamagePerLevel) || 0) * gainedLevels;
+            if (effectDamageBonus > 0) {
+                this.levelGrowthEffectDamageBonus = effectDamageBonus;
+                this.globalEffectDamageMultiplier += effectDamageBonus;
+            }
+
+            const projectileSpeedBonus = Math.max(0, Number(growthConfig.projectileSpeedPerLevel) || 0) * gainedLevels;
+            if (projectileSpeedBonus > 0) {
+                this.levelGrowthProjectileSpeedBonus = projectileSpeedBonus;
+                this.globalProjectileSpeedMultiplier += projectileSpeedBonus;
+            }
+
+            const areaSizeBonus = Math.max(0, Number(growthConfig.areaSizePerLevel) || 0) * gainedLevels;
+            if (areaSizeBonus > 0) {
+                this.levelGrowthAreaSizeBonus = areaSizeBonus;
+                this.globalSkillAreaMultiplier += areaSizeBonus;
             }
 
             const damageBonus = Math.max(0, Number(growthConfig.damagePerLevel) || 0) * gainedLevels;
@@ -2025,6 +2100,7 @@ export default class Player extends BaseEntity {
     }
 
     destroy(fromScene) {
+        this.characterPassive?.onCleanup?.(this, { destroying: true });
         this.statusEffects?.destroy?.();
         this.statusEffects = null;
         this.motionTrailEffect?.destroy();

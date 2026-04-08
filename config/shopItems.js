@@ -90,7 +90,7 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
         assetPath: 'assets/shopitem/extra_barrel.png',
         shortText: '+1 projectile, but lowers damage per shot.',
         modifiers: { projectileCount: 1 },
-        availability: { excludesCharacterKeys: ['knight'] }
+        availability: { excludesCharacterKeys: ['knight', 'witch', 'frost'] }
     }),
     createShopItem({ id: 'cooldown_module', name: 'Cooldown Module', type: 'stat', cost: 40, assetPath: 'assets/shopitem/cooldown_module.png', modifiers: { attackSpeed: 0.08, healthRegenPerSecond: -0.3 } }),
     createShopItem({ id: 'combat_injector', name: 'Combat Injector', type: 'stat', cost: 47, assetPath: 'assets/shopitem/combat_injector.png', modifiers: { attackSpeed: 0.08, damageMultiplier: 0.08, effectDamageMultiplier: -0.1 } }),
@@ -105,7 +105,7 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
         cost: 40,
         assetPath: 'assets/shopitem/heavy_core.png',
         modifiers: { projectileCount: 1, attackSpeed: -0.15 },
-        availability: { excludesCharacterKeys: ['knight'] }
+        availability: { excludesCharacterKeys: ['knight', 'witch', 'frost'] }
     }),
     createShopItem({ id: 'overcharged_reactor', name: 'Overcharged Reactor', type: 'hybrid', cost: 40, assetPath: 'assets/shopitem/overcharged_reactor.png', modifiers: { skillRange: 10, attackSpeed: -0.15 } }),
     createShopItem({ id: 'unstable_shield', name: 'Unstable Shield', type: 'hybrid', cost: 40, assetPath: 'assets/shopitem/unstable_shield2.png', modifiers: { shield: 30, armor: -2 } }),
@@ -180,8 +180,24 @@ export const SHOP_ITEM_CONFIG = Object.freeze([
     createShopItem({ id: 'fire_core', name: 'Fire Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/fire_core.png', unlockElement: { effectKey: 'burn', chance: 0.5, tags: ['fire'] } }),
     createShopItem({ id: 'ice_core', name: 'Ice Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/ice_core.png', unlockElement: { effectKey: 'freeze', chance: 0.5, tags: ['ice'] } }),
     createShopItem({ id: 'poison_core', name: 'Poison Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/poison_core.png', unlockElement: { effectKey: 'poison', chance: 0.5, tags: ['poison'] } }),
-    createShopItem({ id: 'shock_core', name: 'Shock Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/shock_core.png', unlockElement: { effectKey: 'shock', chance: 0.5, tags: ['lightning'] } }),
-    createShopItem({ id: 'aim_core', name: 'Aim Core', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/aim_core.png', unlockElement: { effectKey: 'mark', chance: 0.5, tags: ['mark', 'aim'] } }),
+    createShopItem({
+        id: 'shock_core',
+        name: 'Shock Core',
+        type: 'unlock_element',
+        cost: 70,
+        assetPath: 'assets/shopitem/shock_core.png',
+        availability: { excludesCharacterKeys: ['raiji'] },
+        unlockElement: { effectKey: 'shock', chance: 0.5, tags: ['lightning'] }
+    }),
+    createShopItem({
+        id: 'aim_core',
+        name: 'Aim Core',
+        type: 'unlock_element',
+        cost: 70,
+        assetPath: 'assets/shopitem/aim_core.png',
+        availability: { excludesCharacterKeys: ['warden'] },
+        unlockElement: { effectKey: 'mark', chance: 0.5, tags: ['mark', 'aim'] }
+    }),
     createShopItem({ id: 'afang', name: 'Afang', type: 'unlock_element', cost: 70, assetPath: 'assets/shopitem/afang.png', unlockElement: { effectKey: 'bleed', chance: 0.5, tags: ['bleed'] } }),
     createShopItem({
         id: 'explore_core',

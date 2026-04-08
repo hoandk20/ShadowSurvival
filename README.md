@@ -1,6 +1,6 @@
-# Shadow Survivors
+# Rune Pixel Survivors
 
-`Shadow Survivors` is a browser-based survivor-action game built with `Phaser 3` and plain `ES modules`.
+`Rune Pixel Survivors` is a browser-based survivor-action game built with `Phaser 3` and plain `ES modules`.
 
 This README is intentionally config-first: the numbers below match the current game configuration in the repo.
 
@@ -10,7 +10,10 @@ Implemented now:
 
 - single-player gameplay loop
 - multiple playable characters
+- character unlock system in the menu using `dynamon`, map-clear conditions, and meta-upgrade conditions
+- character-specific passives and per-character level growth
 - flexible `base stats + bonus stats` system
+- permanent meta-upgrade system using `dynamon`
 - skill system with `projectile` and `melee`
 - supporter companion system
 - status effect framework
@@ -38,6 +41,7 @@ See [COOP_DECISION.md](./COOP_DECISION.md) for co-op planning notes.
 - skills: [config/skill.js](./config/skill.js)
 - supporters: [config/supporters.js](./config/supporters.js)
 - pre-shop cards: [config/preShopCards.js](./config/preShopCards.js)
+- meta upgrades: [config/metaUpgrades.js](./config/metaUpgrades.js)
 - enemies: [config/enemies.js](./config/enemies.js)
 - status effects: [config/statusEffects.js](./config/statusEffects.js)
 - scenarios: [config/stageScenarios.js](./config/stageScenarios.js)
@@ -130,27 +134,57 @@ All values below are the final current values after `base stats + statsBonus`.
 
 Source: [config/characters/characters.js](./config/characters/characters.js)
 
+Character unlock note:
+
+- free by default: `Lumina`, `Knight`
+- `Witch` unlocks permanently by clearing `maprock_field`
+- `Radian` unlocks permanently by clearing `church_sanctuary`
+- `Asian Dragon` unlocks permanently by clearing `inside_church`
+- `Assasin` unlocks permanently by maxing the `Crit Chance` meta upgrade
+- all other locked characters are unlocked permanently from the character select menu using `dynamon`
+
+Current unlock costs:
+
+| Character | Cost |
+| --- | ---: |
+| `Aqua` | `260` |
+| `Frost` | `360` |
+| `Bodoi` | `520` |
+| `Gambler` | `580` |
+| `Raiji` | `640` |
+| `Warden` | `700` |
+| `Werewolf` | `780` |
+
 Current character passive note:
 
-- `Lumina`: `skillRange +40`
+- `Lumina`: `skillRange +40`; level growth `+1 HP`, `+2 shooting_star damage` per level
 - `Knight`: `dodge +20%`
-- `Witch`: `casts Ritual Zone (slow + tick damage)`
-- `Werewolf`: level growth `+5 HP`, `+2 move speed`, `+2 claw damage` per level
+- `Aqua`: `Tidal Flow (water hits build Flow; at 5 stacks the next water cast triggers a freezing Splash Burst)`; level growth `+6 HP`, `+1.5% area size`, `+1.5% projectile speed` per level
+- `Radian`: `Ghost Summon calls forth spirits that persistently hunt nearby enemies`; level growth `+5 HP`, `+1 ghost_summon damage` per level
+- `Frost`: `casts Frost Zone (tick damage + brief freeze after repeated hits)`; level growth `+5 HP`, `+1.5% effect chance`, `+1 frost_zone damage` per level
+- `Witch`: `casts Ritual Zone (slow + tick damage)`; level growth `+4 HP`, `+1.5% effect damage`, `+1% crit chance` per level
+- `Asian Dragon`: `Flame explodes for 30% bonus damage and leaves a burn cloud`; level growth `+4 HP`, `+1 flame damage`, `+1% effect damage` per level
+- `Bodoi`: `Mu Coi auto-aims, chains once, and triggers a small burst when it redirects`; level growth `+4 HP`, `+1 mu_coi damage`, `+1.5% projectile speed` per level
+- `Gambler`: `Loaded Deck (+8% crit chance; Card Toss fires a 3-card fan with the center card aiming true)`; level growth `+4 HP`, `+1 card_toss damage`, `+1% crit chance` per level
+- `Raiji`: `Static Surge (+1 shock chain and sharper lightning crits)`; level growth `+4 HP`, `+1 thunder damage`, `+1% crit chance` per level
+- `Warden`: `Detention Mark (marks last 6s; fire prioritizes marked targets; hit 2 triggers a small explosion and brief root, then resets)`
+- `Assasin`: `Phantom Slash (critical stab hits trigger a ghostly ambush slash for 35% bonus damage about once every 0.7s, cutting through a nearby enemy)`
+- `Werewolf`: `Below 50% HP: +15% attack speed, +10 move speed, +8% lifesteal; hits against bleeding targets heal 1.5% max HP`; level growth `+5 HP`, `+2 move speed`, `+2 claw damage` per level
 
 | Character | Default skill | Style | HP | Armor | Move Speed | Crit Chance |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | Lumina | `shooting_star` | ranged | 75 | 1 | 105 | 0.1 |
 | Aqua | `nova` | ranged | 140 | 1 | 105 | 0.1 |
-| Radian | `ghost_summon` | ranged | 100 | 1 | 105 | 0.1 |
-| Frost | `ice` | ranged | 100 | 1 | 108 | 0.1 |
+| Radian | `ghost_summon` | ranged | 105 | 1 | 105 | 0.1 |
+| Frost | `frost_zone` | ranged | 100 | 1 | 108 | 0.1 |
 | Witch | `ritual_zone` | ranged | 75 | 1 | 112 | 0.35 |
 | Asian Dragon | `flame` | ranged | 75 | 1 | 112 | 0.1 |
-| Bodoi | `mu_coi` | ranged | 75 | 1 | 112 | 0.1 |
-| Gambler | `card_toss` | ranged | 80 | 1 | 108 | 0.1 |
-| Raiji | `thunder` | ranged | 70 | 2 | 115 | 0.1 |
-| Warden | `fire` | ranged | 100 | 2 | 105 | 0.1 |
+| Bodoi | `mu_coi` | ranged | 80 | 1 | 112 | 0.1 |
+| Gambler | `card_toss` | ranged | 85 | 1 | 110 | 0.18 |
+| Raiji | `thunder` | ranged | 75 | 2 | 113 | 0.12 |
+| Warden | `fire` | ranged | 110 | 2 | 103 | 0.1 |
 | Werewolf | `claw` | melee | 135 | 2 | 107 | 0.18 |
-| Assasin | `stab` | melee | 90 | 1 | 113 | 0.22 |
+| Assasin | `stab` | melee | 85 | 1 | 115 | 0.2 |
 | Knight | `slash` | melee | 120 | 3 | 100 | 0.1 |
 
 ## Skill Mechanics
@@ -188,7 +222,8 @@ Current melee behavior:
 ### Projectile Variant Rules
 
 - `thunder` now behaves as a normal `projectile` skill with `attackStyle: 'chain_lightning_strike'`
-- `charm` and `ghost` now behave as normal `projectile` skills
+- `charm` behaves as a normal `projectile` skill (auto-aim projectile volley)
+- `ghost_summon` is a summon-style skill (Radian default)
 
 ## Skill Table
 
@@ -198,36 +233,30 @@ Source: [config/skill.js](./config/skill.js)
 
 | Skill | Damage | Cooldown | Duration | Range | Speed | Hitbox | Targeting / Notes |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| `nova` | 18 | 1400 | 800 | 140 | 400 | `20x8` | straight projectile |
-| `aqua_stream` | 15 | 700 | 900 | 130 | 200 | `40x25` | rotating multi-projectile |
-| `ice` | 8 | 2000 | 800 | 120 | 1000 | `30x10` | auto-aim, `iceTrail`, stun `2000ms` |
-| `shooting_star` | 24 | 1000 | 1600 | 140 | 800 | `40x15` | auto-aim projectile, destroy on hit |
-| `sky_fall` | 30 | 700 | 1800 | 130 | 2000 | `40x40` | sky drop, `cometTail`, destroy on hit |
-| `astral` | 300 | 5000 | 1800 | 140 | 300 | `150x150` | sky drop, auto explode at viewport center, `cometTailAstral` |
-| `fire` | 20 | 1800 | 3000 | 110 | 200 | `20x20` | homing |
-| `flame` | 22 | 2500 | 1800 | 130 | 200 | `50x30` | auto-aim |
-| `blueflame` | 70 | 1300 | 1500 | 150 | 260 | `70x30` | auto-aim, distinct targets |
+| `ritual_zone` | 24 | 2300 | 1500 | 160 | - | - | places a cursed ritual zone, ticks every `400ms`, slow `0.65` |
+| `frost_zone` | 20 | 2200 | 1500 | 150 | - | - | places a frost zone, ticks every `320ms`, no slow, freezes briefly after `4` hits on the same target |
+| `nova` | 16 | 1400 | 800 | 140 | 400 | `20x8` | straight projectile |
+| `shooting_star` | 22 | 1000 | 1600 | 140 | 800 | `40x15` | auto-aim projectile, destroy on hit |
+| `fire` | 18 | 1800 | 10000 | 120 | 260 | `20x20` | homing, prioritizes marked targets, hit 1 marks for `6s`, hit 2 detonates and briefly roots |
+| `flame` | 22 | 2500 | 1800 | 130 | 240 | `50x30` | auto-aim, 30% on-hit explosion, leaves a burn cloud |
 | `code` | 15 | 3000 | 1800 | 140 | 150 | `10x10` | auto-aim, hidden sprite, `codeProjectile` |
-| `mu_coi` | 15 | 3000 | 8000 | 140 | 80 | `12x12` | auto-aim, bounce on hit |
-| `card_toss` | 5 | 1500 | 1800 | 110 | 700 | `10x15` | auto-aim fan, spin |
-| `card_shot` | 20 | 1000 | 2000 | 120 | 720 | `18x24` | auto-aim distinct targets, spin |
-| `god_card` | 35 | 0 | 2200 | 130 | 760 | `18x24` | auto-aim distinct targets, spin |
+| `mu_coi` | 18 | 2000 | 8000 | 140 | 500 | `12x12` | auto-aim, small green-gold burst on chain, retargets once to another enemy on hit, then disappears |
+| `card_toss` | 18 | 1500 | 1800 | 145 | 400 | `10x15` | auto-aim 3-card fan, spin |
 
 ### Melee Skills
 
 | Skill | Damage | Cooldown | Duration | Melee Range | Cast Gap | Hitbox | Current hit effect |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | `claw` | 22 | 1200 | 1200 | 34 | 22 | `20x40` | blood wolf slash |
-| `stab` | 20 | 850 | 900 | 30 | 20 | `18x34` | knife-like single slash |
-| `slash` | 24 | 1100 | 1000 | 38 | 24 | `44x44` | 180-degree knight slash arc |
+| `stab` | 18 | 820 | 900 | 30 | 20 | `18x34` | knife-like single slash |
+| `slash` | 24 | 1700 | 1000 | 38 | 24 | `44x44` | 180-degree knight slash arc |
 
 ### Projectile Variant Skills
 
 | Skill | Category | Damage | Cooldown | Duration | Key behavior |
 | --- | --- | ---: | ---: | ---: | --- |
-| `thunder` | projectile | 12 | 1000 | 300 | chain lightning strike |
+| `thunder` | projectile | 14 | 1000 | 300 | chain lightning strike with direct projectile chaining disabled; shock still handles spread |
 | `charm` | projectile | 18 | 3000 | 2000 | auto-aim projectile volley |
-| `ghost` | projectile | 18 | 2200 | 1800 | auto-aim projectile volley |
 
 ### Important Skill Notes
 
@@ -238,11 +267,11 @@ Source: [config/skill.js](./config/skill.js)
 - if `projectileCount > 1`, each projectile uses `baseDamage / projectileCount + 0.1 x baseDamage`
 - default explosion is not assigned to any skill right now
 - `explosion` exists as a status effect config, ready to be attached later
-- normalized skill knockback currently defaults to `30`
+- normalized skill knockback currently defaults to `100`
 
 ### Summon Skills
 
-- `ghost_summon` is a Radian-only summon skill (default spawns `2` ghosts and scales with `projectileCount`)
+- `ghost_summon` is a Radian-only summon skill (default spawns `2` ghosts, ghost base damage `13`, and scales with `projectileCount`)
 - ghosts are melee summons that try to spread targets (but prioritize bosses when present)
 - ghosts expire after `20s` and are re-summoned in a loop
 
@@ -382,6 +411,9 @@ Source: [config/statusEffects.js](./config/statusEffects.js)
 | `burn` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `reapplyDelayMs: 400`, `maxStacks: 6` |
 | `shock` | `durationMs: 2000`, `slowDurationMs: 2000`, `slowMultiplier: 0.7`, `chainCount: 2`, `chainRadius: 120`, `chainDamageRatios: [0.75, 0.5, 0.25]`, `chainStepDelayMs: 90`, `maxStacks: 4` |
 | `freeze` | `durationMs: 1500`, `mode: 'stun'`, `slowMultiplier: 0`, `maxStacks: 1` |
+| `petrify` | `durationMs: 700`, `mode: 'stun'`, `slowMultiplier: 0`, `maxStacks: 1` |
+| `ritual_slow` | `durationMs: 650`, `slowMultiplier: 0.65`, `maxStacks: 1` |
+| `root` | `durationMs: 550`, `speedMultiplier: 0`, `maxStacks: 1` |
 | `poison` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `trailIntervalMs: 700`, `trailDamage: 4`, `antiHealMultiplier: 0.35`, `reapplyDelayMs: 400`, `maxStacks: 6` |
 | `shield` | `durationMs: 0`, `capacity: 50`, `refillIntervalMs: 10000`, `maxStacks: 1` |
 | `bleed` | `durationMs: 4000`, `damageRatioPerTick: 0.3`, `minDamagePerTick: 5`, `burstDamage: 10`, `reapplyDelayMs: 400`, `maxStacks: 10` |
@@ -479,6 +511,7 @@ Current runtime flow:
 
 - `maprock_field` now runs a scripted `20`-wave plan
 - `church_sanctuary` now also runs a scripted `20`-wave plan with a different enemy roster
+- `inside_church` now also runs a scripted `20`-wave plan (same structure as `church_sanctuary`, different roster)
 - maps can define an `atmosphere` overlay in [config/map.js](./config/map.js) to darken just the tilemap background while keeping players/enemies/telegraphs bright (fixed-screen `MULTIPLY` rectangle with a low depth)
 - weighted wave spawn is supported inside scripted wave plans
 - each wave shows a `WAVE N` banner and waits about `2s` before enemies start spawning
@@ -497,6 +530,13 @@ Current runtime flow:
   - `bat -> widow`
   - `eyes -> succubus + lamia`
   - `mummy -> bugmonster`
+- `inside_church` uses the same 20-wave structure with its own roster swaps:
+  - `slime -> dino`
+  - `bugmonster -> moth_woman`
+  - `lamia -> firer`
+  - wave `5` miniboss: `medusa` (instead of `ailen`)
+  - wave `10` miniboss: `minotau` (instead of `skeleton`)
+  - wave `20` boss: `black_widow` (instead of `plant`)
 - the maximum number of enemies alive on the map at once is currently `25`
 - about `2s` after a wave ends, the shop flow begins
 - before the shop opens, the game now rolls `4` stat cards and the player picks `1`
@@ -557,6 +597,62 @@ Current debug defaults:
 - player HP starts at `10000`
 - enemy HP starts at `10000`
 
+### Meta Progression (Dynamon)
+
+- the game tracks an out-of-run currency `dynamon`
+- `dynamon` is currently persisted via `localStorage` through `utils/metaProgress.js` (designed so it can be swapped to an account-backed provider later)
+- clearing a wave grants `+7..10 dynamon`
+- the main menu now includes an `UPGRADE` screen for permanent stat upgrades
+- permanent upgrade definitions live in [config/metaUpgrades.js](./config/metaUpgrades.js)
+- current local default meta save starts at `10000 dynamon`
+- challenge-based character unlocks currently include:
+  - `Witch`: clear `maprock_field`
+  - `Radian`: clear `church_sanctuary`
+  - `Asian Dragon`: clear `inside_church`
+  - `Assasin`: max the `Crit Chance` meta upgrade
+- permanent reroll upgrades currently affect:
+  - pre-shop rerolls
+  - supporter rerolls
+  - normal shop reroll discount with a current floor of `6` gold
+
+### Permanent Meta Upgrades
+
+Source: [config/metaUpgrades.js](./config/metaUpgrades.js)
+
+Current permanent upgrade groups:
+
+- `Survival`
+- `Economy`
+- `Combat`
+
+#### Survival
+
+| Stat | Bonus mỗi level | Max | Cost |
+| --- | ---: | ---: | --- |
+| Max HP | `+6 HP` | `+30 HP` | `120 / 180 / 260 / 360 / 500` |
+| Armor | `+0.4` | `+2` | `160 / 230 / 320 / 440 / 600` |
+| Regen | `+0.12 HP/s` | `+0.6 HP/s` | `120 / 180 / 260 / 360 / 500` |
+| Pickup Range | `+6%` | `+30%` | `120 / 180 / 260 / 360 / 500` |
+
+#### Economy
+
+| Stat | Bonus mỗi level | Max | Cost |
+| --- | ---: | ---: | --- |
+| Gold Gain | `+3%` | `+15%` | `160 / 230 / 320 / 440 / 600` |
+| XP Gain | `+4%` | `+20%` | `160 / 230 / 320 / 440 / 600` |
+| Shop Reroll Discount | `-1 gold` | `-5 gold` | `160 / 230 / 320 / 440 / 600` |
+| Pre-shop Reroll | `Lv1: +1 reroll`, `Lv2: +1 reroll` | `+2 reroll` | `420 / 680` |
+| Supporter Reroll | `Lv1: +1 reroll`, `Lv2: +1 reroll` | `+2 reroll` | `500 / 780` |
+
+#### Combat
+
+| Stat | Bonus mỗi level | Max | Cost |
+| --- | ---: | ---: | --- |
+| Damage | `+2.5%` | `+12.5%` | `160 / 230 / 320 / 440 / 600` |
+| Attack Speed | `+2%` | `+10%` | `160 / 230 / 320 / 440 / 600` |
+| Crit Chance | `+1.5%` | `+7.5%` | `160 / 230 / 320 / 440 / 600` |
+| Effect Chance | `+2%` | `+10%` | `160 / 230 / 320 / 440 / 600` |
+
 ## Audio
 
 Default audio config:
@@ -566,14 +662,25 @@ Default audio config:
 
 Source: [utils/audioSettings.js](./utils/audioSettings.js)
 
+Settings persistence:
+
+- audio settings are persisted via `localStorage`
+- gameplay settings such as `DMG TEXT` and `DMG CAP` are also persisted via `localStorage`
+
+Additional source:
+
+- [utils/gameplaySettings.js](./utils/gameplaySettings.js)
+
 ## Summary
 
-`Shadow Survivors` currently ships as a config-driven single-player survivor game with:
+`Rune Pixel Survivors` currently ships as a config-driven single-player survivor game with:
 
 - shared stat bases for player and enemy
 - a mixed roster of ranged and melee characters
+- a permanent character unlock layer using both `dynamon` purchases and challenge conditions
 - projectile and melee skill styles
 - attack and support supporters with explicit numeric configs
+- a permanent meta-upgrade layer driven by `dynamon`
 - pre-shop stat card picks with rarity-based upgrades
 - a wave shop with reroll and lock persistence
 - a dedicated status effect framework with current default values documented above

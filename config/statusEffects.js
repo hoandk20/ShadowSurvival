@@ -50,9 +50,11 @@ export const STATUS_EFFECT_CONFIG = {
             slowMultiplier: 0,
             maxStacks: 1
         },
-        // Stone-ish tint. No icon yet to avoid confusion with freeze.
+        // Stone-ish tint + custom icon (shown above player/enemy when active).
         highlightTint: 0xbab3a5,
         highlightPriority: 55,
+        iconPriority: 85,
+        iconTextureKey: 'petrify_icon',
         showStack: false
     },
     ritual_slow: {
@@ -65,6 +67,17 @@ export const STATUS_EFFECT_CONFIG = {
         highlightPriority: 35,
         iconPriority: 75,
         iconTextureKey: 'ritual_zone_icon',
+        showStack: false
+    },
+    root: {
+        defaultStats: {
+            durationMs: 550,
+            maxStacks: 1
+        },
+        highlightTint: 0xff8a4d,
+        highlightPriority: 65,
+        iconPriority: 82,
+        iconTextureKey: 'root_icon',
         showStack: false
     },
     poison: {

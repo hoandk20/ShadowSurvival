@@ -3,11 +3,55 @@ export const DEFAULT_AUDIO_SETTINGS = {
     sfxEnabled: true
 };
 
+const AUDIO_SETTINGS_STORAGE_KEY = 'rune_pixel_survivors_audio_settings_v1';
+const LEGACY_AUDIO_SETTINGS_STORAGE_KEY = 'shadow_survivors_audio_settings_v1';
+
+function sanitizeAudioSettings(raw) {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    return {
+        musicEnabled: typeof source.musicEnabled === 'boolean'
+            ? source.musicEnabled
+            : DEFAULT_AUDIO_SETTINGS.musicEnabled,
+        sfxEnabled: typeof source.sfxEnabled === 'boolean'
+            ? source.sfxEnabled
+            : DEFAULT_AUDIO_SETTINGS.sfxEnabled
+    };
+}
+
+function loadStoredAudioSettings() {
+    try {
+        const raw = globalThis?.localStorage?.getItem?.(AUDIO_SETTINGS_STORAGE_KEY)
+            ?? globalThis?.localStorage?.getItem?.(LEGACY_AUDIO_SETTINGS_STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_AUDIO_SETTINGS };
+        return { ...DEFAULT_AUDIO_SETTINGS, ...sanitizeAudioSettings(JSON.parse(raw)) };
+    } catch (_error) {
+        return { ...DEFAULT_AUDIO_SETTINGS };
+    }
+}
+
+function saveStoredAudioSettings(settings) {
+    try {
+        globalThis?.localStorage?.setItem?.(
+            AUDIO_SETTINGS_STORAGE_KEY,
+            JSON.stringify(sanitizeAudioSettings(settings))
+        );
+    } catch (_error) {
+        // Ignore storage failures and keep runtime settings alive in registry.
+    }
+}
+
 export function ensureAudioSettings(registry) {
-    if (!registry) return { ...DEFAULT_AUDIO_SETTINGS };
+    if (!registry) return loadStoredAudioSettings();
     const current = registry.get('audioSettings');
-    const next = { ...DEFAULT_AUDIO_SETTINGS, ...(current ?? {}) };
-    registry.set('audioSettings', next);
+    const stored = loadStoredAudioSettings();
+    const next = sanitizeAudioSettings({ ...DEFAULT_AUDIO_SETTINGS, ...stored, ...(current ?? {}) });
+    if (
+        current?.musicEnabled !== next.musicEnabled ||
+        current?.sfxEnabled !== next.sfxEnabled
+    ) {
+        registry.set('audioSettings', next);
+    }
+    saveStoredAudioSettings(next);
     return next;
 }
 
@@ -17,8 +61,9 @@ export function getAudioSettings(scene) {
 
 export function updateAudioSetting(scene, key, value) {
     const settings = getAudioSettings(scene);
-    const next = { ...settings, [key]: Boolean(value) };
+    const next = sanitizeAudioSettings({ ...settings, [key]: Boolean(value) });
     scene?.registry?.set('audioSettings', next);
+    saveStoredAudioSettings(next);
     return next;
 }
 

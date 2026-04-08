@@ -112,6 +112,42 @@ const RAW_SKILL_CONFIG = {
         zoneSlowDurationMs: 650,
         tags: ['ritual', 'zone']
     },
+    frost_zone: {
+        label: 'Frost Zone',
+        category: 'projectile',
+        attackStyle: 'ritual_zone',
+        targeting: {
+            autoAim: true
+        },
+        projectile: {
+            range: 150
+        },
+        playAnimation: false,
+        visibleDuringEffect: false,
+        hitboxWidth: 1,
+        hitboxHeight: 1,
+        damage: 20,
+        duration: 1500,
+        cooldown: 2200,
+        zoneRadius: 128,
+        zoneDurationMs: 1600,
+        zoneTickIntervalMs: 320,
+        zoneDamageRatio: 0.28,
+        zoneBaseDamageExponent: 0.85,
+        zoneApplySlow: false,
+        zoneFreezeHitsRequired: 4,
+        zoneFreezeDurationMs: 700,
+        zoneVisualColors: {
+            base: 0x03111c,
+            haze: 0x082237,
+            outerVeil: 0x12507a,
+            innerGlow: 0x7fd8ff,
+            core: 0xe7fbff,
+            runeColors: [0xe7fbff, 0x9fe9ff, 0x7fd8ff, 0x4fb8ea],
+            arcColors: [0xe7fbff, 0x9fe9ff, 0x7fd8ff]
+        },
+        tags: ['ice', 'zone']
+    },
     ghost_summon: {
         label: 'Ghost',
         category: 'projectile',
@@ -132,7 +168,7 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 11,
+        damage: 13,
         duration: 300,
         cooldown: 1200,
         summonLifetimeMs: 20000,
@@ -160,7 +196,6 @@ const RAW_SKILL_CONFIG = {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 5,
-            force: 40,
             dragFactor: 0.5,
             dragDuration: 220,
             count: 99
@@ -173,7 +208,7 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 12,
+        damage: 14,
         duration: 300,
         cooldown: 1000,
         hitboxWidth: 60,
@@ -188,7 +223,7 @@ const RAW_SKILL_CONFIG = {
                 chance: 1
             }
         ],
-        chainCount: 3,
+        chainCount: 0,
         chainRadius: 180,
         chainInitialDamageRatio: 0.75,
         chainDamageDecayFactor: 0.75,
@@ -204,6 +239,10 @@ const RAW_SKILL_CONFIG = {
     nova: {
         label: 'Nova',
         category: 'projectile',
+        tags: ['water'],
+        targeting: {
+            autoAim: true
+        },
         objects: {
             multiple: true,
             maxCount: 6
@@ -211,13 +250,13 @@ const RAW_SKILL_CONFIG = {
         projectile: {
             speed: 400,
             range: 140,
-            alignWithMovement: true
+            alignWithMovement: false,
+            destroyOnHit: true,
         },
         knockback: {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 5,
-            force: 40,
             dragFactor: 0.4,
             dragDuration: 220,
             count: 99
@@ -230,110 +269,15 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 18,
+        damage: 16,
         duration: 800,
         cooldown: 1400,
         hitboxWidth: 20,
         hitboxHeight: 8,
         critical: {
-            chance: 0.3,
-            multiplier: 1.45,
+            chance: 0.25,
+            multiplier: 1.4,
             color: '#4287f5'
-        }
-    },
-    aqua_stream: {
-        label: 'Aqua Stream',
-        category: 'projectile',
-        objects: {
-            multiple: true,
-            defaultCount: 6,
-            maxCount: 6
-        },
-        projectile: {
-            speed: 200,
-            range: 130,
-            alignWithMovement: true,
-            castRotationStartAngle: -Math.PI / 2,
-            castRotationSpeed: -Math.PI * 2
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 1,
-            force: 10,
-            dragFactor: 0.4,
-            dragDuration: 220,
-            count: 99
-        },
-        basePath: 'assets/skill_evolution/aqua_stream/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        damage: 15,
-        duration: 900,
-        cooldown: 700,
-        hitboxWidth: 40,
-        hitboxHeight: 25,
-        critical: {
-            chance: 0.32,
-            multiplier: 1.55,
-            color: '#6fd6ff'
-        }
-    },
-    ice: {
-        label: 'Ice',
-        category: 'projectile',
-        objects: {
-            multiple: false
-        },
-        targeting: {
-            autoAim: true
-        },
-        projectile: {
-            speed: 1000,
-            range: 120,
-            alignWithMovement: false
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 1,
-            force: 10,
-            dragFactor: 0.4,
-            dragDuration: 220,
-            count: 50
-        },
-        basePath: 'assets/skills/ice/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        behaviors: [
-            { type: 'directHit' },
-            { type: 'stunOnHit' },
-            { type: 'projectileResolution' }
-        ],
-        damage: 8,
-        duration: 800,
-        cooldown: 2000,
-        hitboxWidth: 30,
-        hitboxHeight: 10,
-        effectKey: 'iceTrail',
-        critical: {
-            chance: 0.3,
-            multiplier: 1.45,
-            color: '#7ce5ff'
-        },
-        stun: {
-            duration: 2000,
-            color: '#7ce5ff'
         }
     },
     shooting_star: {
@@ -360,7 +304,6 @@ const RAW_SKILL_CONFIG = {
         },
         knockback: {
             takeDamage: false,
-            force: 80,
             count: 4
         },
         basePath: 'assets/skills/shooting_star/',
@@ -371,7 +314,7 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 24,
+        damage: 22,
         duration: 1600,
         cooldown: 1000,
         hitboxWidth: 40,
@@ -380,105 +323,6 @@ const RAW_SKILL_CONFIG = {
             chance: 0.25,
             multiplier: 1.75,
             color: '#2b1e1a'
-        }
-    },
-    sky_fall: {
-        label: 'Sky Fall',
-        category: 'projectile',
-        objects: {
-            multiple: true,
-            defaultCount: 5,
-            maxCount: 10,
-            spawnInterval: 0
-        },
-        projectile: {
-            speed: 2000,
-            range: 130,
-            alignWithMovement: false,
-            destroyOnHit: true
-        },
-        skyDrop: {
-            enabled: true,
-            height: 300,
-            entryOffsetX: 220
-        },
-        knockback: {
-            takeDamage: false,
-            force: 110,
-            count: 6
-        },
-        basePath: 'assets/skill_evolution/sky_fall/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        behaviors: [
-            { type: 'directHit' },
-            { type: 'projectileResolution' }
-        ],
-        damage: 30,
-        duration: 1800,
-        cooldown: 700,
-        hitboxWidth: 40,
-        hitboxHeight: 40,
-        effectKey: 'cometTail',
-        critical: {
-            chance: 0.3,
-            multiplier: 1.85,
-            color: '#fff0a8'
-        }
-    },
-    astral: {
-        label: 'Astral',
-        category: 'projectile',
-        objects: {
-            multiple: false,
-            defaultCount: 1,
-            maxCount: 1,
-            spawnInterval: 100
-        },
-        projectile: {
-            speed: 300,
-            range: 140,
-            alignWithMovement: false,
-            destroyOnHit: true
-        },
-        skyDrop: {
-            enabled: true,
-            height: 360,
-            entryOffsetX: 220
-        },
-        autoExplodeAtViewportCenter: true,
-        knockback: {
-            takeDamage: false,
-            force: 110,
-            count: 6
-        },
-        basePath: 'assets/skill_evolution/astral/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        behaviors: [
-            { type: 'directHit' },
-            { type: 'projectileResolution' }
-        ],
-        damage: 300,
-        duration: 1800,
-        cooldown: 5000,
-        hitboxWidth: 150,
-        hitboxHeight: 150,
-        effectKey: 'cometTailAstral',
-        critical: {
-            chance: 0.3,
-            multiplier: 1.85,
-            color: '#fff0a8'
         }
     },
     fire: {
@@ -492,8 +336,8 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 200,
-            range: 110,
+            speed: 260,
+            range: 120,
             alignWithMovement: true,
             destroyOnHit: true
         },
@@ -501,7 +345,6 @@ const RAW_SKILL_CONFIG = {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 5,
-            force: 30,
             dragFactor: 0.3,
             dragDuration: 300,
             count: 99
@@ -514,11 +357,33 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 20,
-        duration: 3000,
+        damage: 18,
+        duration: 10000,
         cooldown: 1800,
         hitboxWidth: 20,
         hitboxHeight: 20,
+        detentionMark: {
+            enabled: true,
+            markEffectKey: 'mark',
+            markDurationMs: 6000,
+            rootDurationMs: 550,
+            explosionRadius: 38,
+            explosionDamageRatio: 0.4,
+            explosionTint: '#ff9a4d'
+        },
+        prioritizeDetentionMarkedTargets: true,
+        statusEffects: [
+            {
+                key: 'mark',
+                trigger: 'onHit',
+                target: 'target',
+                chance: 1,
+                durationMs: 6000,
+                damageIncreasePerStack: 0,
+                maxStacks: 1,
+                tags: ['mark', 'detention']
+            }
+        ],
         critical: {
             chance: 0.3,
             multiplier: 1.4,
@@ -541,7 +406,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 3
         },
         projectile: {
-            speed: 200,
+            speed: 240,
             range: 130,
             alignWithMovement: true,
             destroyOnHit: true
@@ -550,7 +415,6 @@ const RAW_SKILL_CONFIG = {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 10,
-            force: 140,
             dragFactor: 0.35,
             dragDuration: 300,
             count: 1
@@ -570,66 +434,18 @@ const RAW_SKILL_CONFIG = {
         damage: 22,
         duration: 1800,
         cooldown: 2500,
-        hitboxWidth: 50,
-        hitboxHeight: 30,
+        hitboxWidth: 30,
+        hitboxHeight: 20,
+        onHitExplosionRadius: 42,
+        onHitExplosionDamageRatio: 0.3,
+        onHitExplosionTint: '#ff9a4d',
+        onHitBurnCloudRadius: 54,
+        onHitBurnCloudDurationMs: 1500,
+        onHitBurnDurationMs: 2200,
         critical: {
             chance: 0.15,
             multiplier: 2,
             color: '#B2BEB5'
-        }
-    },
-    blueflame: {
-        label: 'Blue Flame',
-        category: 'projectile',
-        targeting: {
-            homing: false,
-            autoAim: {
-                enabled: true,
-                distinctTargets: true,
-                burstInterval: 220
-            }
-        },
-        objects: {
-            multiple: true,
-            defaultCount: 2,
-            maxCount: 2
-        },
-        projectile: {
-            speed: 260,
-            range: 150,
-            alignWithMovement: true,
-            destroyOnHit: true
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 14,
-            force: 190,
-            dragFactor: 0.35,
-            dragDuration: 320,
-            count: 1
-        },
-        basePath: 'assets/skill_evolution/blueflame/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        behaviors: [
-            { type: 'directHit' },
-            { type: 'projectileResolution' }
-        ],
-        damage: 70,
-        duration: 1500,
-        cooldown: 1300,
-        hitboxWidth: 70,
-        hitboxHeight: 30,
-        critical: {
-            chance: 0.32,
-            multiplier: 2.3,
-            color: '#dff6ff'
         }
     },
     code: {
@@ -657,7 +473,6 @@ const RAW_SKILL_CONFIG = {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 10,
-            force: 140,
             dragFactor: 0.35,
             dragDuration: 300,
             count: 1
@@ -691,17 +506,18 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 80,
+            speed: 500,
             range: 140,
             alignWithMovement: true,
-            destroyOnHit: false,
-            bounceOnHit: true
+            destroyOnHit: true,
+            bounceOnHit: false,
+            retargetOnHit: true,
+            maxChainTargets: 1
         },
         knockback: {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 10,
-            force: 140,
             dragFactor: 0.35,
             dragDuration: 300,
             count: Infinity
@@ -714,11 +530,23 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 15,
+        damage: 18,
         duration: 8000,
-        cooldown: 3000,
+        cooldown: 2000,
         hitboxWidth: 12,
         hitboxHeight: 12,
+        retargetBurstEffect: {
+            enabled: true,
+            coreColor: 0xf6f5c2,
+            outerColor: 0xb7df67,
+            ringColor: 0x5f8f2f,
+            emberColor: 0xdde99b,
+            coreRadius: 4,
+            outerRadius: 8,
+            ringRadius: 12,
+            emberCount: 5,
+            alphaMultiplier: 0.5
+        },
         critical: {
             chance: 0.15,
             multiplier: 2,
@@ -733,14 +561,14 @@ const RAW_SKILL_CONFIG = {
             autoAim: {
                 enabled: true,
                 distinctTargets: false,
-                burstInterval: 80,
-                fanAngle: 2,
+                burstInterval: 0,
+                fanAngle: 0.48,
                 spawnRadius: 10
             }
         },
         projectile: {
-            speed: 700,
-            range: 110,
+            speed: 400,
+            range: 145,
             alignWithMovement: true,
             destroyOnHit: true,
             spinOnFlight: true,
@@ -748,14 +576,13 @@ const RAW_SKILL_CONFIG = {
         },
         objects: {
             multiple: true,
-            defaultCount: 7,
-            maxCount: 15
+            defaultCount: 3,
+            maxCount: 9
         },
         knockback: {
             takeDamage: false,
             maxSpeed: 9999,
             distance: 10,
-            force: 40,
             dragFactor: 0.35,
             dragDuration: 300,
             count: 1
@@ -773,7 +600,7 @@ const RAW_SKILL_CONFIG = {
                 loop: false
             }
         },
-        damage: 5,
+        damage: 18,
         duration: 1800,
         cooldown: 1500,
         hitboxWidth: 10,
@@ -782,115 +609,6 @@ const RAW_SKILL_CONFIG = {
             chance: 0.15,
             multiplier: 2,
             color: '#d9c27a'
-        }
-    },
-    card_shot: {
-        label: 'Card Shot',
-        category: 'projectile',
-        targeting: {
-            homing: false,
-            autoAim: {
-                enabled: true,
-                distinctTargets: true,
-                burstInterval: 70,
-                fanAngle: 2.4,
-                spawnRadius: 14
-            }
-        },
-        projectile: {
-            speed: 720,
-            range: 120,
-            alignWithMovement: true,
-            destroyOnHit: true,
-            spinOnFlight: true,
-            spinSpeed: 22
-        },
-        objects: {
-            multiple: true,
-            defaultCount: 10,
-            maxCount: 16
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 12,
-            force: 55,
-            dragFactor: 0.35,
-            dragDuration: 300,
-            count: 2
-        },
-        basePath: 'assets/skill_evolution/card_shot/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        damage: 20,
-        duration: 2000,
-        cooldown: 1000,
-        hitboxWidth: 18,
-        hitboxHeight: 24,
-        critical: {
-            chance: 0.22,
-            multiplier: 2.2,
-            color: '#ffe08a'
-        }
-    },
-    god_card: {
-        label: 'God Card',
-        category: 'projectile',
-        targeting: {
-            homing: false,
-            autoAim: {
-                enabled: true,
-                distinctTargets: true,
-                burstInterval: 50,
-                fanAngle: 2.6,
-                spawnRadius: 14
-            }
-        },
-        projectile: {
-            speed: 760,
-            range: 130,
-            alignWithMovement: true,
-            destroyOnHit: true,
-            spinOnFlight: true,
-            spinSpeed: 26
-        },
-        objects: {
-            multiple: true,
-            defaultCount: 10,
-            maxCount: 20
-        },
-        knockback: {
-            takeDamage: false,
-            maxSpeed: 9999,
-            distance: 14,
-            force: 65,
-            dragFactor: 0.35,
-            dragDuration: 300,
-            count: 2
-        },
-        basePath: 'assets/skill_evolution/god_card/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: false
-            }
-        },
-        damage: 35,
-        duration: 2200,
-        cooldown: 0,
-        minimumCooldown: 0,
-        hitboxWidth: 18,
-        hitboxHeight: 24,
-        critical: {
-            chance: 0.28,
-            multiplier: 2.4,
-            color: '#fff2b8'
         }
     },
     claw: {
@@ -922,9 +640,9 @@ const RAW_SKILL_CONFIG = {
         meleeRange: 30,
         castGap: 20,
         visibleDuringEffect: false,
-        damage: 20,
+        damage: 18,
         duration: 900,
-        cooldown: 850,
+        cooldown: 820,
         hitboxWidth: 18,
         hitboxHeight: 34,
         meleeHitEffect: {
@@ -939,8 +657,8 @@ const RAW_SKILL_CONFIG = {
             duration: 120
         },
         critical: {
-            chance: 0.42,
-            multiplier: 2.35,
+            chance: 0.38,
+            multiplier: 2.25,
             color: '#f7f1c8'
         }
     },
@@ -1006,7 +724,6 @@ const RAW_SKILL_CONFIG = {
             destroyOnHit: true
         },
         knockback: {
-            force: 30,
             distance: 5,
             maxSpeed: 99999
         },
@@ -1025,52 +742,6 @@ const RAW_SKILL_CONFIG = {
         hitboxHeight: 20,
         critical: {
             chance: 0.25,
-            multiplier: 1.7,
-            color: '#ffd700'
-        }
-    },
-    ghost: {
-        label: 'Ghost',
-        description: 'Ghost spirits fire as a normal auto-aim projectile volley.',
-        category: 'projectile',
-        targeting: {
-            autoAim: {
-                enabled: true,
-                distinctTargets: true,
-                burstInterval: 140
-            }
-        },
-        objects: {
-            multiple: true,
-            defaultCount: 5,
-            maxCount: 5
-        },
-        projectile: {
-            speed: 760,
-            range: 150,
-            alignWithMovement: true,
-            destroyOnHit: true
-        },
-        knockback: {
-            force: 2,
-            distance: 2,
-            maxSpeed: 99999
-        },
-        basePath: 'assets/skill_evolution/ghost/',
-        animations: {
-            cast: {
-                frames: ['frame0.png'],
-                frameRate: 1,
-                loop: true
-            }
-        },
-        damage: 18,
-        duration: 1800,
-        cooldown: 2200,
-        hitboxWidth: 20,
-        hitboxHeight: 20,
-        critical: {
-            chance: 0.2,
             multiplier: 1.7,
             color: '#ffd700'
         }

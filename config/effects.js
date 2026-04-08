@@ -105,6 +105,30 @@ export const EFFECT_CONFIG = {
             spread: 4
         },
         tags: ['pixel', 'blue', 'trail', 'celestial']
+    },
+    muCoiTrail: {
+        label: 'Mu Coi Trail',
+        description: 'Green-gold particle stream used for Mu Coi projectiles.',
+        usage: ['skill-projectile'],
+        effectClass: 'WaterParticleEffect',
+        settings: {
+            depthOffset: -1,
+            tint: 0xf1f0b8,
+            secondaryTint: 0xb7df67,
+            tertiaryTint: 0x5f8f2f,
+            foamTint: 0xfff7cf,
+            speed: { min: 16, max: 34 },
+            scale: { start: 1.35, end: 0.16 },
+            alpha: { start: 0.8, end: 0 },
+            lifespan: 280,
+            frequency: 12,
+            quantity: 4,
+            followOffset: 14,
+            spread: 8,
+            radialDrift: 8,
+            streamArc: 12
+        },
+        tags: ['pixel', 'trail', 'green', 'gold']
     }
 };
 

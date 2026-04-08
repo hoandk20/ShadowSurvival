@@ -5,6 +5,30 @@ import { getStatusEffectConfig } from '../config/statusEffects.js';
 import { getChestTypeConfig, rollChestType } from '../config/chests.js';
 import { getFinalBossConfig, getFinalBossRoundConfig } from '../config/finalBosses.js';
 import MotionTrailEffect from './effects/MotionTrailEffect.js';
+import { cleanupZigzagDash, isZigzagDashing, maybeStartZigzagDash, updateZigzagDash } from '../systems/enemyBehaviors/zigzagDash.js';
+import { tryRangedAttack, performBurstRangedAttack, performPoisonTrapAttack, performBurnTrapAttack } from '../systems/enemyBehaviors/rangedAttacks.js';
+import { beginSniperAttack, destroySniperTelegraph as destroySniperTelegraphBehavior, spawnSniperTelegraph as spawnSniperTelegraphBehavior } from '../systems/enemyBehaviors/sniperAttack.js';
+import {
+    destroyDashAttackTelegraph as destroyDashAttackTelegraphBehavior,
+    didDashPathIntersectPlayer as didDashPathIntersectPlayerBehavior,
+    finishDashAttack as finishDashAttackBehavior,
+    onDashAttackHitPlayer as onDashAttackHitPlayerBehavior,
+    performDashAttack as performDashAttackBehavior,
+    setDashMapCollisionEnabled as setDashMapCollisionEnabledBehavior,
+    shootBackFan as shootBackFanBehavior,
+    spawnBullet as spawnBulletBehavior,
+    spawnDashAttackTelegraph as spawnDashAttackTelegraphBehavior,
+    updateDashAttack as updateDashAttackBehavior,
+    updateDashBackFanAttack as updateDashBackFanAttackBehavior
+} from '../systems/enemyBehaviors/dashLunge.js';
+import {
+    getMeleeAttackDistance as getMeleeAttackDistanceBehavior,
+    getMeleeEngageTargetId as getMeleeEngageTargetIdBehavior,
+    hasSatisfiedMeleeEngageDelay as hasSatisfiedMeleeEngageDelayBehavior,
+    performMeleeAttack as performMeleeAttackBehavior,
+    resetMeleeEngageDelay as resetMeleeEngageDelayBehavior,
+    tryAttackPlayer as tryAttackPlayerBehavior
+} from '../systems/enemyBehaviors/meleeAttack.js';
 
 const HITBOX_DISTANCE = 30;
 const REPELL_FORCE = 220;
@@ -18,9 +42,6 @@ const ATTACK_BOUNCE_SCALE_X = 0.98;
 const ATTACK_BOUNCE_SCALE_Y = 1.08;
 const ATTACK_SQUASH_DURATION_MS = 70;
 const ATTACK_BOUNCE_DURATION_MS = 105;
-const SNIPER_TELEGRAPH_LINE_WIDTH = 3;
-const SNIPER_TELEGRAPH_ALPHA = 0.24;
-const SNIPER_TELEGRAPH_STROKE_ALPHA = 0.52;
 const DASH_LUNGE_STYLES = new Set(['dash_lunge', 'dash_lunge_bullet_trail', 'dash_lunge_back_fan']);
 const DEFAULT_MELEE_ATTACK_CONFIG = Object.freeze({
     engageDelayMs: 90,
@@ -37,6 +58,8 @@ export default class Enemy extends BaseEntity {
     constructor(scene, x, y, type) {
         super(scene, x, y, `${type}_move`, type);
         scene.physics.add.existing(this);
+        this.enemyType = type;
+        this.behaviorState = {};
         this.body.setImmovable(false);
         this.body.setCollideWorldBounds(true);
         this.body.setBounce(0);
@@ -241,6 +264,8 @@ export default class Enemy extends BaseEntity {
                     return;
                 }
             }
+        } else if (isZigzagDashing(this)) {
+            updateZigzagDash(this, targetPlayer, time);
         } else if (this.isDashAttacking) {
             this.updateDashAttack(targetPlayer);
         } else if (targetPlayer) {
@@ -256,6 +281,10 @@ export default class Enemy extends BaseEntity {
             this.applySeparation(allEnemies);
         }
         this.handleStuckInWall(targetPlayer, delta);
+        // Keep sniper telegraph anchored after all movement / separation adjustments.
+        if (this.sniperTelegraph?.active && typeof this.sniperTelegraph.__redraw === 'function') {
+            this.sniperTelegraph.__redraw();
+        }
         this.enforceHitboxSize();
         this.updateHealthTextPosition();
         this.updateStuckMemory();
@@ -644,6 +673,10 @@ export default class Enemy extends BaseEntity {
         const dy = targetPlayer.y - this.y;
         const attackDistance = this.getMeleeAttackDistance(targetPlayer);
         const effectiveSpeed = this.getStatusAdjustedSpeed?.(this.speed) ?? this.speed;
+        const distanceSq = (dx * dx) + (dy * dy);
+
+        // Optional evasive zigzag before engaging (for melee units like moth_woman).
+        if (maybeStartZigzagDash(this, targetPlayer, time, distanceSq)) return;
 
         if (this.isAttacking) {
             if (!this.isDashAttacking) {
@@ -653,7 +686,7 @@ export default class Enemy extends BaseEntity {
             return;
         }
 
-        if ((dx * dx) + (dy * dy) <= attackDistance * attackDistance) {
+        if (distanceSq <= attackDistance * attackDistance) {
             this.body.setVelocity(0, 0);
             this.setFlipX(dx < 0);
             if (this.hasSatisfiedMeleeEngageDelay(targetPlayer, time)) {
@@ -672,134 +705,23 @@ export default class Enemy extends BaseEntity {
     }
 
     tryRangedAttack(targetPlayer, time) {
-        if (!targetPlayer?.active || targetPlayer?.isDead) return false;
-        if ((time - this.lastRangedAttackTime) < this.attackCooldown) return false;
-        const dx = targetPlayer.x - this.x;
-        const dy = targetPlayer.y - this.y;
-        const preferredRange = Math.max(0, this.rangedAttackConfig?.preferredRange ?? 0);
-        const attackDistance = Math.max(this.attackRange ?? 0, preferredRange + 20, 40);
-        if ((dx * dx) + (dy * dy) > attackDistance * attackDistance) return false;
-        this.lastRangedAttackTime = time;
-        this.playAttackSquashBounce();
-        if (this.attackStyle === 'projectile_burst') {
-            this.performBurstRangedAttack(targetPlayer);
-            return true;
-        }
-        if (this.attackStyle === 'trap_poison_cloud') {
-            this.performPoisonTrapAttack(targetPlayer);
-            return true;
-        }
-        if (this.attackStyle === 'projectile_sniper') {
-            this.beginSniperAttack(targetPlayer);
-            return true;
-        }
-        if (this.attackStyle === 'trap_burn_cloud') {
-            this.performBurnTrapAttack(targetPlayer);
-            return true;
-        }
-        this.scene?.spawnEnemyProjectile?.(this, targetPlayer, {
-            damage: this.damage ?? 10,
-            speed: this.rangedAttackConfig?.projectileSpeed ?? 230,
-            radius: this.rangedAttackConfig?.projectileRadius ?? 5,
-            lifetimeMs: this.rangedAttackConfig?.projectileLifetimeMs ?? 1400,
-            color: this.rangedAttackConfig?.projectileColor ?? 0xff7cba,
-            glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xffd5ee
-        });
-        return true;
+        return tryRangedAttack(this, targetPlayer, time);
     }
 
     performBurstRangedAttack(targetPlayer) {
-        const burstCount = Math.max(2, Math.round(this.rangedAttackConfig?.burstCount ?? 3));
-        const burstSpreadDeg = Math.max(0, Number(this.rangedAttackConfig?.burstSpreadDeg ?? 18) || 18);
-        const baseAngle = Math.atan2(targetPlayer.y - this.y, targetPlayer.x - this.x);
-        const spreadRad = Phaser.Math.DegToRad(burstSpreadDeg);
-        const step = burstCount > 1 ? spreadRad / (burstCount - 1) : 0;
-        for (let index = 0; index < burstCount; index += 1) {
-            const angleOffset = burstCount > 1 ? (-spreadRad * 0.5) + (step * index) : 0;
-            const projectileAngle = baseAngle + angleOffset;
-            this.scene?.spawnEnemyProjectileDirection?.(
-                this,
-                this.x,
-                this.y,
-                Math.cos(projectileAngle),
-                Math.sin(projectileAngle),
-                {
-                    damage: this.damage ?? 10,
-                    speed: this.rangedAttackConfig?.projectileSpeed ?? 230,
-                    radius: this.rangedAttackConfig?.projectileRadius ?? 5,
-                    lifetimeMs: this.rangedAttackConfig?.projectileLifetimeMs ?? 1400,
-                    color: this.rangedAttackConfig?.projectileColor ?? 0xff7cba,
-                    glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xffd5ee
-                }
-            );
-        }
+        return performBurstRangedAttack(this, targetPlayer);
     }
 
     performPoisonTrapAttack(targetPlayer) {
-        this.scene?.statusEffectSystem?.spawnPoisonCloud?.(this, {
-            x: targetPlayer.x,
-            y: targetPlayer.y,
-            radius: this.rangedAttackConfig?.cloudRadius ?? 56,
-            durationMs: this.rangedAttackConfig?.cloudDurationMs ?? 2200,
-            tickIntervalMs: this.rangedAttackConfig?.cloudTickIntervalMs ?? 450,
-            poisonDurationMs: this.rangedAttackConfig?.poisonDurationMs ?? 2500,
-            damage: this.rangedAttackConfig?.cloudDamage ?? 0,
-            source: this,
-            targetMode: 'opponents',
-            tags: this.rangedAttackConfig?.cloudTags ?? ['poison', 'cloud', 'enemy_trap'],
-            showDamageText: true
-        });
+        return performPoisonTrapAttack(this, targetPlayer);
     }
 
     performBurnTrapAttack(targetPlayer) {
-        this.scene?.statusEffectSystem?.spawnBurnCloud?.(this, {
-            x: targetPlayer.x,
-            y: targetPlayer.y,
-            radius: this.rangedAttackConfig?.fireRadius ?? 56,
-            durationMs: this.rangedAttackConfig?.fireDurationMs ?? 1800,
-            tickIntervalMs: this.rangedAttackConfig?.fireTickIntervalMs ?? 450,
-            burnDurationMs: this.rangedAttackConfig?.burnDurationMs ?? 2500,
-            damage: this.rangedAttackConfig?.fireDamage ?? 0,
-            source: this,
-            targetMode: 'opponents',
-            tags: this.rangedAttackConfig?.fireTags ?? ['fire', 'burn', 'enemy_trap'],
-            showDamageText: true
-        });
+        return performBurnTrapAttack(this, targetPlayer);
     }
 
     beginSniperAttack(targetPlayer) {
-        this.isAttacking = true;
-        this.body?.setVelocity?.(0, 0);
-        const targetPoint = new Phaser.Math.Vector2(targetPlayer.x, targetPlayer.y);
-        this.spawnSniperTelegraph(targetPoint.x, targetPoint.y);
-        this.pendingAttackTimer?.remove?.(false);
-        this.pendingAttackTimer = this.scene?.time?.delayedCall(this.rangedAttackConfig?.sniperWindupMs ?? 650, () => {
-            this.pendingAttackTimer = null;
-            if (!this.active) return;
-            this.destroySniperTelegraph();
-            const direction = new Phaser.Math.Vector2(targetPoint.x - this.x, targetPoint.y - this.y);
-            if (direction.lengthSq() === 0) {
-                direction.set(this.flipX ? -1 : 1, 0);
-            } else {
-                direction.normalize();
-            }
-            this.spawnSniperMuzzleFlash(direction);
-            this.scene?.spawnEnemyProjectileDirection?.(this, this.x, this.y, direction.x, direction.y, {
-                damage: this.damage ?? 10,
-                speed: this.rangedAttackConfig?.projectileSpeed ?? 320,
-                radius: this.rangedAttackConfig?.projectileRadius ?? 4,
-                lifetimeMs: this.rangedAttackConfig?.projectileLifetimeMs ?? 1800,
-                color: this.rangedAttackConfig?.projectileColor ?? 0x8fd7ff,
-                glowColor: this.rangedAttackConfig?.projectileGlowColor ?? 0xe3f6ff,
-                onHitEffectKey: this.rangedAttackConfig?.onHitEffectKey ?? null,
-                onHitEffectOptions: this.rangedAttackConfig?.onHitEffectOptions ?? null
-            });
-            const recoveryMs = Math.max(0, this.rangedAttackConfig?.sniperRecoveryMs ?? 160);
-            this.scene?.time?.delayedCall(recoveryMs, () => {
-                if (!this.active) return;
-                this.isAttacking = false;
-            });
-        });
+        return beginSniperAttack(this, targetPlayer);
     }
 
     spawnSniperMuzzleFlash(direction) {
@@ -835,70 +757,27 @@ export default class Enemy extends BaseEntity {
     }
 
     spawnSniperTelegraph(targetX, targetY) {
-        if (!this.scene?.add?.graphics) return;
-        this.destroySniperTelegraph();
-        const color = this.rangedAttackConfig?.projectileColor ?? 0x8fd7ff;
-        const telegraph = this.scene.add.graphics().setDepth((this.depth ?? 20) + 4);
-        telegraph.lineStyle(SNIPER_TELEGRAPH_LINE_WIDTH, color, SNIPER_TELEGRAPH_ALPHA);
-        telegraph.beginPath();
-        telegraph.moveTo(this.x, this.y);
-        telegraph.lineTo(targetX, targetY);
-        telegraph.strokePath();
-        telegraph.lineStyle(1, 0xffffff, SNIPER_TELEGRAPH_STROKE_ALPHA);
-        telegraph.beginPath();
-        telegraph.moveTo(this.x, this.y);
-        telegraph.lineTo(targetX, targetY);
-        telegraph.strokePath();
-        this.sniperTelegraph = telegraph;
-        this.sniperTelegraphTween = this.scene?.tweens?.add({
-            targets: telegraph,
-            alpha: { from: 0.35, to: 1 },
-            duration: this.rangedAttackConfig?.sniperWindupMs ?? 650,
-            yoyo: true,
-            repeat: -1
-        }) ?? null;
+        return spawnSniperTelegraphBehavior(this, targetX, targetY);
     }
 
     destroySniperTelegraph() {
-        this.sniperTelegraphTween?.stop?.();
-        this.sniperTelegraphTween = null;
-        this.sniperTelegraph?.destroy?.();
-        this.sniperTelegraph = null;
+        return destroySniperTelegraphBehavior(this);
     }
 
     getMeleeAttackDistance(targetPlayer = null) {
-        const playerRadius = Math.max(
-            targetPlayer?.hitboxSize?.width ?? 0,
-            targetPlayer?.hitboxSize?.height ?? 0,
-            targetPlayer?.displayWidth ?? 0,
-            targetPlayer?.displayHeight ?? 0,
-            18
-        ) * 0.35;
-        return Math.max(18, (this.attackRange ?? ENEMY_BASE_STATS.attackRange) + playerRadius + (this.meleeAttackConfig.rangePadding ?? 0));
+        return getMeleeAttackDistanceBehavior(this, targetPlayer);
     }
 
     getMeleeEngageTargetId(targetPlayer = null) {
-        return targetPlayer?.playerId ?? targetPlayer?.name ?? '__primary_player__';
+        return getMeleeEngageTargetIdBehavior(this, targetPlayer);
     }
 
     resetMeleeEngageDelay() {
-        this.meleeEngageStartedAt = -Infinity;
-        this.meleeEngageTargetId = null;
+        return resetMeleeEngageDelayBehavior(this);
     }
 
     hasSatisfiedMeleeEngageDelay(targetPlayer, time) {
-        const targetId = this.getMeleeEngageTargetId(targetPlayer);
-        const engageDelayMs = Math.max(0, this.meleeAttackConfig.engageDelayMs ?? 0);
-        if (this.meleeEngageTargetId !== targetId) {
-            this.meleeEngageTargetId = targetId;
-            this.meleeEngageStartedAt = time;
-            return engageDelayMs <= 0;
-        }
-        if (!Number.isFinite(this.meleeEngageStartedAt)) {
-            this.meleeEngageStartedAt = time;
-            return engageDelayMs <= 0;
-        }
-        return (time - this.meleeEngageStartedAt) >= engageDelayMs;
+        return hasSatisfiedMeleeEngageDelayBehavior(this, targetPlayer, time);
     }
 
     handlePlayerContact(player, time) {
@@ -924,223 +803,35 @@ export default class Enemy extends BaseEntity {
     }
 
     tryAttackPlayer(targetPlayer, time) {
-        if (this.explodeOnDead?.triggerOnPlayerContact) return false;
-        if (this.combatType !== 'melee' || !targetPlayer?.active || targetPlayer?.isDead) return false;
-        if (this.isAttacking) return false;
-        if ((time - this.lastAttackTime) < this.attackCooldown) return false;
-        const dx = targetPlayer.x - this.x;
-        const dy = targetPlayer.y - this.y;
-        const attackDistance = this.getMeleeAttackDistance(targetPlayer);
-        if ((dx * dx) + (dy * dy) > attackDistance * attackDistance) return false;
-
-        this.lastAttackTime = time;
-        this.isAttacking = true;
-        this.playAttackSquashBounce();
-        this.resetMeleeEngageDelay();
-        this.body?.setVelocity(0, 0);
-        this.setFlipX(dx < 0);
-        if (this.isDashLungeStyle()) {
-            this.beginDashWindupAnimation();
-            this.dashAttackTargetPoint = new Phaser.Math.Vector2(targetPlayer.x, targetPlayer.y);
-            this.spawnDashAttackTelegraph(this.dashAttackTargetPoint);
-        } else {
-            this.spawnMeleeAttackTelegraph();
-        }
-        this.pendingAttackTimer?.remove?.(false);
-        this.pendingAttackTimer = this.scene?.time?.delayedCall(this.meleeAttackConfig.windupMs ?? 220, () => {
-            this.pendingAttackTimer = null;
-            this.performMeleeAttack(targetPlayer);
-        });
-        return true;
+        return tryAttackPlayerBehavior(this, targetPlayer, time);
     }
 
     performMeleeAttack(targetPlayer) {
-        if (!this.active) return;
-        if (this.isDashLungeStyle()) {
-            this.performDashAttack(targetPlayer);
-            return;
-        }
-        const recoveryMs = Math.max(0, this.meleeAttackConfig.recoveryMs ?? 120);
-        const finishAttack = () => {
-            this.isAttacking = false;
-        };
-        if (!targetPlayer?.active || targetPlayer?.isDead) {
-            if (recoveryMs > 0) {
-                this.scene?.time?.delayedCall(recoveryMs, finishAttack);
-            } else {
-                finishAttack();
-            }
-            return;
-        }
-
-        const dx = targetPlayer.x - this.x;
-        const dy = targetPlayer.y - this.y;
-        const attackDistance = this.getMeleeAttackDistance(targetPlayer);
-        const hitConfirmPadding = Math.max(0, this.meleeAttackConfig.hitConfirmPadding ?? 0);
-        const confirmedAttackDistance = attackDistance + hitConfirmPadding;
-        const withinRange = ((dx * dx) + (dy * dy)) <= confirmedAttackDistance * confirmedAttackDistance;
-        if (withinRange && targetPlayer.takeDamage && !targetPlayer.isDead) {
-            targetPlayer.takeDamage(this.damage ?? 10, this, { fromEnemyAttack: true });
-            this.spawnMeleeAttackImpact(targetPlayer);
-        }
-
-        if (recoveryMs > 0) {
-            this.scene?.time?.delayedCall(recoveryMs, finishAttack);
-        } else {
-            finishAttack();
-        }
+        return performMeleeAttackBehavior(this, targetPlayer);
     }
 
     performDashAttack(targetPlayer) {
-        this.destroyDashAttackTelegraph();
-        const recoveryMs = Math.max(0, this.meleeAttackConfig.recoveryMs ?? 120);
-        const lockedTarget = this.dashAttackTargetPoint?.clone?.()
-            ?? new Phaser.Math.Vector2(targetPlayer?.x ?? this.x, targetPlayer?.y ?? this.y);
-        this.dashAttackTrackedPlayer = targetPlayer ?? null;
-        this.resumeDashJumpAnimation();
-        const dashDirection = new Phaser.Math.Vector2(lockedTarget.x - this.x, lockedTarget.y - this.y);
-        if (dashDirection.lengthSq() === 0) {
-            dashDirection.set(this.flipX ? -1 : 1, 0);
-        } else {
-            dashDirection.normalize();
-        }
-        const dashOvershootDistance = Math.max(0, this.meleeAttackConfig.dashOvershootDistance ?? 100);
-        const dashTarget = lockedTarget.clone().add(dashDirection.clone().scale(dashOvershootDistance));
-        const dashSpeed = Math.max(80, this.meleeAttackConfig.dashSpeed ?? 280);
-        const directDistance = Phaser.Math.Distance.Between(this.x, this.y, dashTarget.x, dashTarget.y);
-        const dashDistance = Math.max(24, this.meleeAttackConfig.dashDistance ?? directDistance);
-        this.isDashAttacking = true;
-        this.setDashMapCollisionEnabled(false);
-        this.dashAttackHitResolved = false;
-        this.dashBackFanElapsedMs = 0;
-        this.dashBackFanShotTimerMs = 0;
-        this.dashAttackDirection.copy(dashDirection);
-        this.dashAttackRemainingDistance = Math.max(dashDistance, directDistance);
-        this.dashAttackLastPosition.set(this.x, this.y);
-        this.body?.setVelocity(dashDirection.x * dashSpeed, dashDirection.y * dashSpeed);
-        this.setFlipX(dashDirection.x < 0);
-        this.scene?.time?.delayedCall(Math.max(1, recoveryMs + Math.round((this.dashAttackRemainingDistance / dashSpeed) * 1000)), () => {
-            if (this.active && this.isDashAttacking) {
-                this.finishDashAttack();
-            }
-        });
+        return performDashAttackBehavior(this, targetPlayer);
     }
 
     updateDashAttack(targetPlayer = null) {
-        if (!this.isDashAttacking || !this.body) return;
-        if (targetPlayer?.active && !targetPlayer?.isDead && !this.dashAttackHitResolved) {
-            const hitPlayerDuringDash = this.didDashPathIntersectPlayer(
-                this.dashAttackLastPosition.x,
-                this.dashAttackLastPosition.y,
-                this.x,
-                this.y,
-                targetPlayer
-            );
-            if (hitPlayerDuringDash) {
-                if (this.onDashAttackHitPlayer(targetPlayer)) return;
-                return;
-            }
-        }
-        const movedDistance = Phaser.Math.Distance.Between(this.x, this.y, this.dashAttackLastPosition.x, this.dashAttackLastPosition.y);
-        this.dashAttackRemainingDistance -= movedDistance;
-        this.updateDashBackFanAttack();
-        this.dashAttackLastPosition.set(this.x, this.y);
-        if (Math.abs(this.body.velocity.x) + Math.abs(this.body.velocity.y) <= 2) {
-            this.finishDashAttack();
-            return;
-        }
-        if (
-            !this.ignoreMapCollisionDuringDash
-            && (this.body.blocked?.left || this.body.blocked?.right || this.body.blocked?.up || this.body.blocked?.down)
-        ) {
-            this.finishDashAttack();
-            return;
-        }
-        if (this.dashAttackRemainingDistance <= 0) {
-            this.finishDashAttack();
-            return;
-        }
-        if (targetPlayer?.active) {
-            this.setFlipX((this.body.velocity.x ?? 0) < 0);
-        }
+        return updateDashAttackBehavior(this, targetPlayer);
     }
 
     didDashPathIntersectPlayer(startX, startY, endX, endY, targetPlayer) {
-        if (!targetPlayer?.active || targetPlayer?.isDead) return false;
-        const lineDx = endX - startX;
-        const lineDy = endY - startY;
-        const lineLengthSq = (lineDx * lineDx) + (lineDy * lineDy);
-        const enemyRadius = Math.max(
-            this.hitboxSize?.width ?? 0,
-            this.hitboxSize?.height ?? 0,
-            this.displayWidth ?? 0,
-            this.displayHeight ?? 0,
-            16
-        ) * 0.5;
-        const playerRadius = Math.max(
-            targetPlayer?.hitboxSize?.width ?? 0,
-            targetPlayer?.hitboxSize?.height ?? 0,
-            targetPlayer?.displayWidth ?? 0,
-            targetPlayer?.displayHeight ?? 0,
-            18
-        ) * 0.5;
-        const hitDistance = enemyRadius + playerRadius;
-        if (lineLengthSq <= 0) {
-            return Phaser.Math.Distance.Between(startX, startY, targetPlayer.x, targetPlayer.y) <= hitDistance;
-        }
-        const toPlayerX = targetPlayer.x - startX;
-        const toPlayerY = targetPlayer.y - startY;
-        const projection = Phaser.Math.Clamp(
-            ((toPlayerX * lineDx) + (toPlayerY * lineDy)) / lineLengthSq,
-            0,
-            1
-        );
-        const closestX = startX + (lineDx * projection);
-        const closestY = startY + (lineDy * projection);
-        return Phaser.Math.Distance.Between(closestX, closestY, targetPlayer.x, targetPlayer.y) <= hitDistance;
+        return didDashPathIntersectPlayerBehavior(this, startX, startY, endX, endY, targetPlayer);
     }
 
     onDashAttackHitPlayer(targetPlayer) {
-        this.dashAttackHitResolved = true;
-        targetPlayer.takeDamage?.(this.damage ?? 10, this, { fromEnemyAttack: true });
-        this.spawnMeleeAttackImpact(targetPlayer);
-        return false;
+        return onDashAttackHitPlayerBehavior(this, targetPlayer);
     }
 
     finishDashAttack() {
-        this.isDashAttacking = false;
-        this.setDashMapCollisionEnabled(true);
-        this.body?.setVelocity(0, 0);
-        this.dashAttackTargetPoint = null;
-        this.dashAttackRemainingDistance = 0;
-        this.dashAttackHitResolved = false;
-        this.dashAttackTrackedPlayer = null;
-        this.dashBackFanElapsedMs = 0;
-        this.dashBackFanShotTimerMs = 0;
-        const recoveryMs = Math.max(0, this.meleeAttackConfig.recoveryMs ?? 120);
-        if (recoveryMs > 0) {
-            this.scene?.time?.delayedCall(recoveryMs, () => {
-                if (this.active) {
-                    this.isAttacking = false;
-                    this.forceReturnToMoveAnimation();
-                }
-            });
-        } else {
-            this.isAttacking = false;
-            this.forceReturnToMoveAnimation();
-        }
+        return finishDashAttackBehavior(this);
     }
 
     setDashMapCollisionEnabled(enabled = true) {
-        const shouldEnable = Boolean(enabled);
-        if (shouldEnable && !this.ignoreMapCollisionDuringDash) return;
-        if (!shouldEnable && this.ignoreMapCollisionDuringDash) return;
-        this.ignoreMapCollisionDuringDash = !shouldEnable;
-        if (shouldEnable) {
-            this.scene?.mapManager?.enableObjectCollisions?.(this);
-            return;
-        }
-        this.scene?.mapManager?.removeObjectCollisions?.(this);
+        return setDashMapCollisionEnabledBehavior(this, enabled);
     }
 
     getMeleeAttackEffectConfig() {
@@ -1193,41 +884,11 @@ export default class Enemy extends BaseEntity {
     }
 
     spawnDashAttackTelegraph(targetPoint) {
-        this.destroyDashAttackTelegraph();
-        if (!this.scene?.add || !targetPoint) return;
-        const container = this.scene.add.container(0, 0).setDepth((this.depth ?? 20) + 8);
-        const line = this.scene.add.graphics();
-        line.lineStyle(this.dashTelegraphWidth ?? 2, 0xff4d4d, this.dashTelegraphAlpha ?? 0.95);
-        line.beginPath();
-        line.moveTo(this.x, this.y);
-        line.lineTo(targetPoint.x, targetPoint.y);
-        line.strokePath();
-        const alert = this.scene.add.text(targetPoint.x, targetPoint.y - 24, '!', {
-            fontSize: '14px',
-            fontFamily: 'monospace',
-            fontStyle: 'bold',
-            color: '#ffb3b3',
-            stroke: '#000000',
-            strokeThickness: 3
-        }).setOrigin(0.5);
-        container.add([line, alert]);
-        this.dashAttackTelegraph = container;
-        this.dashAttackTelegraphTween = this.scene.tweens?.add({
-            targets: [alert],
-            alpha: { from: 0.45, to: 1 },
-            scale: { from: 0.92, to: 1.08 },
-            duration: 260,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        }) ?? null;
+        return spawnDashAttackTelegraphBehavior(this, targetPoint);
     }
 
     destroyDashAttackTelegraph() {
-        this.dashAttackTelegraphTween?.remove?.();
-        this.dashAttackTelegraphTween = null;
-        this.dashAttackTelegraph?.destroy?.(true);
-        this.dashAttackTelegraph = null;
+        return destroyDashAttackTelegraphBehavior(this);
     }
 
     spawnMeleeAttackImpact(targetPlayer) {
@@ -1612,49 +1273,15 @@ export default class Enemy extends BaseEntity {
     }
 
     updateDashBackFanAttack() {
-        if (!this.isDashAttacking || this.attackStyle !== 'dash_lunge_back_fan' || !this.scene) return;
-        const dashBackFan = this.meleeAttackConfig?.dashBackFan ?? {};
-        const bulletIntervalMs = Math.max(40, Number(dashBackFan.bulletInterval) || 120);
-        this.dashBackFanShotTimerMs += this.scene.game.loop.delta;
-        while (this.dashBackFanShotTimerMs >= bulletIntervalMs) {
-            this.dashBackFanShotTimerMs -= bulletIntervalMs;
-            this.shootBackFan();
-        }
+        return updateDashBackFanAttackBehavior(this);
     }
 
     shootBackFan() {
-        if (!this.scene || !this.active) return;
-        const dashBackFan = this.meleeAttackConfig?.dashBackFan ?? {};
-        const bulletsPerWave = Math.max(1, Math.round(dashBackFan.bulletsPerWave ?? 5));
-        const spreadAngleRad = Phaser.Math.DegToRad(Math.max(0, Number(dashBackFan.spreadAngle) || 55));
-        const bulletSpeed = Math.max(0, Number(dashBackFan.bulletSpeed) || 140);
-        const backDir = this.dashAttackDirection.clone().negate();
-        const centerAngle = backDir.angle();
-        const startAngle = centerAngle - (spreadAngleRad * 0.5);
-        const angleStep = bulletsPerWave <= 1 ? 0 : (spreadAngleRad / (bulletsPerWave - 1));
-        for (let index = 0; index < bulletsPerWave; index += 1) {
-            const bulletAngle = startAngle + (angleStep * index);
-            const dirX = Math.cos(bulletAngle);
-            const dirY = Math.sin(bulletAngle);
-            this.spawnBullet(this.x, this.y, dirX, dirY, {
-                speed: bulletSpeed,
-                radius: dashBackFan.projectileRadius ?? 5,
-                lifetimeMs: dashBackFan.projectileLifetimeMs ?? 1800,
-                color: dashBackFan.projectileColor ?? 0xff3b3b,
-                glowColor: dashBackFan.projectileGlowColor ?? 0xff8c8c,
-                damage: Math.max(1, Math.round((this.damage ?? 10) * (dashBackFan.projectileDamageRatio ?? 1)))
-            });
-        }
+        return shootBackFanBehavior(this);
     }
 
     spawnBullet(x, y, dirX, dirY, options = {}) {
-        const normalized = new Phaser.Math.Vector2(dirX, dirY);
-        if (normalized.lengthSq() === 0) {
-            normalized.set(1, 0);
-        } else {
-            normalized.normalize();
-        }
-        this.scene?.spawnEnemyProjectileDirection?.(this, x, y, normalized.x, normalized.y, options);
+        return spawnBulletBehavior(this, x, y, dirX, dirY, options);
     }
 
     playAttackSquashBounce() {
@@ -1718,6 +1345,7 @@ export default class Enemy extends BaseEntity {
         this.pendingAttackTimer = null;
         this.destroySniperTelegraph();
         this.destroyDashAttackTelegraph();
+        cleanupZigzagDash(this);
         this.attackSquashTween?.stop?.();
         this.attackSquashTween = null;
         this.attackBounceTween?.stop?.();
