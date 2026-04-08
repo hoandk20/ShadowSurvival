@@ -4,6 +4,7 @@ import {
     createPixelPanel,
     createPixelText
 } from './ui/PixelSceneHelpers.js';
+import { t } from '../utils/languageSettings.js';
 
 export default class GameOverScene extends Phaser.Scene {
     constructor() {
@@ -32,9 +33,9 @@ export default class GameOverScene extends Phaser.Scene {
         }));
 
         const stats = [
-            `TIME SURVIVED: ${data.timeSurvived ?? '00:00'}`,
-            `ENEMIES KILLED: ${data.enemiesKilled ?? 0}`,
-            `LEVEL REACHED: ${data.levelReached ?? 1}`
+            t(this, 'time_survived', { time: data.timeSurvived ?? '00:00' }),
+            t(this, 'enemies_killed', { count: data.enemiesKilled ?? 0 }),
+            t(this, 'level_reached', { level: data.levelReached ?? 1 })
         ];
         stats.forEach((line, index) => {
             panel.add(createPixelText(this, 0, -36 + index * (isCompact ? 40 : 42), line, {

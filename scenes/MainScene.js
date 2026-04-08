@@ -198,8 +198,8 @@ export default class MainScene extends Phaser.Scene {
         this.debugEnemyHealthOverride = this.debugMode ? DEBUG_DEFAULT_HP_OVERRIDE : 0;
         this.debugPlayerHealthOverride = this.debugMode ? DEBUG_DEFAULT_HP_OVERRIDE : 0;
         this.debugPlayerSpeedOverride = 0;
-        this.selectedSupporterKey = null;
-        this.registry.set('selectedSupporterKey', null);
+        this.selectedSupporterKey = this.registry.get('selectedSupporterKey') ?? null;
+        this.registry.set('selectedSupporterKey', this.selectedSupporterKey);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         ensureAudioSettings(this.registry);
         bootstrapMetaProgress(this);
@@ -224,7 +224,7 @@ export default class MainScene extends Phaser.Scene {
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
-            this.cameras.main.setZoom(isMobileDevice ? 1.2 : 2);
+            this.cameras.main.setZoom(isMobileDevice ? 2 : 2);
             this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
@@ -2344,7 +2344,7 @@ export default class MainScene extends Phaser.Scene {
 
     shouldPresentSupporterSelection() {
         return this.waveSystemEnabled
-            && this.currentWaveNumber === 3
+            && this.currentWaveNumber === 1
             && !this.selectedSupporterKey
             && !this.isChoosingSupporter;
     }

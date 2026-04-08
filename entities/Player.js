@@ -14,6 +14,7 @@ import SupporterClawEffect from './effects/SupporterClawEffect.js';
 import KnightSlashEffect from './effects/KnightSlashEffect.js';
 import FirecoatAuraEffect from './effects/FirecoatAuraEffect.js';
 import { playSfx } from '../utils/audioSettings.js';
+import { translateText } from '../utils/languageSettings.js';
 
 const selectAnimationName = (config) => {
     if (!config?.animations) return 'idle';
@@ -1134,7 +1135,7 @@ export default class Player extends BaseEntity {
 
     playLevelUpEffect(x, y) {
         this.playFloatingAnnouncementEffect(x, y, {
-            text: 'LEVEL UP',
+            text: translateText(this.scene, 'LEVEL UP'),
             glowColor: 0xffd966,
             textColor: '#ffe066'
         });
@@ -1144,7 +1145,7 @@ export default class Player extends BaseEntity {
         const scene = this.scene;
         if (!scene || !this.active) return;
         this.playFloatingAnnouncementEffect(this.x, this.y, {
-            text: 'MISS',
+            text: translateText(this.scene, 'MISS'),
             glowColor: 0x8ff7ff,
             textColor: '#bffcff',
             fontSize: '9px',

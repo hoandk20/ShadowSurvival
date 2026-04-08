@@ -1,5 +1,6 @@
 import { getAudioSettings, updateAudioSetting } from '../utils/audioSettings.js';
 import { getGameplaySettings, updateGameplaySetting } from '../utils/gameplaySettings.js';
+import { ensureLanguageSettings, updateLanguageSetting } from '../utils/languageSettings.js';
 import {
     createBackdrop,
     createPixelButton,
@@ -117,12 +118,13 @@ export default class PauseMenuScene extends Phaser.Scene {
         } else {
             const settings = getAudioSettings(this);
             const gameplay = getGameplaySettings(this);
+            const language = ensureLanguageSettings(this.registry).language;
             const toggleX = -Math.min(isMobileLandscape ? 88 : 100, panelWidth * (isMobileLandscape ? 0.22 : 0.24));
             const titleY = -panelHeight / 2 + (isMobileLandscape ? 24 : 28);
             const contentTopY = titleY + (isMobileLandscape ? 42 : 54);
             const backButtonHeight = isCompact ? 42 : 36;
             const contentBottomY = panelHeight / 2 - backButtonHeight - (isMobileLandscape ? 18 : 24);
-            const rowGap = Math.max(isMobileLandscape ? 38 : 46, Math.floor((contentBottomY - contentTopY) / 3));
+            const rowGap = Math.max(isMobileLandscape ? 30 : 38, Math.floor((contentBottomY - contentTopY) / 4));
 
             panel.add(createPixelToggle(this, toggleX, contentTopY + rowGap * 0, 'MUSIC', settings.musicEnabled, (value) => {
                 updateAudioSetting(this, 'musicEnabled', value);
@@ -137,6 +139,12 @@ export default class PauseMenuScene extends Phaser.Scene {
             }));
             panel.add(createPixelCycle(this, toggleX, contentTopY + rowGap * 3, 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
                 updateGameplaySetting(this, 'damageTextCapMode', next);
+            }));
+            panel.add(createPixelCycle(this, toggleX, contentTopY + rowGap * 4, 'LANGUAGE', ['en', 'vi'], language, (next) => {
+                updateLanguageSetting(this, next);
+                this.render();
+            }, {
+                languageLabels: true
             }));
             panel.add(createPixelButton(this, 0, panelHeight / 2 - (isMobileLandscape ? 28 : 34), Math.min(buttonWidth, 180), backButtonHeight, 'BACK', () => {
                 this.mode = 'pause';

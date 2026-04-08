@@ -10,6 +10,7 @@ import { CHARACTER_ASSET_CONFIG } from '../config/assets.js';
 import { DEFAULT_MAP_KEY, getAvailableMaps, getMapDefinition } from '../config/map.js';
 import { DEFAULT_AUDIO_SETTINGS, ensureAudioSettings, getAudioSettings, installAudioUnlock, updateAudioSetting } from '../utils/audioSettings.js';
 import { ensureGameplaySettings, getGameplaySettings, updateGameplaySetting } from '../utils/gameplaySettings.js';
+import { ensureLanguageSettings, getLanguageLabel, translateText, updateLanguageSetting, t } from '../utils/languageSettings.js';
 import {
     bootstrapMetaProgress,
     getMetaProgress,
@@ -39,6 +40,7 @@ import {
     createPixelCycle,
     createSparkField
 } from './ui/PixelSceneHelpers.js';
+import { SUPPORTER_CONFIG, SUPPORTER_KEYS } from '../config/supporters.js';
 
 const MENU_BACKGROUND_KEY = 'menu_background';
 const DYNAMON_ICON_KEY = 'menu_dynamon_icon';
@@ -81,19 +83,19 @@ function getCharacterUnlockLabel(characterKey) {
         if (requirement?.type === 'clear_map') {
             const mapDefinition = getMapDefinition(requirement.mapKey);
             const mapLabel = String(mapDefinition?.label ?? requirement.mapKey ?? '').trim();
-            return `CLEAR ${mapLabel.toUpperCase()}`;
+            return t(null, 'clear_map', { label: translateText(null, mapLabel).toUpperCase() });
         }
         if (requirement?.type === 'max_meta_upgrade') {
             const upgrade = META_UPGRADE_CONFIG.find((entry) => entry.key === requirement.upgradeKey);
             const upgradeLabel = String(upgrade?.label ?? requirement.upgradeKey ?? '').trim();
-            return `MAX ${upgradeLabel.toUpperCase()}`;
+            return t(null, 'max_upgrade', { label: translateText(null, upgradeLabel).toUpperCase() });
         }
-        return 'CHALLENGE LOCKED';
+        return translateText(null, 'CHALLENGE LOCKED');
     }
     if (unlockType === 'dynamon') {
-        return `UNLOCK ${getCharacterUnlockCost(characterKey)} DYN`;
+        return t(null, 'unlock_dyn', { cost: getCharacterUnlockCost(characterKey) });
     }
-    return 'UNLOCKED';
+    return translateText(null, 'UNLOCKED');
 }
 
 export default class MainMenuScene extends Phaser.Scene {
@@ -107,6 +109,7 @@ export default class MainMenuScene extends Phaser.Scene {
         this.selectedCharacterKey = DEFAULT_CHARACTER_KEY;
         this.selectedMapKey = DEFAULT_MAP_KEY;
         this.debugMode = false;
+        this.selectedSupporterKey = null;
         this.characterGridKeys = [];
         this.characterGridColumns = 0;
         this.mapOptionKeys = [];
@@ -144,12 +147,14 @@ export default class MainMenuScene extends Phaser.Scene {
         this.mode = 'main';
         this.registry.set('audioSettings', { ...DEFAULT_AUDIO_SETTINGS, ...ensureAudioSettings(this.registry) });
         ensureGameplaySettings(this.registry);
+        ensureLanguageSettings(this.registry);
         bootstrapMetaProgress(this);
         const initialCharacterKey = this.registry.get('selectedCharacterKey') ?? DEFAULT_CHARACTER_KEY;
         this.selectedCharacterKey = CHARACTER_CONFIG[initialCharacterKey] ? initialCharacterKey : DEFAULT_CHARACTER_KEY;
         const initialMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
         this.selectedMapKey = getMapDefinition(initialMapKey) ? initialMapKey : DEFAULT_MAP_KEY;
         this.debugMode = this.registry.get('debugMode') === true;
+        this.selectedSupporterKey = this.registry.get('selectedSupporterKey') ?? null;
         this.setDebugPanelVisible(false);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
         this.audioUnlockCleanup = installAudioUnlock(this);
@@ -189,8 +194,74 @@ export default class MainMenuScene extends Phaser.Scene {
         }
     }
 
+    setupHubDebugMenu() {
+        const panel = document.getElementById('debug-panel');
+        if (!panel) return;
+        this.setDebugPanelVisible(this.debugMode);
+        const existingSection = panel.querySelector('#hub-supporter-section');
+        if (!this.debugMode) {
+            existingSection?.remove();
+            return;
+        }
+
+        let supporterSection = existingSection;
+        if (!supporterSection) {
+            supporterSection = document.createElement('div');
+            supporterSection.id = 'hub-supporter-section';
+            supporterSection.classList.add('panel-section');
+            const firstSection = panel.querySelector('.panel-section');
+            if (firstSection) {
+                panel.insertBefore(supporterSection, firstSection);
+            } else {
+                panel.appendChild(supporterSection);
+            }
+        }
+        supporterSection.innerHTML = '';
+
+        const supporterTitle = document.createElement('div');
+        supporterTitle.classList.add('panel-title');
+        supporterTitle.textContent = 'Hub Supporter';
+        supporterSection.appendChild(supporterTitle);
+
+        const supporterLabel = document.createElement('label');
+        supporterLabel.textContent = 'Selected Supporter';
+        supporterLabel.style.display = 'flex';
+        supporterLabel.style.flexDirection = 'column';
+        supporterLabel.style.gap = '4px';
+        supporterLabel.style.fontSize = '12px';
+
+        const supporterSelect = document.createElement('select');
+        supporterSelect.style.padding = '4px';
+        supporterSelect.style.borderRadius = '4px';
+        supporterSelect.style.background = '#222';
+        supporterSelect.style.color = '#fff';
+        supporterSelect.style.border = '1px solid rgba(255,255,255,0.2)';
+
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = 'None';
+        noneOption.selected = !this.selectedSupporterKey;
+        supporterSelect.appendChild(noneOption);
+
+        SUPPORTER_KEYS.forEach((supporterKey) => {
+            const option = document.createElement('option');
+            option.value = supporterKey;
+            option.textContent = translateText(this, SUPPORTER_CONFIG[supporterKey]?.label ?? supporterKey);
+            option.selected = supporterKey === this.selectedSupporterKey;
+            supporterSelect.appendChild(option);
+        });
+
+        supporterSelect.addEventListener('change', () => {
+            this.selectedSupporterKey = supporterSelect.value || null;
+            this.registry.set('selectedSupporterKey', this.selectedSupporterKey);
+        });
+        supporterLabel.appendChild(supporterSelect);
+        supporterSection.appendChild(supporterLabel);
+    }
+
     render() {
         this.destroyRenderTree();
+        this.setupHubDebugMenu();
         if (!CHARACTER_CONFIG[this.selectedCharacterKey]) {
             this.selectedCharacterKey = DEFAULT_CHARACTER_KEY;
         }
@@ -219,30 +290,43 @@ export default class MainMenuScene extends Phaser.Scene {
         );
 
         this.uiRoot = this.add.container(0, 0);
-        this.uiRoot.add(createPixelText(this, width / 2, metrics.safeY + 24, 'RUNE PIXEL SURVIVORS', {
-            fontSize: metrics.isCompact ? '22px' : metrics.isPortrait ? '26px' : '32px',
+        const headerTitleX = metrics.isPortrait ? (width / 2 + (metrics.isCompact ? 28 : 18)) : (width / 2);
+        const headerTitleY = metrics.safeY + (metrics.isPortrait ? 28 : 24);
+        const headerSubtitleY = headerTitleY + (metrics.isPortrait ? 30 : 32);
+        const headerTitle = createPixelText(this, headerTitleX, headerTitleY, 'RUNE PIXEL SURVIVORS', {
+            fontSize: metrics.isPortrait
+                ? (metrics.isCompact ? '16px' : '20px')
+                : (metrics.isCompact ? '22px' : '32px'),
             color: SHOP_HUB_COLORS.title,
-            strokeThickness: 5
-        }));
-        this.uiRoot.add(createPixelText(this, width / 2, metrics.safeY + 56, 'RETRO FANTASY HUNT', {
-            fontSize: metrics.isCompact ? '11px' : '12px',
+            strokeThickness: metrics.isPortrait ? 4 : 5
+        });
+        const headerSubtitle = createPixelText(this, width / 2, headerSubtitleY, 'RETRO FANTASY HUNT', {
+            fontSize: metrics.isPortrait ? '10px' : (metrics.isCompact ? '11px' : '12px'),
             color: SHOP_HUB_COLORS.dimText,
             strokeThickness: 3
-        }));
+        });
+        this.uiRoot.add([headerTitle, headerSubtitle]);
 
         // Meta currency HUD (menu-only): Dynamon display.
         const meta = getMetaProgress(this);
-        const dynamonContainer = this.add.container(width - metrics.safeX - 10, metrics.safeY + 22);
-        const icon = this.add.image(0, 0, DYNAMON_ICON_KEY).setOrigin(1, 0.5);
-        const iconScale = metrics.isCompact ? 0.7 : 0.8;
-        icon.setScale(iconScale);
-        const amountText = createPixelText(this, 10, 0, `${Math.max(0, Math.floor(meta.dynamon ?? 0))}`, {
-            fontSize: metrics.isCompact ? '14px' : '16px',
+        const iconScale = metrics.isPortrait ? (metrics.isCompact ? 0.56 : 0.64) : (metrics.isCompact ? 0.7 : 0.8);
+        const iconWidth = Math.round(64 * iconScale);
+        const amountText = createPixelText(this, 0, 0, `${Math.max(0, Math.floor(meta.dynamon ?? 0))}`, {
+            fontSize: metrics.isPortrait ? '12px' : (metrics.isCompact ? '14px' : '16px'),
             originX: 0,
             originY: 0.5,
             color: SHOP_HUB_COLORS.title,
             strokeThickness: 4
         });
+        const amountBounds = amountText.getBounds();
+        const dynamonGap = metrics.isPortrait ? 6 : 10;
+        const dynamonTotalWidth = iconWidth + dynamonGap + amountBounds.width;
+        const dynamonLeftX = width - metrics.safeX - dynamonTotalWidth;
+        const dynamonY = metrics.safeY + (metrics.isPortrait ? -4 : 22);
+        const dynamonContainer = this.add.container(dynamonLeftX, dynamonY);
+        const icon = this.add.image(0, 0, DYNAMON_ICON_KEY).setOrigin(0, 0.5);
+        icon.setScale(iconScale);
+        amountText.setPosition(iconWidth + dynamonGap, 0);
         dynamonContainer.add([icon, amountText]);
         // Keep above spark field but below title.
         dynamonContainer.setDepth(5);
@@ -275,13 +359,14 @@ export default class MainMenuScene extends Phaser.Scene {
             { label: 'CREDITS', action: () => this.setMode('credits') }
         ];
         const totalHeight = buttonHeight * buttons.length + buttonGap * Math.max(0, buttons.length - 1);
-        const buttonY = Math.max(safeY + 120, height / 2 - totalHeight / 2 + buttonHeight / 2);
+        const buttonY = Math.max(safeY + (isPortrait ? 146 : 120), height / 2 - totalHeight / 2 + buttonHeight / 2);
 
-        const gearSize = isCompact ? 46 : 50;
-        this.uiRoot.add(createPixelButton(this, safeX + gearSize / 2, safeY + 28, gearSize, gearSize, '⚙', () => {
+        const gearSize = isPortrait ? (isCompact ? 38 : 42) : (isCompact ? 46 : 50);
+        const gearY = safeY + (isPortrait ? 28 : 28);
+        this.uiRoot.add(createPixelButton(this, safeX + gearSize / 2, gearY, gearSize, gearSize, '⚙', () => {
             this.setMode('settings');
         }, {
-            fontSize: isCompact ? '18px' : '20px',
+            fontSize: isPortrait ? (isCompact ? '15px' : '17px') : (isCompact ? '18px' : '20px'),
             textColor: SHOP_HUB_COLORS.title,
             fill: SHOP_HUB_COLORS.buttonFill,
             inner: SHOP_HUB_COLORS.buttonInner,
@@ -315,6 +400,10 @@ export default class MainMenuScene extends Phaser.Scene {
 
     beginNewRun(debugMode) {
         this.debugMode = Boolean(debugMode);
+        if (!this.debugMode) {
+            this.selectedSupporterKey = null;
+            this.registry.set('selectedSupporterKey', null);
+        }
         this.setMode('characters');
     }
 
@@ -387,7 +476,7 @@ export default class MainMenuScene extends Phaser.Scene {
         const passiveInfoBadge = this.createPassiveInfoBadge(
             previewWidth / 2 - 24,
             -previewHeight / 2 + 24,
-            selectedCharacter.passiveDescription,
+            translateText(this, selectedCharacter.passiveDescription),
             { panelWidth: Math.min(PASSIVE_INFO_PANEL_MAX_WIDTH, previewWidth - 28) }
         );
         if (passiveInfoBadge) {
@@ -397,7 +486,7 @@ export default class MainMenuScene extends Phaser.Scene {
         const previewSpriteSize = Math.max(50, Math.round((isPortrait ? 70 : 88) * previewScale));
         previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, previewSpriteY, previewSpriteSize));
         const descriptionY = compactPortrait ? -6 : isPortrait ? 0 : Math.round(-4 * previewScale);
-        previewPanel.add(this.add.text(0, descriptionY, selectedCharacter.description ?? '', {
+        previewPanel.add(this.add.text(0, descriptionY, translateText(this, selectedCharacter.description ?? ''), {
             fontFamily: 'monospace',
             fontSize: isMobileDevice ? '9px' : isCompact ? '10px' : '11px',
             color: SHOP_HUB_COLORS.dimText,
@@ -407,7 +496,7 @@ export default class MainMenuScene extends Phaser.Scene {
             wordWrap: { width: previewWidth - 32, useAdvancedWrap: true }
         }).setOrigin(0.5, 0));
         const styleLabelY = compactPortrait ? 48 : isPortrait ? Math.round(72 * previewScale) : Math.round(96 * previewScale);
-        const characterStyleLabel = String(selectedCharacter.combatStyle ?? selectedCharacter.style ?? 'ranged').toUpperCase();
+        const characterStyleLabel = translateText(this, String(selectedCharacter.combatStyle ?? selectedCharacter.style ?? 'ranged')).toUpperCase();
         const characterStyleColor = characterStyleLabel === 'MELEE' ? '#ffb4a8' : '#a8e3ff';
         previewPanel.add(createPixelText(this, 0, styleLabelY, characterStyleLabel, {
             fontSize: isMobileDevice ? '12px' : compactPortrait ? '12px' : isCompact ? '14px' : '15px',
@@ -538,7 +627,7 @@ export default class MainMenuScene extends Phaser.Scene {
         panel.add(previewPanel);
 
         const selectedMap = getMapDefinition(this.selectedMapKey);
-        const mapInfoText = selectedMap?.description ?? '';
+        const mapInfoText = translateText(this, selectedMap?.description ?? '');
         previewPanel.add(this.add.text(0, -previewHeight / 2 + 18, mapInfoText, {
             fontFamily: 'monospace',
             fontSize: isCompact ? '10px' : '11px',
@@ -618,6 +707,7 @@ export default class MainMenuScene extends Phaser.Scene {
         }));
         const settings = getAudioSettings(this);
         const gameplay = getGameplaySettings(this);
+        const language = ensureLanguageSettings(this.registry).language;
         const toggleX = -Math.min(isMobileLandscape ? 88 : 110, panelWidth * (isMobileLandscape ? 0.21 : 0.25));
         const actionButtonHeight = isCompact ? 44 : 42;
         const fullscreenButtonHeight = isCompact ? 42 : 40;
@@ -628,8 +718,8 @@ export default class MainMenuScene extends Phaser.Scene {
         const contentBottomY = isMobileLandscape
             ? (panelHeight / 2 - bottomPadding - actionButtonHeight - 18)
             : (panelHeight / 2 - bottomPadding - stackedActionBlockHeight - 22);
-        const rowCount = 4;
-        const rowGap = Math.max(isMobileLandscape ? 42 : 50, Math.floor((contentBottomY - contentTopY) / Math.max(1, rowCount - 1)));
+        const rowCount = 5;
+        const rowGap = Math.max(isMobileLandscape ? 34 : 42, Math.floor((contentBottomY - contentTopY) / Math.max(1, rowCount - 1)));
         const firstRowY = contentTopY;
         const musicToggle = createPixelToggle(this, toggleX, firstRowY + (rowGap * 0), 'MUSIC', settings.musicEnabled, (value) => {
             updateAudioSetting(this, 'musicEnabled', value);
@@ -643,7 +733,13 @@ export default class MainMenuScene extends Phaser.Scene {
         const dmgCapCycle = createPixelCycle(this, toggleX, firstRowY + (rowGap * 3), 'DMG CAP', ['merge', 'replace', 'unlimited'], gameplay.damageTextCapMode ?? 'merge', (next) => {
             updateGameplaySetting(this, 'damageTextCapMode', next);
         });
-        panel.add([musicToggle, sfxToggle, dmgCycle, dmgCapCycle]);
+        const languageCycle = createPixelCycle(this, toggleX, firstRowY + (rowGap * 4), 'LANGUAGE', ['en', 'vi'], language, (next) => {
+            updateLanguageSetting(this, next);
+            this.render();
+        }, {
+            languageLabels: true
+        });
+        panel.add([musicToggle, sfxToggle, dmgCycle, dmgCapCycle, languageCycle]);
 
         const isFullscreen = this.scale.isFullscreen === true;
         if (isMobileLandscape) {
@@ -1064,7 +1160,7 @@ export default class MainMenuScene extends Phaser.Scene {
             sprite.setAlpha(0.38);
             sprite.setTint(0x5f6770);
         }
-        const label = createPixelText(this, 0, size / 2 - 12, config.label ?? key, {
+        const label = createPixelText(this, 0, size / 2 - 12, translateText(this, config.label ?? key), {
             fontSize: size <= 64 ? '8px' : '10px',
             color: selected ? SHOP_HUB_COLORS.title : SHOP_HUB_COLORS.dimText,
             strokeThickness: 2
@@ -1108,7 +1204,7 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     createPassiveInfoBadge(x, y, passiveText, options = {}) {
-        const normalizedPassiveText = typeof passiveText === 'string' ? passiveText.trim() : '';
+        const normalizedPassiveText = typeof passiveText === 'string' ? translateText(this, passiveText.trim()) : '';
         if (!normalizedPassiveText) {
             return null;
         }
@@ -1138,7 +1234,7 @@ export default class MainMenuScene extends Phaser.Scene {
             color: SHOP_HUB_COLORS.title,
             strokeThickness: 2
         });
-        const tooltipText = this.add.text(0, 0, `Passive\n${normalizedPassiveText}`, tooltipTextStyle)
+        const tooltipText = this.add.text(0, 0, `${translateText(this, 'Passive')}\n${normalizedPassiveText}`, tooltipTextStyle)
             .setOrigin(0.5, 0);
         const tooltipHeight = Math.max(44, tooltipText.height + tooltipPadding * 2 + 8);
         const tooltip = this.add.container(0, -badgeSize / 2 - 10);
@@ -1201,7 +1297,7 @@ export default class MainMenuScene extends Phaser.Scene {
         frame.strokeRect(-size / 2, -size / 2, size, size);
         frame.lineStyle(2, selected ? SHOP_HUB_COLORS.borderBright : SHOP_HUB_COLORS.border, 1);
         frame.strokeRect(-size / 2 + 2, -size / 2 + 2, size - 4, size - 4);
-        const label = createPixelText(this, 0, -size / 2 + 20, definition?.label ?? mapKey, {
+        const label = createPixelText(this, 0, -size / 2 + 20, translateText(this, definition?.label ?? mapKey), {
             fontSize: size <= 108 ? '7px' : size <= 120 ? '9px' : '10px',
             color: selected ? SHOP_HUB_COLORS.title : SHOP_HUB_COLORS.dimText,
             strokeThickness: 2
@@ -1251,13 +1347,15 @@ export default class MainMenuScene extends Phaser.Scene {
                 color: SHOP_HUB_COLORS.title,
                 strokeThickness: 3
             });
-        const title = createPixelText(this, -width / 2 + 84, -height / 2 + 24, upgrade.label, {
+        const title = createPixelText(this, -width / 2 + 84, -height / 2 + 24, translateText(this, upgrade.label), {
             fontSize: '11px',
             color: SHOP_HUB_COLORS.title,
             originX: 0,
             strokeThickness: 3
         });
-        const maxText = createPixelText(this, -width / 2 + 84, -height / 2 + 44, `Max ${upgrade.maxText}`, {
+        const maxText = createPixelText(this, -width / 2 + 84, -height / 2 + 44, t(this, 'max_value', {
+            value: translateText(this, upgrade.maxText)
+        }), {
             fontSize: '9px',
             color: SHOP_HUB_COLORS.dimText,
             originX: 0,
@@ -1288,19 +1386,23 @@ export default class MainMenuScene extends Phaser.Scene {
             container.add(pip);
         }
 
-        const currentText = createPixelText(this, -width / 2 + 16, 6, `Current ${formatMetaUpgradeValue(upgrade, totalValue)}`, {
+        const currentText = createPixelText(this, -width / 2 + 16, 6, t(this, 'current_value', {
+            value: formatMetaUpgradeValue(upgrade, totalValue)
+        }), {
             fontSize: '10px',
             color: SHOP_HUB_COLORS.text,
             originX: 0,
             strokeThickness: 3
         });
-        const nextText = createPixelText(this, -width / 2 + 16, 26, isMaxed ? 'Fully upgraded' : `Next ${formatMetaUpgradeValue(upgrade, nextValue)}`, {
+        const nextText = createPixelText(this, -width / 2 + 16, 26, isMaxed ? t(this, 'fully_upgraded') : t(this, 'next_value', {
+            value: formatMetaUpgradeValue(upgrade, nextValue)
+        }), {
             fontSize: '10px',
             color: isMaxed ? '#fff4d0' : '#a7e6b8',
             originX: 0,
             strokeThickness: 3
         });
-        const hintText = createPixelText(this, -width / 2 + 16, 46, upgrade.bonusText, {
+        const hintText = createPixelText(this, -width / 2 + 16, 46, translateText(this, upgrade.bonusText), {
             fontSize: '9px',
             color: SHOP_HUB_COLORS.dimText,
             originX: 0,
@@ -1313,7 +1415,9 @@ export default class MainMenuScene extends Phaser.Scene {
         costBadge.fillRoundedRect(-width / 2 + 14, height / 2 - 34, 96, 22, 8);
         costBadge.lineStyle(2, costBorderColor, 1);
         costBadge.strokeRoundedRect(-width / 2 + 14, height / 2 - 34, 96, 22, 8);
-        const costText = createPixelText(this, -width / 2 + 62, height / 2 - 23, isMaxed ? 'MAXED' : `${Math.floor(nextCost ?? 0)} DYN`, {
+        const costText = createPixelText(this, -width / 2 + 62, height / 2 - 23, isMaxed ? t(this, 'maxed') : t(this, 'dyn_value', {
+            value: Math.floor(nextCost ?? 0)
+        }), {
             fontSize: '10px',
             color: isMaxed ? '#e9ffd7' : canBuy ? '#fff1c9' : '#e4c0c0',
             strokeThickness: 3
@@ -1639,6 +1743,7 @@ export default class MainMenuScene extends Phaser.Scene {
         this.registry.set('selectedCharacterKey', this.selectedCharacterKey);
         this.registry.set('selectedMapKey', this.selectedMapKey);
         this.registry.set('debugMode', this.debugMode);
+        this.registry.set('selectedSupporterKey', this.debugMode ? this.selectedSupporterKey : null);
         this.registry.set('hasStartedGame', true);
         this.scene.start('MainScene');
     }

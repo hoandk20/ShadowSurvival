@@ -6,6 +6,10 @@ import PauseMenuScene from './scenes/PauseMenuScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 import VictoryScene from './scenes/VictoryScene.js';
 
+function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent ?? '');
+}
+
 function ensureFatalErrorOverlay() {
     let overlay = document.getElementById('fatal-error-overlay');
     if (overlay) return overlay;
@@ -87,6 +91,58 @@ window.addEventListener('unhandledrejection', (event) => {
     showFatalErrorOverlay(event.reason || event);
 });
 
+async function lockPortraitOrientation() {
+    try {
+        if (screen.orientation?.lock) {
+            await screen.orientation.lock('portrait');
+        }
+    } catch (_error) {
+        // Some browsers/webviews require fullscreen or may reject programmatic orientation lock.
+    }
+}
+
+async function requestElementFullscreen(element) {
+    if (!element) return false;
+    try {
+        if (typeof element.requestFullscreen === 'function') {
+            await element.requestFullscreen({ navigationUI: 'hide' });
+            return true;
+        }
+    } catch (_error) {
+        // Fall through to prefixed APIs.
+    }
+    try {
+        if (typeof element.webkitRequestFullscreen === 'function') {
+            element.webkitRequestFullscreen();
+            return true;
+        }
+    } catch (_error) {
+        // Ignore and continue.
+    }
+    return false;
+}
+
+async function ensureMobileFullscreenAndPortrait() {
+    if (!isMobileDevice()) return false;
+    const target = document.getElementById('game-container') ?? document.documentElement;
+    let enteredFullscreen = false;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        enteredFullscreen = await requestElementFullscreen(target);
+    }
+    await lockPortraitOrientation();
+    return enteredFullscreen;
+}
+
+function installMobileDisplayMode() {
+    if (!isMobileDevice()) return;
+    const retryInteractiveDisplayMode = async () => {
+        await ensureMobileFullscreenAndPortrait();
+    };
+    window.addEventListener('pointerdown', retryInteractiveDisplayMode, { passive: true });
+    window.addEventListener('touchend', retryInteractiveDisplayMode, { passive: true });
+    ensureMobileFullscreenAndPortrait();
+}
+
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
@@ -110,6 +166,7 @@ const config = {
 };
 
 try {
+    installMobileDisplayMode();
     new Phaser.Game(config);
 } catch (error) {
     console.error('Failed to start Phaser game:', error);

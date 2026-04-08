@@ -546,9 +546,9 @@ Current runtime flow:
   - before wave `5`: `Normal 100%`
   - wave `5-9`: `Normal 66.67%`, `Epic 33.33%`
   - wave `10+`: `Normal 60%`, `Epic 30%`, `Legendary 10%`
-- if the player still has no supporter, clearing wave `3` opens a supporter selection popup before the shop
-- the supporter selection popup at wave `3` shows `4` options and supports rerolling up to `3` times for `10` gold each
-- after the supporter popup at wave `3`, the pre-shop card choice still appears before the shop
+- if the player still has no supporter, clearing wave `1` opens a supporter selection popup before the shop
+- the supporter selection popup at wave `1` shows `4` options and supports rerolling up to `3` times for `10` gold each
+- after the supporter popup at wave `1`, the pre-shop card choice still appears before the shop
 - when the shop opens, all active enemies and enemy projectiles are cleared
 - after leaving the shop, the next wave begins
 - normal shop shows `5` items

@@ -1,0 +1,6 @@
+{
+  "appId": "com.runepixelsurvivors.game",
+  "appName": "Rune Pixel Survivors",
+  "webDir": "dist/mobile-web",
+  "bundledWebRuntime": false
+}

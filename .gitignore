@@ -1,0 +1,17 @@
+.DS_Store
+
+# Node / web build artifacts
+node_modules/
+dist/
+npm-debug.log*
+
+# Local environment overrides
+.env
+.env.*
+
+# Android / Gradle
+android/
+
+# Binary packages
+*.apk
+*.aab

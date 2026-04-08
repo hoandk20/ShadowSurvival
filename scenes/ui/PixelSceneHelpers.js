@@ -1,3 +1,5 @@
+import { getLanguageLabel, translateText } from '../../utils/languageSettings.js';
+
 export const UI_COLORS = {
     gold: 0x7e99a8,
     goldBright: 0xa8d6ea,
@@ -43,7 +45,8 @@ export function createPixelPanel(scene, x, y, width, height, options = {}) {
 }
 
 export function createPixelText(scene, x, y, text, options = {}) {
-    return scene.add.text(x, y, text, {
+    const resolvedText = options.translate === false ? text : translateText(scene, text);
+    return scene.add.text(x, y, resolvedText, {
         fontFamily: options.fontFamily ?? 'monospace',
         fontSize: options.fontSize ?? '16px',
         color: options.color ?? UI_COLORS.text,
@@ -97,14 +100,17 @@ export function createPixelButton(scene, x, y, width, height, label, onClick, op
     return container;
 }
 
-export function createPixelToggle(scene, x, y, label, value, onToggle) {
+export function createPixelToggle(scene, x, y, label, value, onToggle, options = {}) {
     const container = scene.add.container(x, y);
     const labelText = createPixelText(scene, -60, 0, label, {
         fontSize: '14px',
         originX: 0,
         color: UI_COLORS.text
     });
-    const button = createPixelButton(scene, 88, 0, 78, 28, value ? 'ON' : 'OFF', () => {
+    const trueLabel = options.trueLabel ?? 'ON';
+    const falseLabel = options.falseLabel ?? 'OFF';
+    const getLabel = (nextValue) => translateText(scene, nextValue ? trueLabel : falseLabel);
+    const button = createPixelButton(scene, 88, 0, 78, 28, getLabel(value), () => {
         const next = !button.getData('value');
         button.getData('setValue')?.(next);
         onToggle?.(next);
@@ -120,7 +126,7 @@ export function createPixelToggle(scene, x, y, label, value, onToggle) {
     });
     const setValue = (next) => {
         button.setData('value', next);
-        button.getData('text')?.setText(next ? 'ON' : 'OFF');
+        button.getData('text')?.setText(getLabel(next));
         button.getData('redraw')?.(next ? 'active' : 'idle');
     };
     button.setData('setValue', setValue);
@@ -129,7 +135,7 @@ export function createPixelToggle(scene, x, y, label, value, onToggle) {
     return container;
 }
 
-export function createPixelCycle(scene, x, y, label, options = [], value, onChange) {
+export function createPixelCycle(scene, x, y, label, options = [], value, onChange, uiOptions = {}) {
     const container = scene.add.container(x, y);
     const labelText = createPixelText(scene, -60, 0, label, {
         fontSize: '14px',
@@ -139,11 +145,19 @@ export function createPixelCycle(scene, x, y, label, options = [], value, onChan
     const safeOptions = Array.isArray(options) ? options.filter(Boolean) : [];
     const initialIndex = Math.max(0, safeOptions.indexOf(value));
     const state = { index: initialIndex };
-    const button = createPixelButton(scene, 88, 0, 110, 28, String(safeOptions[state.index] ?? value ?? ''), () => {
+    const formatOption = typeof uiOptions.formatOption === 'function'
+        ? uiOptions.formatOption
+        : (nextValue) => {
+            if (uiOptions.languageLabels === true) {
+                return getLanguageLabel(scene, nextValue);
+            }
+            return translateText(scene, String(nextValue ?? ''));
+        };
+    const button = createPixelButton(scene, 88, 0, 110, 28, String(formatOption(safeOptions[state.index] ?? value ?? '')), () => {
         if (!safeOptions.length) return;
         state.index = (state.index + 1) % safeOptions.length;
         const next = safeOptions[state.index];
-        button.getData('text')?.setText(String(next));
+        button.getData('text')?.setText(String(formatOption(next)));
         onChange?.(next);
     }, {
         fontSize: '13px',

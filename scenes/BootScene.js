@@ -1,5 +1,6 @@
 import { getAvailableMaps, getMapDefinition } from '../config/map.js';
 import { preloadAllAssets } from '../utils/animationSystem.js';
+import { ensureLanguageSettings, translateText } from '../utils/languageSettings.js';
 import { UI_COLORS, createBackdrop, createPixelPanel, createPixelText } from './ui/PixelSceneHelpers.js';
 
 const MENU_BACKGROUND_KEY = 'menu_background';
@@ -34,6 +35,7 @@ export default class BootScene extends Phaser.Scene {
 
     preload() {
         this.cameras.main.roundPixels = true;
+        ensureLanguageSettings(this.registry);
         this.createLoadingUi();
         this.bindLoaderEvents();
         this.preloadMenuAssets();
@@ -80,7 +82,7 @@ export default class BootScene extends Phaser.Scene {
         this.load.on('complete', () => {
             this.drawProgressBar(1);
             if (this.progressLabel) {
-                this.progressLabel.setText('Ready');
+                this.progressLabel.setText(translateText(this, 'Ready'));
             }
         });
     }
