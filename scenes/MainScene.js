@@ -48,6 +48,7 @@ const INITIAL_WAVE_SPAWN_BURST = 1;
 const SHOP_REROLL_COST = 10;
 const SUPPORTER_SELECTION_REROLL_COST = 10;
 const SUPPORTER_SELECTION_MAX_REROLLS = 2;
+const SUPPORTER_SELECTION_WAVE = 3;
 const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
 const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 2;
 const MIN_META_SHOP_REROLL_COST = 6;
@@ -224,7 +225,7 @@ export default class MainScene extends Phaser.Scene {
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
-            this.cameras.main.setZoom(isMobileDevice ? 2 : 2);
+            this.cameras.main.setZoom(isMobileDevice ? 1.3 : 2);
             this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
@@ -2344,7 +2345,7 @@ export default class MainScene extends Phaser.Scene {
 
     shouldPresentSupporterSelection() {
         return this.waveSystemEnabled
-            && this.currentWaveNumber === 1
+            && this.currentWaveNumber === SUPPORTER_SELECTION_WAVE
             && !this.selectedSupporterKey
             && !this.isChoosingSupporter;
     }

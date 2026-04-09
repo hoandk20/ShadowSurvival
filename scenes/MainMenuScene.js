@@ -75,6 +75,7 @@ const SHOP_HUB_COLORS = {
     buttonActiveFill: 0x30454f,
     buttonActiveInner: 0x3b5663
 };
+const DEBUG_MODE_ENABLED = false;
 
 function getCharacterUnlockLabel(characterKey) {
     const unlockType = getCharacterUnlockType(characterKey);
@@ -353,11 +354,13 @@ export default class MainMenuScene extends Phaser.Scene {
         const buttonHeight = isCompact ? 50 : 56;
         const buttonGap = isCompact ? 16 : 18;
         const buttons = [
-            { label: 'START GAME', action: () => this.beginNewRun(false) },
-            { label: 'START DEBUG MODE', action: () => this.beginNewRun(true) },
+            { label: 'START GAME', action: () => this.beginNewRun() },
             { label: 'UPGRADE', action: () => this.setMode('upgrade') },
             { label: 'CREDITS', action: () => this.setMode('credits') }
         ];
+        if (DEBUG_MODE_ENABLED) {
+            buttons.splice(1, 0, { label: 'START DEBUG MODE', action: () => this.beginNewRun(true) });
+        }
         const totalHeight = buttonHeight * buttons.length + buttonGap * Math.max(0, buttons.length - 1);
         const buttonY = Math.max(safeY + (isPortrait ? 146 : 120), height / 2 - totalHeight / 2 + buttonHeight / 2);
 
@@ -398,8 +401,8 @@ export default class MainMenuScene extends Phaser.Scene {
         });
     }
 
-    beginNewRun(debugMode) {
-        this.debugMode = Boolean(debugMode);
+    beginNewRun(debugMode = false) {
+        this.debugMode = DEBUG_MODE_ENABLED && Boolean(debugMode);
         if (!this.debugMode) {
             this.selectedSupporterKey = null;
             this.registry.set('selectedSupporterKey', null);
@@ -1740,6 +1743,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
     startGame() {
         if (!isCharacterUnlocked(this, this.selectedCharacterKey)) return;
+        this.debugMode = DEBUG_MODE_ENABLED && this.debugMode === true;
         this.registry.set('selectedCharacterKey', this.selectedCharacterKey);
         this.registry.set('selectedMapKey', this.selectedMapKey);
         this.registry.set('debugMode', this.debugMode);

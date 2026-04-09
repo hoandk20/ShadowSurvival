@@ -1,0 +1,28 @@
+Rune Pixel Survivors - Android Signing Backup Info
+
+App name: Rune Pixel Survivors
+Package name: com.runepixelsurvivors.game
+Key alias: upload
+Store password: B3B545EB-2DBA-4D6E-BE87-E06469A08E0C
+Key password: B3B545EB-2DBA-4D6E-BE87-E06469A08E0C
+
+Keystore file:
+/Users/hoankieudinh/Documents/ShadowSurvival/android/app/upload-keystore.jks
+
+Local signing config file:
+/Users/hoankieudinh/Documents/ShadowSurvival/android/keystore.properties
+
+Created on:
+2026-04-09
+
+Important:
+- Back up the .jks file in at least 2 safe places.
+- Store the keystore password in a password manager or another secure location.
+- Do not rely on this project folder as the only backup.
+- Losing the keystore file or password can prevent future app updates.
+
+Recommended separate secure records:
+- Store password
+- Key password
+- Google Play Console account used to publish
+- Whether Google Play App Signing is enabled
