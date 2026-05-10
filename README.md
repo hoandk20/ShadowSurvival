@@ -173,7 +173,7 @@ Source: [config/stats.js](./config/stats.js)
 | Armor Pierce | `armorPierce` | 0 |
 | Skill Range | `skillRange` | 0 |
 | Move Speed | `moveSpeed` | 105 |
-| Knockback Multiplier | `knockbackMultiplier` | 1 |
+| Knockback Multiplier | `knockbackMultiplier` | 1 |.
 | Damage Multiplier | `damageMultiplier` | 1 |
 | Attack Speed | `attackSpeed` | 1 |
 | Crit Chance | `critChance` | 0.1 |
