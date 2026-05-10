@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Rune Pixel Survivors</title>
-    <link rel="icon" type="image/png" href="assets/shopitem/sharpened_blade.png">
+    <link rel="icon" type="image/png" href="assets/statuseffect/root.png">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         html, body {
@@ -27,6 +27,9 @@
         }
         canvas {
             display: block;
+            /* Force nearest-neighbor scaling for pixel art (prevents blur when CSS scales the canvas). */
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
         #debug-panel {
             position: fixed;
@@ -151,6 +154,7 @@
             <button id="clear-enemies-btn">Clear Enemies</button>
         </div>
     </div>
+    <script src="./build-env.js"></script>
     <script type="module" src="main.js"></script>
 </body>
 </html>

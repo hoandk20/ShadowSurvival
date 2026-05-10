@@ -132,8 +132,7 @@ export default class DamageText extends Phaser.GameObjects.Text {
         // Slight punch so merging is noticeable.
         this.scene.tweens.add({
             targets: this,
-            scaleX: 1.08,
-            scaleY: 1.08,
+            y: this.y - 2,
             duration: 80,
             yoyo: true,
             ease: 'Quad.easeOut'
@@ -164,7 +163,6 @@ export default class DamageText extends Phaser.GameObjects.Text {
         this.setText(`-${displayValue}`);
         this.setPosition(x, y);
         this.setAlpha(1);
-        this.setScale(1);
         this.playTweenFrom(y);
     }
 }

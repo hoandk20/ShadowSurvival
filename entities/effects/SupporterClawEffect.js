@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 export default class SupporterClawEffect {
     constructor(scene) {
         this.scene = scene;
@@ -13,7 +15,7 @@ export default class SupporterClawEffect {
 
         const color = options.color ?? 0xf4f1df;
         const glowColor = options.glowColor ?? 0xffffff;
-        const depth = options.depth ?? ((target.depth ?? 20) + 6);
+        const depth = resolveEffectDepth(options.depth ?? (target.depth ?? 20), 6, { maxDepth: 55, fallbackDepth: 20 });
         const duration = options.duration ?? 150;
         const radius = Math.max(12, options.arcRadius ?? options.length ?? 28);
         const lineWidth = Math.max(2, options.arcWidth ?? options.slashWidth ?? 6);
@@ -27,15 +29,15 @@ export default class SupporterClawEffect {
         const glowArc = this.scene.add.graphics();
         glowArc.setDepth(depth);
         glowArc.setBlendMode(Phaser.BlendModes.ADD);
-        glowArc.lineStyle(lineWidth + 3, glowColor, 0.35);
+        glowArc.lineStyle(lineWidth + 3, glowColor, 0.25);
         glowArc.beginPath();
         glowArc.arc(centerX, centerY, radius, startAngle, endAngle, false);
         glowArc.strokePath();
 
         const slashArc = this.scene.add.graphics();
-        slashArc.setDepth(depth + 1);
+        slashArc.setDepth(resolveEffectDepth(depth, 1, { maxDepth: 55, fallbackDepth: 20 }));
         slashArc.setBlendMode(Phaser.BlendModes.ADD);
-        slashArc.lineStyle(lineWidth, color, 0.95);
+        slashArc.lineStyle(lineWidth, color, 0.82);
         slashArc.beginPath();
         slashArc.arc(centerX, centerY, radius, startAngle, endAngle, false);
         slashArc.strokePath();
@@ -47,14 +49,12 @@ export default class SupporterClawEffect {
             color,
             options.impactAlpha ?? 0.22
         );
-        tipFlash.setDepth(depth + 2);
+        tipFlash.setDepth(resolveEffectDepth(depth, 2, { maxDepth: 55, fallbackDepth: 20 }));
         tipFlash.setBlendMode(Phaser.BlendModes.ADD);
 
         this.scene.tweens.add({
             targets: [glowArc, slashArc, tipFlash],
             alpha: 0,
-            scaleX: 1.08,
-            scaleY: 1.08,
             duration,
             ease: 'Cubic.easeOut',
             onComplete: () => {
@@ -73,7 +73,7 @@ export default class SupporterClawEffect {
         }
         const color = options.color ?? 0xff6b7d;
         const glowColor = options.glowColor ?? 0xffd3d9;
-        const depth = options.depth ?? ((target.depth ?? 20) + 6);
+        const depth = resolveEffectDepth(options.depth ?? (target.depth ?? 20), 6, { maxDepth: 55, fallbackDepth: 20 });
         const slashLength = options.length ?? 18;
         const slashSpacing = options.spacing ?? 6;
         const slashWidth = options.slashWidth ?? 3;
@@ -93,18 +93,20 @@ export default class SupporterClawEffect {
                 slashWidth,
                 slashLength,
                 color,
-                0.95
+                0.78
             );
             slash.setRotation(angle);
-            slash.setDepth(depth + index);
+            slash.setDepth(resolveEffectDepth(depth, index, { maxDepth: 55, fallbackDepth: 20 }));
             slash.setBlendMode(Phaser.BlendModes.ADD);
-            slash.setStrokeStyle(1, glowColor, 0.95);
+            slash.setStrokeStyle(1, glowColor, 0.78);
+            const baseSlashWidth = slash.width;
+            const baseSlashHeight = slash.height;
 
             this.scene.tweens.add({
                 targets: slash,
                 alpha: 0,
-                scaleX: 0.35,
-                scaleY: 1.25,
+                width: baseSlashWidth * 0.35,
+                height: baseSlashHeight * 1.25,
                 x: slash.x + Phaser.Math.Between(6, 10),
                 y: slash.y - Phaser.Math.Between(4, 8),
                 duration,
@@ -113,14 +115,14 @@ export default class SupporterClawEffect {
             });
         }
 
-        const impact = this.scene.add.circle(centerX, centerY, options.impactRadius ?? 9, color, options.impactAlpha ?? 0.28);
-        impact.setDepth(depth - 1);
+        const impact = this.scene.add.circle(centerX, centerY, options.impactRadius ?? 9, color, options.impactAlpha ?? 0.22);
+        impact.setDepth(resolveEffectDepth(depth, -1, { maxDepth: 55, fallbackDepth: 20 }));
         impact.setBlendMode(Phaser.BlendModes.ADD);
+        const impactBaseRadius = impact.radius;
         this.scene.tweens.add({
             targets: impact,
             alpha: 0,
-            scaleX: 1.6,
-            scaleY: 1.25,
+            radius: impactBaseRadius * 1.4,
             duration: Math.max(120, duration - 10),
             ease: 'Quad.easeOut',
             onComplete: () => impact.destroy()

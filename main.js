@@ -6,8 +6,80 @@ import PauseMenuScene from './scenes/PauseMenuScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 import VictoryScene from './scenes/VictoryScene.js';
 
+const DEBUG_MENU_UNLOCK_STORAGE_KEY = 'rps_debug_menu_unlocked';
+const DEBUG_MENU_UNLOCK_CODE = 'RPS_DEBUG_2026';
+
 function isMobileDevice() {
     return /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent ?? '');
+}
+
+function getRenderResolution() {
+    const rawDpr = Number(globalThis?.devicePixelRatio ?? 1);
+    if (!Number.isFinite(rawDpr) || rawDpr <= 0) return 1;
+    // Keep the game crisp on HiDPI screens without blowing up fill-rate on very high DPR devices.
+    return Math.min(rawDpr, 3);
+}
+
+function isDebugMenuUnlocked() {
+    if (globalThis.__RPS_DEBUG_MENU_UNLOCKED__ === true) return true;
+    try {
+        return globalThis.localStorage?.getItem(DEBUG_MENU_UNLOCK_STORAGE_KEY) === '1';
+    } catch (_error) {
+        return false;
+    }
+}
+
+function setDebugMenuUnlocked(enabled) {
+    const nextEnabled = enabled === true;
+    globalThis.__RPS_DEBUG_MENU_UNLOCKED__ = nextEnabled;
+    try {
+        if (nextEnabled) {
+            globalThis.localStorage?.setItem(DEBUG_MENU_UNLOCK_STORAGE_KEY, '1');
+        } else {
+            globalThis.localStorage?.removeItem(DEBUG_MENU_UNLOCK_STORAGE_KEY);
+        }
+    } catch (_error) {
+        // Ignore storage failures.
+    }
+    globalThis.dispatchEvent?.(new CustomEvent('rps-debug-menu-changed', {
+        detail: { enabled: nextEnabled }
+    }));
+    return nextEnabled;
+}
+
+function installConsoleDebugMenuAccess() {
+    const variant = String(globalThis?.__APP_BUILD_VARIANT__ ?? '').toLowerCase();
+    if (variant === 'release') {
+        globalThis.__RPS_DEBUG_MENU_UNLOCKED__ = false;
+        try {
+            globalThis.localStorage?.removeItem(DEBUG_MENU_UNLOCK_STORAGE_KEY);
+        } catch (_error) {
+            // Ignore storage failures.
+        }
+        delete globalThis.rpsUnlockDebugMenu;
+        delete globalThis.rpsLockDebugMenu;
+        delete globalThis.rpsIsDebugMenuUnlocked;
+        return;
+    }
+
+    globalThis.__RPS_DEBUG_MENU_UNLOCKED__ = isDebugMenuUnlocked();
+    globalThis.rpsUnlockDebugMenu = (code) => {
+        const normalizedCode = String(code ?? '').trim();
+        if (normalizedCode !== DEBUG_MENU_UNLOCK_CODE) {
+            console.warn('Invalid debug code.');
+            return false;
+        }
+        setDebugMenuUnlocked(true);
+        console.info('Debug menu unlocked. Return to the main menu if needed.');
+        return true;
+    };
+    globalThis.rpsLockDebugMenu = () => {
+        setDebugMenuUnlocked(false);
+        console.info('Debug menu locked.');
+        return true;
+    };
+    globalThis.rpsIsDebugMenuUnlocked = () => isDebugMenuUnlocked();
+    console.info(`Console debug hook ready: rpsUnlockDebugMenu('${DEBUG_MENU_UNLOCK_CODE}')`);
 }
 
 function ensureFatalErrorOverlay() {
@@ -147,6 +219,7 @@ const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
+    resolution: getRenderResolution(),
     parent: 'game-container',
     pixelArt: true,
     antialias: false,
@@ -167,6 +240,7 @@ const config = {
 
 try {
     installMobileDisplayMode();
+    installConsoleDebugMenuAccess();
     new Phaser.Game(config);
 } catch (error) {
     console.error('Failed to start Phaser game:', error);

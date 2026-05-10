@@ -1,5 +1,5 @@
 const MAPROCK_FIELD_MAX_WAVE = 20;
-const MAPROCK_FIELD_REGULAR_WAVE_DURATION = 60;
+const MAPROCK_FIELD_REGULAR_WAVE_DURATION = 50;
 const MAPROCK_FIELD_BOSS_WAVE_DURATION = 9999;
 
 function getEnemyMaxHealth(waveNumber, enemyType) {
@@ -171,6 +171,12 @@ export function createMaprockFieldScenario(sharedEnemyHealthMilestones = []) {
         normalSpawnPerSecond: 0.5,
         waveSpawnRateByWave: getMaprockFieldSpawnRate,
         enemyHealthMilestones: sharedEnemyHealthMilestones,
-        wavePlans: createWavePlans()
+        wavePlans: createWavePlans(),
+        onWaveStart: (scene, payload = {}) => {
+            const waveNumber = Math.max(1, Math.round(payload.waveNumber ?? 1));
+            if ((scene?.blackWidowCameoWave ?? 0) === waveNumber && typeof scene?.playBlackWidowCameo === 'function') {
+                scene.playBlackWidowCameo({ dashCount: 10, idleMs: 1000 });
+            }
+        }
     };
 }

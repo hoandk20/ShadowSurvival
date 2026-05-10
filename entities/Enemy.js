@@ -43,6 +43,9 @@ const ATTACK_BOUNCE_SCALE_Y = 1.08;
 const ATTACK_SQUASH_DURATION_MS = 70;
 const ATTACK_BOUNCE_DURATION_MS = 105;
 const DASH_LUNGE_STYLES = new Set(['dash_lunge', 'dash_lunge_bullet_trail', 'dash_lunge_back_fan']);
+const GLOBAL_UNIT_SCALE = 1;
+const GLOBAL_ENEMY_ATTACK_SCALE = 1;
+const GLOBAL_ENEMY_MOVE_SPEED_SCALE = 1;
 const DEFAULT_MELEE_ATTACK_CONFIG = Object.freeze({
     engageDelayMs: 90,
     windupMs: 110,
@@ -52,6 +55,35 @@ const DEFAULT_MELEE_ATTACK_CONFIG = Object.freeze({
     dashSpeed: 280,
     dashDistance: 120,
     dashOvershootDistance: 100
+});
+
+const getGlobalUnitScale = () => GLOBAL_UNIT_SCALE;
+const getGlobalEnemyAttackScale = () => GLOBAL_ENEMY_ATTACK_SCALE;
+const getGlobalEnemyMoveSpeedScale = () => GLOBAL_ENEMY_MOVE_SPEED_SCALE;
+
+const scaleDimensionValue = (value, scale, minimum = 0) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+    return Math.max(minimum, Math.round(value * scale));
+};
+
+const unscaleDimensionValue = (value, scale, minimum = 0) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isFinite(scale) || scale <= 0) return value;
+    return Math.max(minimum, Math.round(value / scale));
+};
+
+const scaleEnemyAttackConfig = (config = {}, scale = 1) => ({
+    ...config,
+    preferredRange: scaleDimensionValue(config.preferredRange, scale, 0),
+    projectileRadius: scaleDimensionValue(config.projectileRadius, scale, 1),
+    cloudRadius: scaleDimensionValue(config.cloudRadius, scale, 1),
+    fireRadius: scaleDimensionValue(config.fireRadius, scale, 1)
+});
+
+const scaleMeleeAttackConfig = (config = {}, scale = 1) => ({
+    ...config,
+    rangePadding: scaleDimensionValue(config.rangePadding, scale, 0),
+    dashDistance: scaleDimensionValue(config.dashDistance, scale, 0),
+    dashOvershootDistance: scaleDimensionValue(config.dashOvershootDistance, scale, 0)
 });
 
 export default class Enemy extends BaseEntity {
@@ -66,20 +98,15 @@ export default class Enemy extends BaseEntity {
 
         const enemyConfig = ENEMIES[type] ?? {};
         this.enemyConfig = enemyConfig;
+        this.mobileUnitScale = getGlobalUnitScale();
+        this.enemyAttackScale = getGlobalEnemyAttackScale();
+        this.enemyMoveSpeedScale = getGlobalEnemyMoveSpeedScale();
         const enemyStats = getEnemyStats(enemyConfig);
-        this.speed = enemyStats.moveSpeed ?? ENEMY_BASE_STATS.moveSpeed;
+        this.speed = Math.max(1, Math.round((enemyStats.moveSpeed ?? ENEMY_BASE_STATS.moveSpeed) * this.enemyMoveSpeedScale));
         const rawDisplay = enemyConfig.displaySize || { width: 34, height: 50 };
         const rawHitbox = enemyConfig.hitboxSize || { width: HITBOX_DISTANCE, height: HITBOX_DISTANCE };
         this.baseDisplaySize = { width: rawDisplay.width, height: rawDisplay.height };
         this.baseHitboxSize = { width: rawHitbox.width, height: rawHitbox.height };
-        this.displaySize = {
-            width: rawDisplay.width,
-            height: rawDisplay.height
-        };
-        this.hitboxSize = {
-            width: rawHitbox.width,
-            height: rawHitbox.height
-        };
         this.maxHealth = enemyStats.maxHealth ?? ENEMY_BASE_STATS.maxHealth;
         this.health = this.maxHealth;
         this.damage = enemyStats.damage ?? ENEMY_BASE_STATS.damage;
@@ -97,17 +124,23 @@ export default class Enemy extends BaseEntity {
         this.knockbackVelocity = new Phaser.Math.Vector2(0, 0);
         this.knockbackTimer = 0;
         this.attackCooldown = enemyStats.attackCooldown ?? ENEMY_BASE_STATS.attackCooldown;
-        this.attackRange = enemyStats.attackRange ?? ENEMY_BASE_STATS.attackRange;
+        this.attackRange = scaleDimensionValue(
+            enemyStats.attackRange ?? ENEMY_BASE_STATS.attackRange,
+            this.enemyAttackScale,
+            0
+        );
         this.behavior = enemyConfig.behavior ?? 'chase';
         this.combatType = enemyConfig.combatType ?? (this.behavior === 'ranged' ? 'ranged' : 'melee');
         this.attackStyle = enemyConfig.attackStyle ?? (this.combatType === 'ranged' ? 'projectile_bolt' : 'contact_strike');
-        this.rangedAttackConfig = enemyConfig.rangedAttack ?? null;
+        this.rangedAttackConfig = enemyConfig.rangedAttack
+            ? scaleEnemyAttackConfig(enemyConfig.rangedAttack, this.enemyAttackScale)
+            : null;
         this.meleeAttackConfig = {
             ...DEFAULT_MELEE_ATTACK_CONFIG,
-            ...(enemyConfig.meleeAttack ?? {})
+            ...scaleMeleeAttackConfig(enemyConfig.meleeAttack ?? {}, this.enemyAttackScale)
         };
         this.baseMeleeAttackConfig = { ...this.meleeAttackConfig };
-        this.dashTelegraphWidth = Math.max(2, enemyConfig.dashTelegraphWidth ?? 6);
+        this.dashTelegraphWidth = Math.max(2, scaleDimensionValue(enemyConfig.dashTelegraphWidth ?? 6, this.enemyAttackScale, 2));
         this.dashTelegraphAlpha = Phaser.Math.Clamp(enemyConfig.dashTelegraphAlpha ?? 0.18, 0.05, 1);
         this.lastRangedAttackTime = -Infinity;
         this.lastAttackTime = -Infinity;
@@ -138,6 +171,14 @@ export default class Enemy extends BaseEntity {
         this.lastPosition = new Phaser.Math.Vector2(x, y);
         this.motionTrailEffect = null;
         this.scaleSize = enemyStats.scale ?? ENEMY_BASE_STATS.scale;
+        this.displaySize = {
+            width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize * this.mobileUnitScale)),
+            height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize * this.mobileUnitScale))
+        };
+        this.hitboxSize = {
+            width: Math.max(2, Math.round(this.baseHitboxSize.width * this.scaleSize * this.mobileUnitScale)),
+            height: Math.max(2, Math.round(this.baseHitboxSize.height * this.scaleSize * this.mobileUnitScale))
+        };
         this.baseStats = null;
         this.currentStats = null;
         this.pendingDeathSource = null;
@@ -146,12 +187,12 @@ export default class Enemy extends BaseEntity {
             moveSpeedMultiplier: Math.max(1, enemyConfig.explodeOnDead.moveSpeedMultiplier ?? 1.4),
             delayMs: Math.max(0, enemyConfig.explodeOnDead.delayMs ?? 500),
             damage: Math.max(0, enemyConfig.explodeOnDead.damage ?? 50),
-            radius: Math.max(12, enemyConfig.explodeOnDead.radius ?? 52),
+            radius: Math.max(12, scaleDimensionValue(enemyConfig.explodeOnDead.radius ?? 52, this.enemyAttackScale, 12)),
             triggerOnPlayerContact: enemyConfig.explodeOnDead.triggerOnPlayerContact !== false,
-            contactRadius: Math.max(8, enemyConfig.explodeOnDead.contactRadius ?? 18)
+            contactRadius: Math.max(8, scaleDimensionValue(enemyConfig.explodeOnDead.contactRadius ?? 18, this.enemyAttackScale, 8))
         } : null;
         if (this.explodeOnDead) {
-            this.speed = Math.round(this.speed * this.explodeOnDead.moveSpeedMultiplier);
+            this.speed = Math.max(1, Math.round(this.speed * this.explodeOnDead.moveSpeedMultiplier));
         }
         this.deathExplosionPrimed = false;
         this.deathExplosionResolved = false;
@@ -176,7 +217,6 @@ export default class Enemy extends BaseEntity {
         this.blockFreezeArmorBonus = 0;
 
         this.setVisible(false);
-        this.setScale(1);
         this.setDepth(20);
         this.applyVisualDisplaySize();
         this.baseWidth = this.displaySize.width;
@@ -314,6 +354,15 @@ export default class Enemy extends BaseEntity {
         const MIN_DAMAGE_TO_ENEMY = 2;
         const actualDamage = Math.min(Math.max(MIN_DAMAGE_TO_ENEMY, mitigatedAmount), this.health);
         this.health = Phaser.Math.Clamp(this.health - actualDamage, 0, this.maxHealth);
+        this.scene?.events?.emit?.('enemy-damaged', {
+            enemy: this,
+            source: source ?? null,
+            ownerPlayerId: source?.ownerPlayerId ?? source?.playerId ?? null,
+            isCritical: options?.isCritical === true,
+            damage: resolvedAmount,
+            damageTaken: actualDamage,
+            timeNow: this.scene?.time?.now ?? 0
+        });
         this.refreshHealthText();
         this.pendingDeathSource = null;
         if (!this.isStunned) {
@@ -401,9 +450,12 @@ export default class Enemy extends BaseEntity {
         this.meleeAttackConfig = {
             ...DEFAULT_MELEE_ATTACK_CONFIG,
             ...this.baseMeleeAttackConfig,
-            ...(roundConfig.meleeAttack ?? {})
+            ...scaleMeleeAttackConfig(roundConfig.meleeAttack ?? {}, this.enemyAttackScale)
         };
-        this.dashTelegraphWidth = Math.max(2, roundConfig.dashTelegraphWidth ?? this.enemyConfig?.dashTelegraphWidth ?? 6);
+        this.dashTelegraphWidth = Math.max(
+            2,
+            scaleDimensionValue(roundConfig.dashTelegraphWidth ?? this.enemyConfig?.dashTelegraphWidth ?? 6, this.enemyAttackScale, 2)
+        );
         this.dashTelegraphAlpha = Phaser.Math.Clamp(
             roundConfig.dashTelegraphAlpha ?? this.enemyConfig?.dashTelegraphAlpha ?? 0.18,
             0.05,
@@ -742,17 +794,31 @@ export default class Enemy extends BaseEntity {
             .setDepth((this.depth ?? 20) + 5);
 
         this.scene.tweens.add({
-            targets: [beam, core, burst],
+            targets: beam,
             alpha: 0,
-            scaleX: { from: 1, to: 1.35 },
-            scaleY: { from: 1, to: 0.7 },
+            width: 34 * 1.35,
+            height: 4 * 0.7,
             duration: 90,
             ease: 'Cubic.easeOut',
-            onComplete: () => {
-                beam.destroy();
-                core.destroy();
-                burst.destroy();
-            }
+            onComplete: () => beam.destroy()
+        });
+        this.scene.tweens.add({
+            targets: core,
+            alpha: 0,
+            width: 18 * 1.35,
+            height: 2 * 0.7,
+            duration: 90,
+            ease: 'Cubic.easeOut',
+            onComplete: () => core.destroy()
+        });
+        const burstBaseRadius = burst.radius;
+        this.scene.tweens.add({
+            targets: burst,
+            alpha: 0,
+            radius: burstBaseRadius * 1.35,
+            duration: 90,
+            ease: 'Cubic.easeOut',
+            onComplete: () => burst.destroy()
         });
     }
 
@@ -1188,12 +1254,12 @@ export default class Enemy extends BaseEntity {
         this.baseStats = {
             maxHealth: this.maxHealth,
             damage: this.damage,
-            speed: this.speed,
+            speed: unscaleDimensionValue(this.speed, this.enemyMoveSpeedScale, 1),
             scale: this.scaleSize ?? 1,
             armor: this.armor ?? 0,
             effectResist: this.effectResist ?? 0,
             attackCooldown: this.attackCooldown ?? ENEMY_BASE_STATS.attackCooldown,
-            attackRange: this.attackRange ?? ENEMY_BASE_STATS.attackRange,
+            attackRange: unscaleDimensionValue(this.attackRange ?? ENEMY_BASE_STATS.attackRange, this.enemyAttackScale, 0),
             knockbackResist: this.knockbackResist ?? 1,
             stunResist: this.stunResist ?? 1,
             ghostDuration: this.ghostDuration ?? ENEMY_BASE_STATS.ghostDuration
@@ -1215,7 +1281,11 @@ export default class Enemy extends BaseEntity {
             armor: nextStats.armor ?? this.armor ?? 0,
             effectResist: nextStats.effectResist ?? this.effectResist ?? 0,
             attackCooldown: nextStats.attackCooldown ?? this.attackCooldown ?? ENEMY_BASE_STATS.attackCooldown,
-            attackRange: nextStats.attackRange ?? this.attackRange ?? ENEMY_BASE_STATS.attackRange,
+            attackRange: scaleDimensionValue(
+                nextStats.attackRange ?? this.attackRange ?? ENEMY_BASE_STATS.attackRange,
+                this.enemyAttackScale,
+                0
+            ),
             knockbackResist: nextStats.knockbackResist ?? this.knockbackResist ?? 1,
             stunResist: nextStats.stunResist ?? this.stunResist ?? 1,
             ghostDuration: nextStats.ghostDuration ?? this.ghostDuration ?? ENEMY_BASE_STATS.ghostDuration
@@ -1227,7 +1297,7 @@ export default class Enemy extends BaseEntity {
             ? Math.round(this.maxHealth * healthRatio)
             : this.maxHealth;
         this.damage = resolvedStats.damage;
-        this.speed = resolvedStats.speed;
+        this.speed = Math.max(1, Math.round((resolvedStats.speed ?? 0) * this.enemyMoveSpeedScale));
         this.scaleSize = resolvedStats.scale;
         this.armor = resolvedStats.armor;
         this.effectResist = resolvedStats.effectResist;
@@ -1237,12 +1307,12 @@ export default class Enemy extends BaseEntity {
         this.stunResist = resolvedStats.stunResist;
         this.ghostDuration = resolvedStats.ghostDuration;
         this.displaySize = {
-            width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize)),
-            height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize))
+            width: Math.max(2, Math.round(this.baseDisplaySize.width * this.scaleSize * this.mobileUnitScale)),
+            height: Math.max(2, Math.round(this.baseDisplaySize.height * this.scaleSize * this.mobileUnitScale))
         };
         this.hitboxSize = {
-            width: Math.max(2, Math.round(this.baseHitboxSize.width * this.scaleSize)),
-            height: Math.max(2, Math.round(this.baseHitboxSize.height * this.scaleSize))
+            width: Math.max(2, Math.round(this.baseHitboxSize.width * this.scaleSize * this.mobileUnitScale)),
+            height: Math.max(2, Math.round(this.baseHitboxSize.height * this.scaleSize * this.mobileUnitScale))
         };
         this.baseWidth = this.displaySize.width;
         this.baseHeight = this.displaySize.height;
@@ -1443,24 +1513,24 @@ export default class Enemy extends BaseEntity {
             this.destroyBlockFreezeVisual();
             return;
         }
-        if (!this.blockFreezeVisual || !this.blockFreezeVisual.active) {
-            const radius = Math.max(18, Math.round(Math.max(
-                this.displaySize?.width ?? this.width ?? 0,
-                this.displaySize?.height ?? this.height ?? 0
-            ) * 0.4));
-            this.blockFreezeVisual = this.scene.add.circle(this.x, this.y, radius, 0xffffff, 0.08)
-                .setStrokeStyle(2, 0xffffff, 0.35)
-                .setDepth(Math.max(1, (this.depth ?? 20) - 1));
-            this.blockFreezeVisualTween = this.scene.tweens.add({
-                targets: this.blockFreezeVisual,
-                alpha: { from: 0.18, to: 0.34 },
-                scaleX: { from: 0.9, to: 1.08 },
-                scaleY: { from: 0.9, to: 1.08 },
-                duration: 480,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
+            if (!this.blockFreezeVisual || !this.blockFreezeVisual.active) {
+                const radius = Math.max(18, Math.round(Math.max(
+                    this.displaySize?.width ?? this.width ?? 0,
+                    this.displaySize?.height ?? this.height ?? 0
+                ) * 0.4));
+                this.blockFreezeVisual = this.scene.add.circle(this.x, this.y, radius * 0.9, 0xffffff, 0.08)
+                    .setStrokeStyle(2, 0xffffff, 0.35)
+                    .setDepth(Math.max(1, (this.depth ?? 20) - 1));
+                const baseRadius = radius;
+                this.blockFreezeVisualTween = this.scene.tweens.add({
+                    targets: this.blockFreezeVisual,
+                    alpha: { from: 0.18, to: 0.34 },
+                    radius: baseRadius * 1.08,
+                    duration: 480,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
         }
         this.updateBlockFreezeVisualPosition();
     }

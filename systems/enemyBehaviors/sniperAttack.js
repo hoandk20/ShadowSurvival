@@ -128,8 +128,6 @@ export function spawnSniperTelegraph(enemy, targetX, targetY) {
     enemy.sniperTelegraphTween = enemy.scene?.tweens?.add({
         targets: [container, dot],
         alpha: { from: style === 'gaze' ? 0.55 : 0.35, to: 1 },
-        scaleX: { from: 1, to: style === 'gaze' ? 1.04 : 1.02 },
-        scaleY: { from: 1, to: style === 'gaze' ? 1.06 : 1.02 },
         duration: windupMs,
         yoyo: true,
         repeat: -1
@@ -142,4 +140,3 @@ export function destroySniperTelegraph(enemy) {
     enemy.sniperTelegraph?.destroy?.();
     enemy.sniperTelegraph = null;
 }
-

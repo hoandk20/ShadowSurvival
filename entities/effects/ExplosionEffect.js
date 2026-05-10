@@ -55,8 +55,6 @@ export default class ExplosionEffect {
 
         this.scene.tweens.add({
             targets: flash,
-            scaleX: 1.4,
-            scaleY: 1.4,
             alpha: 0,
             duration: 220,
             ease: 'Cubic.easeOut',
@@ -67,11 +65,11 @@ export default class ExplosionEffect {
         ring.setStrokeStyle(2, config.ringColor, 0.9 * alphaMul);
         ring.setDepth(depth - 1);
         ring.setAlpha(alphaMul);
+        const ringBaseRadius = ring.radius;
 
         this.scene.tweens.add({
             targets: ring,
-            scaleX: 1.35,
-            scaleY: 1.35,
+            radius: ringBaseRadius * 1.35,
             alpha: 0,
             duration: 240,
             ease: 'Quad.easeOut',
@@ -93,8 +91,8 @@ export default class ExplosionEffect {
                 x: x + Math.cos(angle) * distance,
                 y: y + Math.sin(angle) * distance,
                 alpha: 0,
-                scaleX: 0.2,
-                scaleY: 0.2,
+                width: 0.6,
+                height: 0.6,
                 duration: Phaser.Math.Between(
                     config.emberDuration.min,
                     config.emberDuration.max
@@ -117,11 +115,11 @@ export default class ExplosionEffect {
             shockwave.setStrokeStyle(Math.max(2, Math.round(pixelSize * 0.75)), config.ringColor ?? 0xff5a36, 0.95 * alphaMul);
             shockwave.setDepth(depth - 1);
             shockwave.setAlpha(alphaMul);
+            const shockwaveBaseRadius = shockwave.radius;
 
             this.scene.tweens.add({
                 targets: shockwave,
-                scaleX: 1.08,
-                scaleY: 1.08,
+                radius: shockwaveBaseRadius * 1.08,
                 alpha: 0,
                 duration: Math.max(180, config.duration ?? 190),
                 ease: 'Quad.easeOut',
@@ -150,6 +148,8 @@ export default class ExplosionEffect {
                 const block = this.scene.add.rectangle(offsetX, offsetY, size, size, layer.color, 1)
                     .setOrigin(0.5);
                 block.setAlpha(alphaMul);
+                block.setData('baseWidth', size);
+                block.setData('baseHeight', size);
                 burst.add(block);
                 blocks.push(block);
             }
@@ -158,14 +158,14 @@ export default class ExplosionEffect {
         const core = this.scene.add.rectangle(0, 0, pixelSize * 4, pixelSize * 4, config.coreColor, 1)
             .setOrigin(0.5);
         core.setAlpha(alphaMul);
+        core.setData('baseWidth', pixelSize * 4);
+        core.setData('baseHeight', pixelSize * 4);
         burst.add(core);
         blocks.push(core);
 
         this.scene.tweens.add({
             targets: burst,
             alpha: 0,
-            scaleX: 1.18,
-            scaleY: 1.18,
             duration: config.duration ?? 190,
             ease: 'Stepped(5)',
             onComplete: () => burst.destroy()
@@ -180,13 +180,15 @@ export default class ExplosionEffect {
             const targetX = Math.round((Math.cos(angle) * distance) / pixelSize) * pixelSize;
             const targetY = Math.round((Math.sin(angle) * distance) / pixelSize) * pixelSize;
             const targetScale = index < 6 ? 1.15 : 0.55;
+            const baseWidth = block.getData('baseWidth') ?? block.width ?? pixelSize;
+            const baseHeight = block.getData('baseHeight') ?? block.height ?? pixelSize;
 
             this.scene.tweens.add({
                 targets: block,
                 x: block.x + targetX,
                 y: block.y + targetY,
-                scaleX: targetScale,
-                scaleY: targetScale,
+                width: baseWidth * targetScale,
+                height: baseHeight * targetScale,
                 alpha: 0,
                 duration: Phaser.Math.Between(
                     config.emberDuration.min,

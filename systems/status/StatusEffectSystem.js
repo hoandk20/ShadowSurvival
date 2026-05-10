@@ -833,6 +833,12 @@ class StatusEffectComponent {
         this.lastEffectApplyTimes.set(stackingKey, timeNow);
         effect.onApply({ entity: this.entity, options });
         this.applyStateContributions();
+        this.scene?.events?.emit?.('status-effect-applied', {
+            effectKey: effect.key,
+            target: this.entity ?? null,
+            targetType: this.entity?.constructor?.name === 'Enemy' || this.entity?.type ? 'enemy' : 'other',
+            timeNow
+        });
         return effect;
     }
 
@@ -1104,13 +1110,9 @@ export default class StatusEffectSystem {
             const pulseAlpha = cloud.pulseAlphas[index] ?? 0.05;
             const driftX = cloud.driftX[index] ?? 0;
             const driftY = cloud.driftY[index] ?? 0;
-            const scaleX = 1 + ((cloud.scaleXAmplitude[index] ?? 0.04) * pulse);
-            const scaleY = 1 + ((cloud.scaleYAmplitude[index] ?? 0.02) * pulse);
             layer.x = cloud.centerX + (driftX * elapsedRatio);
             layer.y = cloud.centerY + (driftY * elapsedRatio);
             layer.alpha = Math.max(0, (baseAlpha + (pulseAlpha * pulse)) * fadeMultiplier);
-            layer.scaleX = scaleX;
-            layer.scaleY = scaleY;
         });
     }
 
@@ -1529,14 +1531,38 @@ export default class StatusEffectSystem {
             ?? null;
     }
 
+    canApplyLifesteal(options = {}) {
+        if (options.fromStatusEffect === true) return false;
+        if (options.source?.supporter) return false;
+        const tagSet = new Set(Array.isArray(options.attackTags) ? options.attackTags : []);
+        if (tagSet.has('dot') || tagSet.has('burn') || tagSet.has('poison') || tagSet.has('bleed')) {
+            return false;
+        }
+        if (tagSet.has('cloud') || tagSet.has('trail') || tagSet.has('explosion') || tagSet.has('supporter')) {
+            return false;
+        }
+        return true;
+    }
+
     applyLifestealFromDamageResult(damageResult = {}, options = {}) {
         const sourceOwner = options.sourceOwner ?? null;
         if (!sourceOwner?.heal) return;
-        const lifestealRatio = Math.max(0, Number(sourceOwner.lifesteal ?? 0) || 0);
+        if (!this.canApplyLifesteal(options)) return;
+        const MAX_LIFESTEAL_RATIO = 0.2;
+        const MAX_LIFESTEAL_HEAL_PER_HIT_RATIO = 0.04;
+        const lifestealRatio = Math.min(
+            MAX_LIFESTEAL_RATIO,
+            Math.max(0, Number(sourceOwner.lifesteal ?? 0) || 0)
+        );
         if (lifestealRatio <= 0) return;
         const damageTaken = Math.max(0, Math.floor(Number(damageResult?.healthDamage ?? 0) || 0));
         if (damageTaken <= 0) return;
-        const healAmount = Math.floor(damageTaken * lifestealRatio);
+        const uncappedHealAmount = Math.floor(damageTaken * lifestealRatio);
+        const maxHealPerHit = Math.max(
+            1,
+            Math.floor((Math.max(1, Number(sourceOwner.maxHealth ?? 1) || 1)) * MAX_LIFESTEAL_HEAL_PER_HIT_RATIO)
+        );
+        const healAmount = Math.min(uncappedHealAmount, maxHealPerHit);
         if (healAmount <= 0) return;
         sourceOwner.heal(healAmount);
     }
@@ -1544,7 +1570,12 @@ export default class StatusEffectSystem {
     applyLifestealFromEvent(event = {}) {
         this.applyLifestealFromDamageResult(
             { healthDamage: event.damageTaken ?? event.damage ?? 0 },
-            { sourceOwner: this.resolveEventSourceOwner(event) }
+            {
+                sourceOwner: this.resolveEventSourceOwner(event),
+                attackTags: event.attackTags ?? [],
+                source: event.source ?? null,
+                fromStatusEffect: event.fromStatusEffect === true
+            }
         );
     }
 
@@ -1834,9 +1865,7 @@ export default class StatusEffectSystem {
                 baseAlphas: [0.18, 0.24],
                 pulseAlphas: [0.05, 0.06],
                 driftX: [0, radius * 0.05],
-                driftY: [0.75, -0.25],
-                scaleXAmplitude: [0.06, 0.08],
-                scaleYAmplitude: [0.02, 0.03]
+                driftY: [0.75, -0.25]
             };
             this.updateTrailCloudVisual(trailCloud);
             this.activeTrailClouds.push(trailCloud);
@@ -1846,8 +1875,6 @@ export default class StatusEffectSystem {
         const pulseTween = this.scene.tweens.add({
             targets: mistLayers,
             alpha: { from: 0.16, to: 0.34 },
-            scaleX: { from: 0.97, to: 1.12 },
-            scaleY: { from: 0.97, to: 1.14 },
             y: `-=${Math.max(1, Math.round(radius * 0.08))}`,
             duration: 960,
             yoyo: true,
@@ -1877,8 +1904,6 @@ export default class StatusEffectSystem {
                     x: puffX + Phaser.Math.Between(-5, 5),
                     y: puffY - Phaser.Math.Between(8, 14),
                     alpha: 0,
-                    scaleX: Phaser.Math.FloatBetween(1.2, 1.45),
-                    scaleY: Phaser.Math.FloatBetween(1.2, 1.45),
                     duration: Phaser.Math.Between(700, 900),
                     onComplete: () => puff.destroy()
                 });
@@ -1935,8 +1960,6 @@ export default class StatusEffectSystem {
                 this.scene.tweens.add({
                     targets: shape,
                     alpha: 0,
-                    scaleX: 0.72,
-                    scaleY: 0.72,
                     y: '-=8',
                     duration: 220,
                     onComplete: () => shape.destroy()
@@ -1971,8 +1994,6 @@ export default class StatusEffectSystem {
         const pulseTween = this.scene.tweens.add({
             targets: flameLayers,
             alpha: { from: 0.16, to: 0.38 },
-            scaleX: { from: 0.94, to: 1.14 },
-            scaleY: { from: 0.94, to: 1.18 },
             y: `-=${Math.max(1, Math.round(radius * 0.06))}`,
             duration: 320,
             yoyo: true,
@@ -2028,8 +2049,6 @@ export default class StatusEffectSystem {
                 this.scene.tweens.add({
                     targets: shape,
                     alpha: 0,
-                    scaleX: 0.72,
-                    scaleY: 0.72,
                     duration: 180,
                     onComplete: () => shape.destroy()
                 });
@@ -2112,8 +2131,6 @@ export default class StatusEffectSystem {
         const pulseTween = this.scene.tweens.add({
             targets: [base, haze, outerVeil, innerGlow, core],
             alpha: { from: 0.08, to: 0.24 },
-            scaleX: { from: 0.975, to: 1.055 },
-            scaleY: { from: 0.97, to: 1.08 },
             duration: 560,
             yoyo: true,
             repeat: -1
@@ -2140,13 +2157,13 @@ export default class StatusEffectSystem {
                 const dot = this.scene.add.circle(px, py, Phaser.Math.Between(1, 2), Phaser.Utils.Array.GetRandom(runeColors), 0.26);
                 dot.setDepth(depth + 6);
                 dot.setBlendMode(Phaser.BlendModes.ADD);
+                const dotBaseRadius = dot.radius;
                 this.scene.tweens.add({
                     targets: dot,
                     y: py - Phaser.Math.Between(12, 20),
                     x: px + Phaser.Math.Between(-6, 6),
                     alpha: 0,
-                    scaleX: 1.8,
-                    scaleY: 1.8,
+                    radius: dotBaseRadius * 1.8,
                     duration: Phaser.Math.Between(260, 420),
                     ease: 'Cubic.easeOut',
                     onComplete: () => dot.destroy()
@@ -2224,8 +2241,6 @@ export default class StatusEffectSystem {
                 this.scene.tweens.add({
                     targets: shape,
                     alpha: 0,
-                    scaleX: 0.82,
-                    scaleY: 0.82,
                     duration: 200,
                     onComplete: () => shape.destroy()
                 });

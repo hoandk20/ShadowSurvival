@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const DEFAULT_CONFIG = {
     glyphs: ['0', '1', '{', '}', '<', '>', '/', '\\', '_', '=', 'if', '=>', '&&', '||'],
     headText: '</>',
@@ -7,6 +9,7 @@ const DEFAULT_CONFIG = {
     trailColor: '#7dff9c',
     glowColor: 0x39ff6f,
     coreColor: 0x16351b,
+    alphaMultiplier: 0.75,
     spawnInterval: 35,
     trailLifetime: 420,
     trailDistance: 12
@@ -20,19 +23,24 @@ export default class CodeProjectileEffect {
             ...DEFAULT_CONFIG,
             ...config
         };
+        const alphaMul = Phaser.Math.Clamp(this.config.alphaMultiplier ?? 1, 0, 1);
         this.lastSpawnTime = 0;
         this.lastGlyphSwapTime = 0;
         this.glyphIndex = 0;
-        this.container = scene.add.container(skill.x, skill.y).setDepth((skill.depth ?? 30) + 8);
+        this.container = scene.add.container(skill.x, skill.y)
+            .setDepth(resolveEffectDepth(skill.depth, 8, { maxDepth: 55, fallbackDepth: 30 }));
+        this.container.setAlpha(alphaMul);
 
-        this.shadow = scene.add.rectangle(0, 0, 20, 12, this.config.coreColor, 0.4);
+        this.shadow = scene.add.rectangle(0, 0, 20, 12, this.config.coreColor, 0.33);
         this.shadow.setStrokeStyle(1, 0x0d190f, 0.9);
 
-        this.glow = scene.add.circle(0, 0, 10, this.config.glowColor, 0.28);
+        this.glow = scene.add.circle(0, 0, 10, this.config.glowColor, 0.22);
         this.glow.setBlendMode(Phaser.BlendModes.ADD);
+        this.glowBaseRadius = this.glow.radius;
 
-        this.core = scene.add.circle(0, 0, 4, 0xd6ff9c, 0.95);
+        this.core = scene.add.circle(0, 0, 4, 0xd6ff9c, 0.85);
         this.core.setBlendMode(Phaser.BlendModes.ADD);
+        this.coreBaseRadius = this.core.radius;
 
         this.head = scene.add.text(0, 0, this.config.headText, {
             fontFamily: 'monospace',
@@ -50,19 +58,35 @@ export default class CodeProjectileEffect {
             }
         }).setOrigin(0.5);
         this.head.setBlendMode(Phaser.BlendModes.ADD);
+        this.head.setAlpha(0.95);
 
         this.container.add([this.shadow, this.glow, this.core, this.head]);
 
-        this.pulseTween = scene.tweens.add({
+        const alphaPulse = scene.tweens.add({
             targets: [this.glow, this.core],
-            scaleX: 1.18,
-            scaleY: 1.18,
-            alpha: { from: 0.75, to: 1 },
+            alpha: { from: 0.7, to: 0.95 },
             duration: 180,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
+        const glowPulse = scene.tweens.add({
+            targets: this.glow,
+            radius: this.glowBaseRadius * 1.18,
+            duration: 180,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+        const corePulse = scene.tweens.add({
+            targets: this.core,
+            radius: this.coreBaseRadius * 1.18,
+            duration: 180,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+        this.pulseTween = { stop: () => { alphaPulse.stop(); glowPulse.stop(); corePulse.stop(); } };
     }
 
     update(time) {
@@ -117,8 +141,6 @@ export default class CodeProjectileEffect {
         this.scene.tweens.add({
             targets: trail,
             alpha: 0,
-            scaleX: 0.6,
-            scaleY: 0.6,
             y: trail.y + Phaser.Math.Between(3, 7),
             duration: this.config.trailLifetime,
             ease: 'Quad.easeOut',

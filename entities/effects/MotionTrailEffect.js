@@ -1,4 +1,6 @@
 // entities/effects/MotionTrailEffect.js
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const DEFAULT_CONFIG = {
     tint: 0x6ea2ff,
     spawnInterval: 10,
@@ -7,7 +9,7 @@ const DEFAULT_CONFIG = {
     blendMode: 'ADD',
     scale: 0.5,
     attachOffsetY: 0,
-    minAlpha: 0.4,
+    minAlpha: 0.25,
     offsetDistance: 1,
     sizeFactor: 0.9
 };
@@ -56,14 +58,14 @@ export default class MotionTrailEffect {
         const sprite = this.scene.add.sprite(spawnX, spawnY, textureKey, frameName);
         sprite.setTint(this.config.tint);
         sprite.setBlendMode(this.config.blendMode);
-        sprite.setDepth((this.owner.depth ?? 0) + (this.config.depthOffset ?? 0));
+        sprite.setDepth(resolveEffectDepth(this.owner.depth, this.config.depthOffset ?? 0, { maxDepth: 55, fallbackDepth: 20 }));
         sprite.setOrigin(this.owner.originX, this.owner.originY);
         sprite.setFlipX(this.owner.flipX);
         const baseWidth = this.owner.displayWidth || this.owner.width || (this.owner.body?.width ?? 32);
         const baseHeight = this.owner.displayHeight || this.owner.height || (this.owner.body?.height ?? 32);
         const sizeFactor = this.config.sizeFactor ?? 1;
         sprite.setDisplaySize(baseWidth * sizeFactor, baseHeight * sizeFactor);
-        sprite.setAlpha(0.8);
+        sprite.setAlpha(0.55);
         this.trails.push({ sprite, life: this.config.lifetime });
     }
 

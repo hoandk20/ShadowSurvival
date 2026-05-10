@@ -35,8 +35,18 @@ const POISON_TRAIL_MOVEMENT_START_DELAY_MS = 180;
 const POISON_TRAIL_CLOUD_RADIUS = 44;
 const POISON_TRAIL_CLOUD_DURATION_MS = 1085;
 const POISON_TRAIL_POISON_DURATION_MS = 2200;
+const GLOBAL_UNIT_SCALE = 1;
+const GLOBAL_SKILL_VISUAL_SCALE = 1;
+const GLOBAL_SKILL_RANGE_SCALE = 1;
+const GLOBAL_PLAYER_MOVE_SPEED_SCALE = 1;
 
 const getRunState = (scene, player) => scene?.getRunStateForPlayer?.(player) ?? null;
+const getGlobalUnitScale = () => GLOBAL_UNIT_SCALE;
+const scaleSkillConfigValue = (config, key, scale, { round = true } = {}) => {
+    if (typeof config[key] !== 'number' || !Number.isFinite(config[key])) return;
+    const scaled = config[key] * scale;
+    config[key] = round ? Math.max(0, Math.round(scaled)) : Math.max(0, scaled);
+};
 
 export default class Player extends BaseEntity {
     constructor(scene, x, y, characterKey = DEFAULT_CHARACTER_KEY) {
@@ -52,7 +62,7 @@ export default class Player extends BaseEntity {
             ? (characterAssetConfig.animations?.move?.frames?.[0] ?? characterAssetConfig.animations?.idle?.frames?.[0])
             : undefined;
         super(scene, x, y, initialTexture, initialFrame);
-        this.speed = characterStats.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed;
+        this.speed = Math.max(1, Math.round((characterStats.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed) * GLOBAL_PLAYER_MOVE_SPEED_SCALE));
         this.maxHealth = characterStats.hp ?? DEFAULT_CHARACTER_HP;
         this.health = this.maxHealth;
         this.armor = characterStats.armor ?? DEFAULT_CHARACTER_ARMOR;
@@ -157,6 +167,7 @@ export default class Player extends BaseEntity {
         this.lastTrackedPosition = new Phaser.Math.Vector2(x, y);
         this.playerId = scene.playerPartySystem?.createPlayerId?.(resolvedKey) ?? `${resolvedKey}_1`;
         this.scene?.statusEffectSystem?.attach?.(this, { entityType: 'player' });
+        this.mobileUnitScale = getGlobalUnitScale();
 
         this.setCharacter(resolvedKey);
         this.motionTrailEffect = new MotionTrailEffect(scene, this);
@@ -966,6 +977,14 @@ export default class Player extends BaseEntity {
         if (remainingDamage > 0) {
             this.health = Phaser.Math.Clamp(this.health - remainingDamage, 0, this.maxHealth);
         }
+        if (remainingDamage > 0) {
+            this.scene?.events?.emit?.('player-damaged', {
+                player: this,
+                amount: remainingDamage,
+                source: source ?? null,
+                options: options ?? {}
+            });
+        }
         this.characterPassive?.onTakeDamage?.(this, { amount, source, options, remainingDamage });
         if (remainingDamage > 0 && options?.fromStatusEffect) {
             const statusKey = options?.statusKey ?? options?.statusEffect?.key ?? null;
@@ -1053,6 +1072,11 @@ export default class Player extends BaseEntity {
         const effectiveAmount = Math.max(0, Math.round(amount * (this.goldGainMultiplier ?? 1)));
         this.gold += effectiveAmount;
         this.updateGoldText();
+        this.scene?.events?.emit?.('gold-gained', {
+            player: this,
+            amount: effectiveAmount,
+            baseAmount: amount
+        });
     }
 
     spendGold(amount) {
@@ -1079,7 +1103,7 @@ export default class Player extends BaseEntity {
         const time = scene.time;
         if (time) {
             const originalScale = time.timeScale || 1;
-            time.timeScale = 0.5;
+            time.timeScale = Math.max(0.01, originalScale * 0.5);
             time.delayedCall(300, () => {
                 if (time && time.timeScale !== originalScale) {
                     time.timeScale = originalScale;
@@ -1101,10 +1125,10 @@ export default class Player extends BaseEntity {
         const heightOffset = this.baseHeight ? this.baseHeight * 0.6 : 30;
         const glow = scene.add.circle(x, y - heightOffset, 10, glowColor, 0.6);
         glow.setBlendMode(Phaser.BlendModes.ADD);
+        const glowBaseRadius = glow.radius;
         scene.tweens.add({
             targets: glow,
-            scaleX: 3,
-            scaleY: 3,
+            radius: glowBaseRadius * 3,
             alpha: 0,
             duration: 420,
             ease: 'Cubic.easeOut',
@@ -1124,7 +1148,6 @@ export default class Player extends BaseEntity {
             targets: announcementText,
             y: announcementText.y - 30,
             alpha: 0,
-            scale: 1.1,
             duration: 700,
             ease: 'Cubic.easeOut',
             onComplete: () => {
@@ -1474,6 +1497,15 @@ export default class Player extends BaseEntity {
             ...baseConfig,
             ...runtimeOverride
         };
+        if (this.mobileUnitScale < 1) {
+            scaleSkillConfigValue(mergedConfig, 'hitboxWidth', GLOBAL_SKILL_VISUAL_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'hitboxHeight', GLOBAL_SKILL_VISUAL_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'zoneRadius', GLOBAL_SKILL_VISUAL_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'explosionRadius', GLOBAL_SKILL_VISUAL_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'chainRadius', GLOBAL_SKILL_RANGE_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'travelRange', GLOBAL_SKILL_RANGE_SCALE);
+            scaleSkillConfigValue(mergedConfig, 'meleeRange', GLOBAL_SKILL_RANGE_SCALE);
+        }
         const rangeBonus = Number(this.skillRange ?? 0) || 0;
         if (Number.isFinite(rangeBonus) && rangeBonus !== 0) {
             if (typeof mergedConfig.travelRange === 'number') {
@@ -1835,10 +1867,16 @@ export default class Player extends BaseEntity {
         this.assetKey = assetKey;
         this.type = assetKey;
         const charSize = config.size ?? ENTITY_SIZE_CONFIG[assetKey] ?? { width: 42, height: 48 };
-        this.targetWidth = charSize.width;
-        this.targetHeight = charSize.height;
-        this.baseWidth = charSize.width;
-        this.baseHeight = charSize.height;
+        const charHitboxSize = config.hitboxSize ?? charSize;
+        const resolvedWidth = Math.max(2, Math.round(charSize.width * this.mobileUnitScale));
+        const resolvedHeight = Math.max(2, Math.round(charSize.height * this.mobileUnitScale));
+        const resolvedHitboxWidth = Math.max(2, Math.round(charHitboxSize.width * this.mobileUnitScale));
+        const resolvedHitboxHeight = Math.max(2, Math.round(charHitboxSize.height * this.mobileUnitScale));
+        this.targetWidth = resolvedHitboxWidth;
+        this.targetHeight = resolvedHitboxHeight;
+        this.hitboxSize = { width: resolvedHitboxWidth, height: resolvedHitboxHeight };
+        this.baseWidth = resolvedWidth;
+        this.baseHeight = resolvedHeight;
         const characterAssetConfig = CHARACTER_ASSET_CONFIG[assetKey] ?? CHARACTER_ASSET_CONFIG[resolvedKey] ?? {};
         if (characterAssetConfig.atlas) {
             const frameName = characterAssetConfig.animations?.move?.frames?.[0] ?? characterAssetConfig.animations?.idle?.frames?.[0];
@@ -2011,7 +2049,7 @@ export default class Player extends BaseEntity {
         const baseSpeed = this.resolveCharacterStats()?.moveSpeed ?? PLAYER_BASE_STATS.moveSpeed;
         const percentMultiplier = Math.max(0.1, 1 + (Number(this.bonusSpeedPercent ?? 0) || 0));
         const flatBonus = Number(this.bonusSpeedFlat ?? 0) || 0;
-        this.speed = Math.max(1, Math.round((Number(baseSpeed) || 0) * percentMultiplier + flatBonus));
+        this.speed = Math.max(1, Math.round((((Number(baseSpeed) || 0) * percentMultiplier) + flatBonus) * GLOBAL_PLAYER_MOVE_SPEED_SCALE));
     }
 
     handleHitDealt(event = {}) {

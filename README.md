@@ -4,6 +4,118 @@
 
 This README is intentionally config-first: the numbers below match the current game configuration in the repo.
 
+## Build & Run
+
+Install dependencies:
+
+- `npm install`
+
+Build the static bundle used by the mobile wrapper:
+
+- `npm run build:mobile-web` (outputs `dist/mobile-web`)
+
+Run in a browser (ES modules require a local server; opening `index.html` via `file://` may fail):
+
+- serve the repo root with any static server (e.g. VS Code Live Server) and open `/index.html`
+
+Capacitor (Android):
+
+- `npm run cap:sync:android`
+- `npm run cap:open:android` (opens Android Studio)
+- `npm run apk:debug` (builds a debug APK via Gradle)
+  - output: `android/app/build/outputs/apk/debug/app-debug.apk`
+- `cd android && ./gradlew bundleRelease` (builds a release AAB via Gradle)
+  - output: `android/app/build/outputs/bundle/release/app-release.aab`
+
+## Debug Menu (Non-Release Builds)
+
+In non-release builds, the main menu can show a **START DEBUG MODE** button.
+
+- unlock via console: `rpsUnlockDebugMenu('RPS_DEBUG_2026')` (see `main.js`)
+- lock again: `rpsLockDebugMenu()`
+
+Release builds intentionally remove these console hooks.
+
+## Mobile Fullscreen (Android)
+
+On Android, hiding the bottom navigation buttons / gesture bar reliably requires native immersive mode (web fullscreen alone is not enough).
+
+- immersive mode is applied in `android/app/src/main/java/com/runepixelsurvivors/game/MainActivity.java`
+- system bars may still appear transiently after an edge swipe (expected Android behavior) and will be hidden again on focus/resume
+
+## Pixel-Perfect Rendering Notes
+
+If you see “screen tearing / stripes / seams” while moving (especially on tilemaps), it is usually sub-pixel camera movement.
+
+- global pixel rounding is enabled via `roundPixels: true` in `main.js`
+- camera follow uses pixel rounding (see `scenes/MainScene.js` calls to `startFollow(..., true, ...)`)
+
+Shop UI note:
+
+- shop item cards are kept at `scale = 1` (no downscaling) because fractional scaling makes pixel-style text look broken; the layout should achieve multi-column grids by adjusting card sizing / columns instead of scaling.
+- current baseline (mobile portrait) shop card size is `124x160` (see `scenes/HudScene.js`); adjust these explicit dimensions/gaps instead of scaling.
+
+Scaling rule:
+
+- do not use `setScale(...)` / tween `scale` for UI/text because it breaks pixel-perfect readability (especially text). Prefer changing explicit sizes via `setDisplaySize(...)`, layout dimensions, sprite frame assets, or camera/renderer resolution instead.
+
+Badges UI note:
+
+- badge icons are intentionally resized with `setDisplaySize(...)` (not `scale`) so they remain crisp; tune badge grid padding/icon sizing in `scenes/MainMenuScene.js`.
+
+Shop layout note:
+
+- the last row is centered even when item count is odd (e.g. 5 items in a 2-column grid), and the purchased strip is hidden when empty (see `scenes/HudScene.js`).
+
+## Hit Feedback & Damage Readability
+
+Tiered hit feedback (runtime juice):
+
+- crit hit -> stronger camera shake + short timeScale pulse (see `scenes/MainScene.js`)
+- boss hit -> timeScale pulse + screen flash (throttled to avoid spam)
+- multi kill streak -> small combo `xN` feedback
+
+Damage readability (VFX overlap control):
+
+- keep most gameplay VFX at `depth <= 55` so they don't sit on top of `DamageText` (which uses `depth 60`)
+- prefer reducing effect `alpha` and/or particle `quantity` instead of increasing sprite scale
+- helper: `entities/effects/effectRenderUtils.js` (`resolveEffectDepth`)
+
+## Rock Map Teaser: Black Widow Cameo
+
+`maprock_field` can trigger a short “cameo” teaser where **Black Widow** appears, idles briefly, dashes across the screen multiple times, deals **no damage**, then disappears.
+
+- scenario hook: `config/map/maprockFieldScenario.js` (`onWaveStart`)
+- cameo implementation: `scenes/MainScene.js` (`playBlackWidowCameo`)
+- cameo safety: `entities/boss/BlackWidowBoss.js` (`isTeaserCameo` disables damage/AI)
+
+## Phaser Text Config
+
+UI text now uses a shared Phaser text config defined in `scenes/ui/PixelSceneHelpers.js`.
+
+- shared config object: `PHASER_TEXT_CONFIG`
+- shared font alias: `UI_TEXT_FONT_FAMILY`
+- shared style builder: `getPhaserTextStyle()`
+- shared text factory: `createPixelText()`
+
+Most menu / HUD text paths should be adjusted from that file first instead of changing each scene manually.
+
+Main values to tune:
+
+- `fontFamily`: base font used by Phaser canvas text
+- `fontSize`: default UI font size fallback
+- `stroke`: text outline color
+- `strokeThickness`: default outline thickness
+- `mobileResolution`: default text resolution on compact/mobile layouts
+- `desktopResolution`: default text resolution on larger layouts
+- `compactMobileMaxWidth`: breakpoint used to decide mobile-style text resolution
+
+Scene usage:
+
+- `scenes/MainMenuScene.js` uses `UI_TEXT_FONT_FAMILY` for menu text
+- `scenes/HudScene.js` uses `UI_TEXT_FONT_FAMILY` for HUD / shop text
+- `entities/DamageText.js`, `entities/Player.js`, `entities/Enemy.js`, and `config/characterPassives.js` still have their own runtime/combat text settings and are not driven by the shared UI helper
+
 ## Current Status
 
 Implemented now:
@@ -30,7 +142,7 @@ Not implemented as a shipped feature:
 - active in-run level-up card roll flow on level-up in the current build
 - deeper UI polish pass (transitions, more juice, consistency across overlays)
 - late-game visual clarity pass (stacked VFX readability, telegraph contrast, effect density controls)
-- richer audio layering/mix pass (currently music defaults to OFF; SFX is ON)
+- richer audio layering/mix pass (currently music defaults to ON; SFX is ON)
 
 See [COOP_DECISION.md](./COOP_DECISION.md) for co-op planning notes.
 
@@ -427,6 +539,39 @@ Current framework notes:
 - explosion is now a status effect, not a legacy skill behavior
 - skills currently have no default explosion attached
 
+## Status Synergies
+
+Source: [config/statusSynergies.js](./config/statusSynergies.js)
+
+Synergy rules are evaluated on `hit` and can require both:
+
+- specific `attackTags` on the hit (e.g. `fire`, `ice`, `lightning`, `explosion`, `poison`, `physical`)
+- specific target statuses already applied (e.g. `burn`, `freeze`, `mark`, `bleed`, `poison`)
+
+Current notable synergies:
+
+- `burn` + `freeze` -> `frostfireBurst` (consumes both `burn` + `freeze`)
+- `lightning` hit + target `freeze` -> `shatterChain` (consumes `freeze`)
+- `ice` hit + target `freeze` + `mark` -> `sniperWindow`
+- `explosion` hit + target `mark` -> `targetedBlast`
+- `lightning` hit + target `burn` -> `overloadExplosion`
+- `explosion` hit + target `burn` -> `fireBlast`
+- `lightning` hit + target `mark` -> `executionChain`
+- `lightning` hit + target `bleed` -> `bloodShock`
+- `fire` hit + target `burn` + `mark` -> `huntersFlame`
+- `fire` hit + target `poison` -> `corrosionFlame`
+- `ice` hit + target `poison` -> `frozenToxin`
+- `poison` hit + target `poison` + `mark` -> `lethalDose`
+- `poison` hit + target `poison` + `bleed` -> `hemotoxin`
+- `physical` hit + target `bleed` + `mark` -> `exposeWeakness`
+- `crit` hit + target `bleed` -> `bleedBurst`
+- `explosion` hit + target `bleed` -> `bloodNova`
+
+Related combat notes:
+
+- `lifesteal` does not apply to damage tagged as `dot`/`burn`/`poison`/`bleed` (so bleed ticks do not grant lifesteal).
+- Werewolf passive: hitting a target with `bleed` heals `1.5%` max HP (separate from lifesteal).
+
 ## Supporters
 
 Main files:
@@ -604,7 +749,7 @@ Current debug defaults:
 - clearing a wave grants `+7..10 dynamon`
 - the main menu now includes an `UPGRADE` screen for permanent stat upgrades
 - permanent upgrade definitions live in [config/metaUpgrades.js](./config/metaUpgrades.js)
-- current local default meta save starts at `10000 dynamon`
+- current local default meta save starts at `0 dynamon`
 - challenge-based character unlocks currently include:
   - `Witch`: clear `maprock_field`
   - `Radian`: clear `church_sanctuary`
@@ -657,7 +802,7 @@ Current permanent upgrade groups:
 
 Default audio config:
 
-- music: `off`
+- music: `on`
 - SFX: `on`
 
 Source: [utils/audioSettings.js](./utils/audioSettings.js)

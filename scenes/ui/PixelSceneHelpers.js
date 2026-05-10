@@ -18,6 +18,54 @@ export const UI_COLORS = {
     dimText: '#b7d0db'
 };
 
+export const PHASER_TEXT_CONFIG = Object.freeze({
+    fontFamily: 'monospace',
+    fontSize: '16px',
+    color: UI_COLORS.text,
+    stroke: '#000000',
+    strokeThickness: 4,
+    align: 'center',
+    mobileResolution: 3,
+    desktopResolution: 2,
+    compactMobileMaxWidth: 900
+});
+
+export const UI_TEXT_FONT_FAMILY = PHASER_TEXT_CONFIG.fontFamily;
+
+function resolveTextResolution(scene, options = {}) {
+    if (typeof options.resolution === 'number' && Number.isFinite(options.resolution)) {
+        return Math.max(1, options.resolution);
+    }
+    const scaleManager = scene?.scale ?? null;
+    const gameWidth = Number(scaleManager?.gameSize?.width ?? scaleManager?.width ?? scene?.game?.config?.width ?? window?.innerWidth ?? 0);
+    const isCompactMobile = gameWidth > 0 && gameWidth <= PHASER_TEXT_CONFIG.compactMobileMaxWidth;
+    return isCompactMobile ? PHASER_TEXT_CONFIG.mobileResolution : PHASER_TEXT_CONFIG.desktopResolution;
+}
+
+export function getPhaserTextStyle(options = {}) {
+    return {
+        fontFamily: options.fontFamily ?? UI_TEXT_FONT_FAMILY,
+        fontSize: options.fontSize ?? PHASER_TEXT_CONFIG.fontSize,
+        color: options.color ?? PHASER_TEXT_CONFIG.color,
+        stroke: options.stroke ?? PHASER_TEXT_CONFIG.stroke,
+        strokeThickness: options.strokeThickness ?? PHASER_TEXT_CONFIG.strokeThickness,
+        align: options.align ?? PHASER_TEXT_CONFIG.align
+    };
+}
+
+export function finalizeUiText(textObject, options = {}) {
+    if (!textObject) return textObject;
+    const scene = textObject.scene ?? null;
+    const resolution = resolveTextResolution(scene, options);
+    if (typeof textObject.setResolution === 'function') {
+        textObject.setResolution(resolution);
+    }
+    const snappedX = Math.round(Number(textObject.x ?? 0));
+    const snappedY = Math.round(Number(textObject.y ?? 0));
+    textObject.setPosition(snappedX, snappedY);
+    return textObject;
+}
+
 export function createBackdrop(scene, alpha = 0.5) {
     return scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x050307, alpha)
         .setOrigin(0)
@@ -46,14 +94,9 @@ export function createPixelPanel(scene, x, y, width, height, options = {}) {
 
 export function createPixelText(scene, x, y, text, options = {}) {
     const resolvedText = options.translate === false ? text : translateText(scene, text);
-    return scene.add.text(x, y, resolvedText, {
-        fontFamily: options.fontFamily ?? 'monospace',
-        fontSize: options.fontSize ?? '16px',
-        color: options.color ?? UI_COLORS.text,
-        stroke: options.stroke ?? '#000000',
-        strokeThickness: options.strokeThickness ?? 4,
-        align: options.align ?? 'center'
-    }).setOrigin(options.originX ?? 0.5, options.originY ?? 0.5);
+    const textObject = scene.add.text(x, y, resolvedText, getPhaserTextStyle(options))
+        .setOrigin(options.originX ?? 0.5, options.originY ?? 0.5);
+    return finalizeUiText(textObject, options);
 }
 
 export function createPixelButton(scene, x, y, width, height, label, onClick, options = {}) {

@@ -1,12 +1,13 @@
 import { getFinalBossRoundConfig } from '../../config/finalBosses.js';
 import Enemy from '../Enemy.js';
 
+const BOSS_ACTION_SCALE = 1;
 const BLACK_WIDOW_DEATH_ANIMATION_MS = 1000;
 const BLACK_WIDOW_DEATH_HOLD_MS = 3000;
 const BLACK_WIDOW_DEATH_SEQUENCE_MS = BLACK_WIDOW_DEATH_ANIMATION_MS + BLACK_WIDOW_DEATH_HOLD_MS;
-const BLACK_WIDOW_ATTACK_RANGE = 280;
+const BLACK_WIDOW_ATTACK_RANGE = 280 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_DASH_WARNING_TIME_MS = 800;
-const BLACK_WIDOW_DASH_DAMAGE_RADIUS = 26;
+const BLACK_WIDOW_DASH_DAMAGE_RADIUS = 26 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_DASH_PATTERN_COUNT_ROUND1 = 3;
 const BLACK_WIDOW_DASH_PATTERN_COUNT_MIN = 3;
 const BLACK_WIDOW_DASH_PATTERN_COUNT_MAX = 5;
@@ -16,19 +17,19 @@ const BLACK_WIDOW_DASH_WARNING_STROKE_ALPHA = 0.46;
 const BLACK_WIDOW_DASH_WARNING_WIDTH = BLACK_WIDOW_DASH_DAMAGE_RADIUS * 2;
 const BLACK_WIDOW_DASH_SPEED_PX_PER_SEC = 2000;
 const BLACK_WIDOW_ROUND2_DASH_SPEED_PX_PER_SEC = 5000;
-const BLACK_WIDOW_DASH_PLAYER_TARGET_SPREAD_X = 120;
-const BLACK_WIDOW_DASH_PLAYER_TARGET_SPREAD_Y = 90;
+const BLACK_WIDOW_DASH_PLAYER_TARGET_SPREAD_X = 120 * BOSS_ACTION_SCALE;
+const BLACK_WIDOW_DASH_PLAYER_TARGET_SPREAD_Y = 90 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_DASH_EVADE_DURATION_MS = 1000;
 const BLACK_WIDOW_DASH_JUMP_EXIT_DURATION_MS = 220;
 const BLACK_WIDOW_DASH_RETURN_DURATION_MS = 220;
 const BLACK_WIDOW_HAND_ATTACK_DELAY_MS = 1000;
 const BLACK_WIDOW_HAND_ATTACK_ANIMATION_LEAD_MS = 200;
-const BLACK_WIDOW_HAND_ATTACK_RADIUS = 120;
-const BLACK_WIDOW_HAND_WARNING_RADIUS = 148;
+const BLACK_WIDOW_HAND_ATTACK_RADIUS = 120 * BOSS_ACTION_SCALE;
+const BLACK_WIDOW_HAND_WARNING_RADIUS = 148 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_HAND_ATTACK_ARC = Phaser.Math.DegToRad(91);
 const BLACK_WIDOW_HAND_WARNING_ALPHA = 0.2;
 const BLACK_WIDOW_HAND_WARNING_COLOR = 0xff8a8a;
-const BLACK_WIDOW_HAND_APPROACH_DISTANCE = 96;
+const BLACK_WIDOW_HAND_APPROACH_DISTANCE = 96 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_HAND_ROUND1_APPROACH_SPEED_MULTIPLIER = 2.2;
 const BLACK_WIDOW_HAND_ROUND1_APPROACH_STOP_EARLY_MS = 260;
 const BLACK_WIDOW_HAND_SWEEP_DURATION_MS = 180;
@@ -37,8 +38,8 @@ const BLACK_WIDOW_HAND_SHAKE_INTENSITY = 0.0045;
 const BLACK_WIDOW_SUMMON_COUNT = 10;
 const BLACK_WIDOW_BEAM_DURATION_MS = 2000;
 const BLACK_WIDOW_BEAM_TICK_MS = 140;
-const BLACK_WIDOW_BEAM_WIDTH = 40;
-const BLACK_WIDOW_BEAM_LENGTH = 460;
+const BLACK_WIDOW_BEAM_WIDTH = 40 * BOSS_ACTION_SCALE;
+const BLACK_WIDOW_BEAM_LENGTH = 460 * BOSS_ACTION_SCALE;
 const BLACK_WIDOW_BEAM_ARC_DEGREES = 120;
 const BLACK_WIDOW_BEAM_DAMAGE_RATIO = 0.5;
 
@@ -47,6 +48,7 @@ export default class BlackWidowBoss extends Enemy {
         super(scene, x, y, 'black_widow');
         this.attackStyle = 'black_widow_cycle';
         this.behavior = 'chase';
+        this.isTeaserCameo = false;
         this.pendingWidowSkill = null;
         this.handAttackApproachActive = false;
         this.activeBeamGraphics = null;
@@ -59,6 +61,13 @@ export default class BlackWidowBoss extends Enemy {
     }
 
     takeDamage(amount, force = 0, direction = null, source = null, options = {}, skillConfig = null) {
+        if (this.isTeaserCameo) {
+            return {
+                healthDamage: 0,
+                absorbedDamage: 0,
+                didKill: false
+            };
+        }
         if (this.isDashEvading) {
             return {
                 healthDamage: 0,
@@ -117,6 +126,7 @@ export default class BlackWidowBoss extends Enemy {
     }
 
     updateMeleeBehavior(targetPlayer, time) {
+        if (this.isTeaserCameo) return;
         if (!targetPlayer?.active || targetPlayer?.isDead) {
             this.body?.setVelocity?.(0, 0);
             return;
@@ -320,15 +330,17 @@ export default class BlackWidowBoss extends Enemy {
         );
         this.setVisible(true);
         if (this.body) {
-            this.body.enable = true;
+            this.body.enable = !this.isTeaserCameo;
         }
-        this.playWidowAnimation('fall');
-        const distance = Phaser.Math.Distance.Between(actualStartX, actualStartY, actualEndX, actualEndY);
-        const duration = Math.max(80, Math.round((distance / dashSpeed) * 1000));
-        this.scene?.cameras?.main?.shake?.(80, 0.003);
-        this.scene?.tweens?.add({
-            targets: this,
-            x: actualEndX,
+	        this.playWidowAnimation('fall');
+	        const distance = Phaser.Math.Distance.Between(actualStartX, actualStartY, actualEndX, actualEndY);
+	        const duration = Math.max(80, Math.round((distance / dashSpeed) * 1000));
+	        if (!this.isTeaserCameo) {
+	            this.scene?.cameras?.main?.shake?.(80, 0.003);
+	        }
+	        this.scene?.tweens?.add({
+	            targets: this,
+	            x: actualEndX,
             y: actualEndY,
             duration,
             ease: 'Linear',
@@ -437,6 +449,7 @@ export default class BlackWidowBoss extends Enemy {
     }
 
     resolveDashDamage(startX, startY, endX, endY) {
+        if (this.isTeaserCameo) return;
         const players = this.scene?.getActivePlayers?.() ?? [];
         const damage = Math.max(1, Math.round(this.damage ?? 10));
         const dashAttackId = this.activeDashAttackId;

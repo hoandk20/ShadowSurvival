@@ -1,5 +1,5 @@
 const INSIDE_CHURCH_MAX_WAVE = 20;
-const INSIDE_CHURCH_REGULAR_WAVE_DURATION = 60;
+const INSIDE_CHURCH_REGULAR_WAVE_DURATION = 50;
 const INSIDE_CHURCH_BOSS_WAVE_DURATION = 9999;
 
 function getEnemyMaxHealth(waveNumber, enemyType) {
@@ -184,4 +184,3 @@ export function createInsideChurchScenario(sharedEnemyHealthMilestones = []) {
         wavePlans: createWavePlans()
     };
 }
-

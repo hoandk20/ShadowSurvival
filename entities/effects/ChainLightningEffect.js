@@ -5,7 +5,7 @@ const DEFAULT_CONFIG = {
     glowColor: 0xe8feff,
     thickness: 2,
     glowThickness: 4,
-    alpha: 0.95,
+    alpha: 0.75,
     duration: 120,
     particleCount: 9,
     particleSpread: 10,
@@ -107,7 +107,9 @@ export default class ChainLightningEffect {
             particle.setDepth(depth);
             particle.setTint(index % 2 === 0 ? config.color : config.glowColor);
             particle.setBlendMode(Phaser.BlendModes.ADD);
-            particle.setScale(Phaser.Math.FloatBetween(0.8, 1.8));
+            const scaleValue = Phaser.Math.FloatBetween(0.8, 1.8);
+            const pixelSize = Math.max(1, Math.round(2 * scaleValue));
+            particle.setDisplaySize(pixelSize, pixelSize);
             particle.setAlpha(alphaMul);
 
             this.scene.tweens.add({
@@ -115,8 +117,8 @@ export default class ChainLightningEffect {
                 x: particle.x + Phaser.Math.Between(-config.particleTravel, config.particleTravel),
                 y: particle.y + Phaser.Math.Between(-config.particleTravel, config.particleTravel),
                 alpha: 0,
-                scaleX: 0.2,
-                scaleY: 0.2,
+                displayWidth: 0,
+                displayHeight: 0,
                 duration: config.duration + Phaser.Math.Between(20, 80),
                 ease: 'Quad.easeOut',
                 onComplete: () => particle.destroy()

@@ -125,8 +125,6 @@ export default class KnightSlashEffect {
         this.scene.tweens.add({
             targets: container,
             rotation: endRotation,
-            scaleX: 1.04,
-            scaleY: 1.04,
             alpha: 0,
             duration: config.duration,
             ease: 'Cubic.easeOut',
@@ -139,7 +137,6 @@ export default class KnightSlashEffect {
             lifespan: config.particleLifespan,
             quantity: 0,
             speed: { min: config.speedMin, max: config.speedMax },
-            scale: { start: config.scaleFrom, end: config.scaleTo },
             alpha: { start: config.alphaFrom, end: config.alphaTo },
             angle: {
                 min: Phaser.Math.RadToDeg(facingAngle) - (config.arcDegrees * 0.5),
@@ -175,8 +172,8 @@ export default class KnightSlashEffect {
                 x: startX + Math.cos(angle) * travel,
                 y: startY + Math.sin(angle) * travel,
                 alpha: 0,
-                scaleX: 0.6,
-                scaleY: 0.2,
+                displayWidth: Math.max(0, config.streakLength * 0.6),
+                displayHeight: Math.max(0, config.streakWidth * 0.2),
                 duration: Math.max(90, config.duration - 10),
                 ease: 'Quad.easeOut',
                 onComplete: () => streak.destroy()

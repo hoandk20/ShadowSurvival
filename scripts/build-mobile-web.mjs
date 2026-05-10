@@ -8,6 +8,15 @@ const rootDir = path.resolve(__dirname, '..');
 const outDir = path.join(rootDir, 'dist', 'mobile-web');
 const vendorDir = path.join(outDir, 'vendor');
 
+function resolveBuildVariant() {
+    const envVariant = String(process.env.RPS_BUILD_VARIANT ?? '').trim();
+    const args = process.argv.slice(2);
+    const argIndex = args.findIndex((arg) => arg === '--variant');
+    const argVariant = argIndex >= 0 ? String(args[argIndex + 1] ?? '').trim() : '';
+    const candidate = (argVariant || envVariant || 'release').toLowerCase();
+    return candidate === 'debug' ? 'debug' : 'release';
+}
+
 async function removeDir(target) {
     await fs.rm(target, { recursive: true, force: true });
 }
@@ -38,7 +47,13 @@ async function copyPhaserBundle() {
     await fs.copyFile(source, target);
 }
 
+async function writeBuildEnv(variant) {
+    const target = path.join(outDir, 'build-env.js');
+    await fs.writeFile(target, `window.__APP_BUILD_VARIANT__ = '${variant}';\n`, 'utf8');
+}
+
 async function main() {
+    const variant = resolveBuildVariant();
     await removeDir(outDir);
     await ensureDir(outDir);
     await copyRecursive(path.join(rootDir, 'assets'), path.join(outDir, 'assets'));
@@ -50,7 +65,8 @@ async function main() {
     await fs.copyFile(path.join(rootDir, 'main.js'), path.join(outDir, 'main.js'));
     await writeMobileIndex();
     await copyPhaserBundle();
-    console.log(`Built mobile web bundle in ${outDir}`);
+    await writeBuildEnv(variant);
+    console.log(`Built mobile web bundle (${variant}) in ${outDir}`);
 }
 
 main().catch((error) => {

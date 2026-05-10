@@ -13,7 +13,7 @@ export default class GhostSummon extends Phaser.Physics.Arcade.Sprite {
         this.angleOffset = 0;
 
         this.baseMoveSpeedMultiplier = options.moveSpeedMultiplier ?? 1;
-        this.moveSpeed = options.moveSpeed ?? 170;
+        this.moveSpeed = options.moveSpeed ?? 340;
         // Visual-only scaling (used for loot-like pop + attack squash).
         this.visualScale = { x: 1, y: 1 };
         this.spawnPopTween = null;
@@ -24,7 +24,7 @@ export default class GhostSummon extends Phaser.Physics.Arcade.Sprite {
         this.despawning = false;
         this.aggroRange = options.aggroRange ?? 180;
         this.attackRange = options.attackRange ?? 18;
-        this.baseAttackCooldownMs = options.attackCooldownMs ?? 650;
+        this.baseAttackCooldownMs = options.attackCooldownMs ?? 325;
         this.lastAttackAt = -Infinity;
 
         this.target = null;
@@ -244,11 +244,13 @@ export default class GhostSummon extends Phaser.Physics.Arcade.Sprite {
             this.spawnPopTween?.stop?.();
             this.attackSquashTween?.stop?.();
             this.attackBounceTween?.stop?.();
+            const baseWidth = this.displayWidth ?? this.baseDisplayWidth ?? 24;
+            const baseHeight = this.displayHeight ?? this.baseDisplayHeight ?? 24;
             this.scene?.tweens?.add?.({
                 targets: this,
                 alpha: 0,
-                scaleX: 0.65,
-                scaleY: 0.65,
+                displayWidth: baseWidth * 0.65,
+                displayHeight: baseHeight * 0.65,
                 duration: 220,
                 ease: 'Cubic.easeIn',
                 onComplete: () => this.destroy()

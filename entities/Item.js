@@ -112,6 +112,13 @@ export default class Item extends Phaser.Physics.Arcade.Sprite {
         playSfx(this.scene, 'sfx_coin', { volume: 0.35 });
         const type = this.config?.type;
         const effectiveValue = this.getEffectiveValue();
+        this.scene?.events?.emit?.('loot-collected', {
+            itemKey: this.config?.textureKey ?? this.texture?.key ?? null,
+            type,
+            amount: this.amount ?? 1,
+            value: effectiveValue,
+            ownerPlayerId: player?.playerId ?? null
+        });
         switch (type) {
             case 'xp':
                 player.addXP(effectiveValue);

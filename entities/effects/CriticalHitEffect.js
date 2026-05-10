@@ -83,23 +83,24 @@ export default class CriticalHitEffect {
             const offsetY = Math.sin(angle) * dist;
             spark.setBlendMode(Phaser.BlendModes.ADD);
             spark.setTint(Phaser.Math.RND.pick(sparkTints));
-            spark.setScale(Phaser.Math.FloatBetween(sparkScale.min, sparkScale.max));
+            const scaleValue = Phaser.Math.FloatBetween(sparkScale.min, sparkScale.max);
+            const pixelSize = Math.max(1, Math.round(2 * scaleValue));
+            spark.setDisplaySize(pixelSize, pixelSize);
             spark.setDepth((target.depth ?? 0) + 3);
             this.scene.tweens.add({
                 targets: spark,
                 x: target.x + offsetX,
                 y: target.y + offsetY + Phaser.Math.FloatBetween(10, 30),
                 alpha: 0,
-                scale: 0,
-            duration: Phaser.Math.Between(minDuration, maxDuration),
+                displayWidth: 0,
+                displayHeight: 0,
+                duration: Phaser.Math.Between(minDuration, maxDuration),
                 ease: 'Quad.easeOut',
                 onComplete: () => spark.destroy()
             });
         }
         this.scene.tweens.add({
             targets: flash,
-            scaleX: 0.9,
-            scaleY: 0.9,
             alpha: 0,
             duration: 240,
             ease: 'Cubic.easeOut',

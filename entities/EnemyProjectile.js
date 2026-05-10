@@ -58,7 +58,7 @@ export default class EnemyProjectile extends Phaser.GameObjects.Arc {
             this.scene.tweens.add({
                 targets: beam,
                 alpha: 0,
-                scaleX: { from: 1, to: 1.15 },
+                width: length * 1.15,
                 duration,
                 ease: 'Cubic.easeOut',
                 onComplete: () => beam.destroy()

@@ -96,17 +96,15 @@ function triggerAssasinPhantomSlash(player, event = {}) {
         x: strikeX,
         y: strikeY,
         alpha: 0,
-        scaleX: 1,
-        scaleY: 1,
         duration: 260,
         ease: 'Cubic.easeIn',
         onComplete: () => shadow.destroy()
     });
+    const pulseBaseRadius = pulse.radius;
     scene.tweens.add({
         targets: pulse,
         alpha: 0,
-        scaleX: 1.7,
-        scaleY: 1.7,
+        radius: pulseBaseRadius * 1.7,
         duration: 260,
         ease: 'Cubic.easeOut',
         onComplete: () => pulse.destroy()
@@ -308,8 +306,7 @@ function ensureWerewolfBloodlustAura(player, werewolfState) {
                 y: ember.y - Phaser.Math.Between(18, 30),
                 x: ember.x + Phaser.Math.Between(-6, 6),
                 alpha: 0,
-                scaleX: { from: 1, to: 1.8 },
-                scaleY: { from: 1, to: 1.8 },
+                radius: ember.radius * 1.8,
                 duration: Phaser.Math.Between(280, 420),
                 ease: 'Cubic.easeOut',
                 onComplete: () => ember.destroy()

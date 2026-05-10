@@ -32,15 +32,19 @@ import {
 } from '../config/metaUpgrades.js';
 import {
     UI_COLORS,
+    UI_TEXT_FONT_FAMILY,
     createBackdrop,
     createPixelButton,
     createPixelPanel,
     createPixelText,
     createPixelToggle,
     createPixelCycle,
-    createSparkField
+    createSparkField,
+    finalizeUiText
 } from './ui/PixelSceneHelpers.js';
 import { SUPPORTER_CONFIG, SUPPORTER_KEYS } from '../config/supporters.js';
+import { BADGES, getBadgeTier } from '../config/badges.js';
+import { getBadgesWithState, getBadgeProgressSummary } from '../utils/badges.js';
 
 const MENU_BACKGROUND_KEY = 'menu_background';
 const DYNAMON_ICON_KEY = 'menu_dynamon_icon';
@@ -60,6 +64,7 @@ const MAP_THEME_COLORS = {
     maprock_field: 0x8fa7c7
 };
 const PASSIVE_INFO_PANEL_MAX_WIDTH = 220;
+const MENU_TEXT_FONT_FAMILY = UI_TEXT_FONT_FAMILY;
 const SHOP_HUB_COLORS = {
     panelOuter: 0x11171b,
     panelInner: 0x1b252b,
@@ -75,7 +80,14 @@ const SHOP_HUB_COLORS = {
     buttonActiveFill: 0x30454f,
     buttonActiveInner: 0x3b5663
 };
-const DEBUG_MODE_ENABLED = false;
+function isDebugMenuEnabled() {
+    const variant = String(globalThis?.__APP_BUILD_VARIANT__ ?? '').toLowerCase();
+    if (variant === 'release') return false;
+    if (typeof globalThis?.rpsIsDebugMenuUnlocked === 'function') {
+        return globalThis.rpsIsDebugMenuUnlocked() === true;
+    }
+    return globalThis?.__RPS_DEBUG_MENU_UNLOCKED__ === true;
+}
 
 function getCharacterUnlockLabel(characterKey) {
     const unlockType = getCharacterUnlockType(characterKey);
@@ -118,6 +130,9 @@ export default class MainMenuScene extends Phaser.Scene {
         this.selectedUpgradeGroupKey = 'survival';
         this.upgradeScrollOffsets = {};
         this.selectedUpgradeGroupKey = 'survival';
+        this.badgeScrollOffset = 0;
+        this.badgeWheelHandler = null;
+        this.selectedBadgeId = null;
     }
 
     preload() {
@@ -141,6 +156,12 @@ export default class MainMenuScene extends Phaser.Scene {
             if (!atlas?.key || this.textures.exists(atlas.key)) return;
             this.load.atlas(atlas.key, atlas.texture, atlas.atlasJSON);
         });
+
+        BADGES.forEach((badge) => {
+            if (!badge?.iconKey || !badge?.iconPath) return;
+            if (this.textures.exists(badge.iconKey)) return;
+            this.load.image(badge.iconKey, badge.iconPath);
+        });
     }
 
     create() {
@@ -161,6 +182,11 @@ export default class MainMenuScene extends Phaser.Scene {
         this.audioUnlockCleanup = installAudioUnlock(this);
         this.input.keyboard.on('keydown', this.handleKeyboardNavigation, this);
         this.events.on('metaProgressChanged', this.handleMetaProgressChanged, this);
+        this.debugMenuUnlockHandler = () => {
+            this.debugMode = isDebugMenuEnabled() && this.debugMode === true;
+            this.render();
+        };
+        globalThis.addEventListener?.('rps-debug-menu-changed', this.debugMenuUnlockHandler);
         this.syncChallengeCharacterUnlocks();
         this.ensureMetaUpgradeTexturesLoaded();
         this.render();
@@ -175,6 +201,8 @@ export default class MainMenuScene extends Phaser.Scene {
         this.input.keyboard.off('keydown', this.handleKeyboardNavigation, this);
         this.events.off('metaProgressChanged', this.handleMetaProgressChanged, this);
         this.scale.off('resize', this.render, this);
+        globalThis.removeEventListener?.('rps-debug-menu-changed', this.debugMenuUnlockHandler);
+        this.debugMenuUnlockHandler = null;
     }
 
     destroyRenderTree() {
@@ -193,6 +221,11 @@ export default class MainMenuScene extends Phaser.Scene {
         if (panel) {
             panel.style.display = visible ? 'flex' : 'none';
         }
+    }
+
+    isCharacterAvailable(characterKey) {
+        if (this.debugMode === true) return true;
+        return isCharacterUnlocked(this, characterKey);
     }
 
     setupHubDebugMenu() {
@@ -262,6 +295,10 @@ export default class MainMenuScene extends Phaser.Scene {
 
     render() {
         this.destroyRenderTree();
+        if (this.mode !== 'badges' && this.badgeWheelHandler) {
+            this.input.off('wheel', this.badgeWheelHandler);
+            this.badgeWheelHandler = null;
+        }
         this.setupHubDebugMenu();
         if (!CHARACTER_CONFIG[this.selectedCharacterKey]) {
             this.selectedCharacterKey = DEFAULT_CHARACTER_KEY;
@@ -294,19 +331,30 @@ export default class MainMenuScene extends Phaser.Scene {
         const headerTitleX = metrics.isPortrait ? (width / 2 + (metrics.isCompact ? 28 : 18)) : (width / 2);
         const headerTitleY = metrics.safeY + (metrics.isPortrait ? 28 : 24);
         const headerSubtitleY = headerTitleY + (metrics.isPortrait ? 30 : 32);
+        const headerTitleGlow = this.add.text(headerTitleX, headerTitleY + 1, 'RUNE PIXEL SURVIVORS', {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: metrics.isPortrait
+                ? (metrics.isCompact ? '16px' : '20px')
+                : (metrics.isCompact ? '22px' : '32px'),
+            fontStyle: '700',
+            color: '#8cc4dc',
+            align: 'center'
+        }).setOrigin(0.5);
+        headerTitleGlow.setAlpha(0.45);
         const headerTitle = createPixelText(this, headerTitleX, headerTitleY, 'RUNE PIXEL SURVIVORS', {
             fontSize: metrics.isPortrait
                 ? (metrics.isCompact ? '16px' : '20px')
                 : (metrics.isCompact ? '22px' : '32px'),
             color: SHOP_HUB_COLORS.title,
-            strokeThickness: metrics.isPortrait ? 4 : 5
+            strokeThickness: metrics.isPortrait ? 1 : 2
         });
+        headerTitle.setTint?.(0xe7f4ff);
         const headerSubtitle = createPixelText(this, width / 2, headerSubtitleY, 'RETRO FANTASY HUNT', {
             fontSize: metrics.isPortrait ? '10px' : (metrics.isCompact ? '11px' : '12px'),
             color: SHOP_HUB_COLORS.dimText,
-            strokeThickness: 3
+            strokeThickness: 1
         });
-        this.uiRoot.add([headerTitle, headerSubtitle]);
+        this.uiRoot.add([headerTitleGlow, headerTitle, headerSubtitle]);
 
         // Meta currency HUD (menu-only): Dynamon display.
         const meta = getMetaProgress(this);
@@ -317,7 +365,7 @@ export default class MainMenuScene extends Phaser.Scene {
             originX: 0,
             originY: 0.5,
             color: SHOP_HUB_COLORS.title,
-            strokeThickness: 4
+            strokeThickness: 2
         });
         const amountBounds = amountText.getBounds();
         const dynamonGap = metrics.isPortrait ? 6 : 10;
@@ -326,7 +374,7 @@ export default class MainMenuScene extends Phaser.Scene {
         const dynamonY = metrics.safeY + (metrics.isPortrait ? -4 : 22);
         const dynamonContainer = this.add.container(dynamonLeftX, dynamonY);
         const icon = this.add.image(0, 0, DYNAMON_ICON_KEY).setOrigin(0, 0.5);
-        icon.setScale(iconScale);
+        icon.setDisplaySize(iconWidth, iconWidth);
         amountText.setPosition(iconWidth + dynamonGap, 0);
         dynamonContainer.add([icon, amountText]);
         // Keep above spark field but below title.
@@ -343,6 +391,8 @@ export default class MainMenuScene extends Phaser.Scene {
             this.renderSettings();
         } else if (this.mode === 'upgrade') {
             this.renderUpgradeMenu();
+        } else if (this.mode === 'badges') {
+            this.renderBadgesMenu();
         } else if (this.mode === 'credits') {
             this.renderCredits();
         }
@@ -356,9 +406,10 @@ export default class MainMenuScene extends Phaser.Scene {
         const buttons = [
             { label: 'START GAME', action: () => this.beginNewRun() },
             { label: 'UPGRADE', action: () => this.setMode('upgrade') },
+            { label: 'BADGES', action: () => this.setMode('badges') },
             { label: 'CREDITS', action: () => this.setMode('credits') }
         ];
-        if (DEBUG_MODE_ENABLED) {
+        if (isDebugMenuEnabled()) {
             buttons.splice(1, 0, { label: 'START DEBUG MODE', action: () => this.beginNewRun(true) });
         }
         const totalHeight = buttonHeight * buttons.length + buttonGap * Math.max(0, buttons.length - 1);
@@ -402,7 +453,7 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     beginNewRun(debugMode = false) {
-        this.debugMode = DEBUG_MODE_ENABLED && Boolean(debugMode);
+        this.debugMode = isDebugMenuEnabled() && Boolean(debugMode);
         if (!this.debugMode) {
             this.selectedSupporterKey = null;
             this.registry.set('selectedSupporterKey', null);
@@ -413,7 +464,11 @@ export default class MainMenuScene extends Phaser.Scene {
     renderCharacterSelect() {
         const { width, height, safeX, safeY, isPortrait, isCompact } = this.getResponsiveMetrics();
         const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
-        const unlockedCharacterKeys = new Set(getUnlockedCharacterKeys(this));
+        const unlockedCharacterKeys = new Set(
+            this.debugMode === true
+                ? Object.keys(CHARACTER_CONFIG)
+                : getUnlockedCharacterKeys(this)
+        );
         const panelWidth = Math.min(isPortrait ? width - safeX * 2 : width - safeX * 2, isPortrait ? 420 : 920);
         const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 680 : 560);
         const panel = createPixelPanel(this, width / 2, height / 2 + (isPortrait ? 8 : 12), panelWidth, panelHeight, {
@@ -473,7 +528,7 @@ export default class MainMenuScene extends Phaser.Scene {
             previewPanel.add(createPixelText(this, 0, -previewHeight / 2 + 48, selectedCharacterUnlockLabel, {
                 fontSize: isCompact ? '10px' : '11px',
                 color: '#ffd4a8',
-                strokeThickness: 3
+                strokeThickness: 1
             }));
         }
         const passiveInfoBadge = this.createPassiveInfoBadge(
@@ -490,12 +545,12 @@ export default class MainMenuScene extends Phaser.Scene {
         previewPanel.add(this.createCharacterPreview(this.selectedCharacterKey, 0, previewSpriteY, previewSpriteSize));
         const descriptionY = compactPortrait ? -6 : isPortrait ? 0 : Math.round(-4 * previewScale);
         previewPanel.add(this.add.text(0, descriptionY, translateText(this, selectedCharacter.description ?? ''), {
-            fontFamily: 'monospace',
+            fontFamily: MENU_TEXT_FONT_FAMILY,
             fontSize: isMobileDevice ? '9px' : isCompact ? '10px' : '11px',
             color: SHOP_HUB_COLORS.dimText,
             align: 'center',
             stroke: '#000000',
-            strokeThickness: 2,
+            strokeThickness: 1,
             wordWrap: { width: previewWidth - 32, useAdvancedWrap: true }
         }).setOrigin(0.5, 0));
         const styleLabelY = compactPortrait ? 48 : isPortrait ? Math.round(72 * previewScale) : Math.round(96 * previewScale);
@@ -504,7 +559,7 @@ export default class MainMenuScene extends Phaser.Scene {
         previewPanel.add(createPixelText(this, 0, styleLabelY, characterStyleLabel, {
             fontSize: isMobileDevice ? '12px' : compactPortrait ? '12px' : isCompact ? '14px' : '15px',
             color: characterStyleColor,
-            strokeThickness: 3
+            strokeThickness: 1
         }));
 
         const gridViewportX = isPortrait ? 0 : -panelWidth / 2 + 18 + gridAreaWidth / 2;
@@ -632,12 +687,12 @@ export default class MainMenuScene extends Phaser.Scene {
         const selectedMap = getMapDefinition(this.selectedMapKey);
         const mapInfoText = translateText(this, selectedMap?.description ?? '');
         previewPanel.add(this.add.text(0, -previewHeight / 2 + 18, mapInfoText, {
-            fontFamily: 'monospace',
+            fontFamily: MENU_TEXT_FONT_FAMILY,
             fontSize: isCompact ? '10px' : '11px',
             color: SHOP_HUB_COLORS.dimText,
             align: 'center',
             stroke: '#000000',
-            strokeThickness: 2,
+            strokeThickness: 1,
             wordWrap: { width: previewWidth - 26, useAdvancedWrap: true }
         }).setOrigin(0.5, 0));
 
@@ -1123,13 +1178,13 @@ export default class MainMenuScene extends Phaser.Scene {
             panel.add(createPixelText(this, 0, y, section.title.toUpperCase(), {
                 fontSize: isCompact ? '12px' : '13px',
                 color: SHOP_HUB_COLORS.title,
-                strokeThickness: 3
+                strokeThickness: 1
             }));
             section.lines.forEach((line, lineIndex) => {
                 panel.add(createPixelText(this, 0, y + 24 + lineIndex * 20, line, {
                     fontSize: isCompact ? '12px' : '13px',
                     color: SHOP_HUB_COLORS.text,
-                    strokeThickness: 3
+                    strokeThickness: 1
                 }));
             });
         });
@@ -1144,6 +1199,414 @@ export default class MainMenuScene extends Phaser.Scene {
             border: SHOP_HUB_COLORS.border,
             activeBorder: SHOP_HUB_COLORS.borderBright
         }));
+    }
+
+    renderBadgesMenu() {
+        const { width, height, safeX, safeY, isCompact, isPortrait } = this.getResponsiveMetrics();
+        const progress = getBadgeProgressSummary();
+        const badgeEntries = getBadgesWithState();
+
+        const panelWidth = Math.min(width - safeX * 2, isPortrait ? 440 : 920);
+        const panelHeight = Math.min(height - safeY * 2 - 18, isPortrait ? 720 : 640);
+        const panel = createPixelPanel(this, width / 2, height / 2 + 8, panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: SHOP_HUB_COLORS.border
+        });
+        this.uiRoot.add(panel);
+        const badgesTitle = this.add.text(0, -panelHeight / 2 + 26, 'BADGES', {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '20px' : '24px',
+            fontStyle: '700',
+            color: SHOP_HUB_COLORS.title,
+            align: 'center'
+        }).setOrigin(0.5);
+        finalizeUiText(badgesTitle, { resolution: 3 });
+        panel.add(badgesTitle);
+        const badgesSummary = this.add.text(0, -panelHeight / 2 + 54, `${progress.unlocked} / ${progress.total} UNLOCKED`, {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '12px' : '14px',
+            fontStyle: '600',
+            color: SHOP_HUB_COLORS.subtitle,
+            align: 'center'
+        }).setOrigin(0.5);
+        finalizeUiText(badgesSummary, { resolution: 3 });
+        panel.add(badgesSummary);
+
+        const contentTop = -panelHeight / 2 + 98;
+        const contentHeight = panelHeight - 186;
+        const contentWidth = panelWidth - 20;
+        const contentPanel = createPixelPanel(this, 0, contentTop + contentHeight / 2 + 6, contentWidth, contentHeight - 12, {
+            fill: 0x11181c,
+            fillDark: 0x0b1013,
+            border: SHOP_HUB_COLORS.border
+        });
+        panel.add(contentPanel);
+
+        const viewportTop = -contentHeight / 2 + 18;
+        const viewportHeight = contentHeight - 40;
+        const viewportWidth = contentWidth - 24;
+
+	        // Extra horizontal padding so badge rings don't touch the viewport border (especially on portrait).
+	        const gridPaddingX = isPortrait ? (isCompact ? 24 : 28) : (isCompact ? 22 : 28);
+	        const gridAvailableWidth = Math.max(160, viewportWidth - gridPaddingX * 2);
+        const iconGap = isCompact ? 16 : 18;
+        const iconRingPadding = 6;
+        const minColumns = isPortrait ? 4 : 6;
+        const maxColumns = isPortrait ? 6 : 12;
+        const minIconSize = isPortrait ? (isCompact ? 48 : 52) : (isCompact ? 56 : 60);
+        const maxIconSize = isPortrait ? (isCompact ? 68 : 74) : (isCompact ? 78 : 86);
+	        let columns = minColumns;
+	        let iconSize = minIconSize;
+	        for (let candidate = maxColumns; candidate >= minColumns; candidate -= 1) {
+	            const nextCellSize = Math.floor((gridAvailableWidth - Math.max(0, candidate - 1) * iconGap) / candidate);
+	            const nextIconSize = nextCellSize - iconRingPadding * 2;
+	            if (nextIconSize >= minIconSize) {
+	                columns = candidate;
+	                iconSize = Math.min(maxIconSize, nextIconSize);
+	                break;
+	            }
+	        }
+	        // Shrink icons a bit more so the ring never touches the viewport border on narrow portrait layouts.
+	        const iconSizeScale = isPortrait ? 0.86 : 0.9;
+	        iconSize = Math.max(28, Math.floor(iconSize * iconSizeScale));
+        const rows = Math.ceil(badgeEntries.length / columns);
+        const cellSize = iconSize + iconRingPadding * 2;
+        const rowHeight = cellSize + iconGap;
+        const gridHeight = rows * cellSize + Math.max(0, rows - 1) * iconGap;
+        const gridOffsetY = gridHeight < viewportHeight ? Math.floor((viewportHeight - gridHeight) / 2) : 0;
+
+        const totalContentHeight = Math.max(
+            viewportHeight,
+            gridHeight
+        );
+        const maxScroll = Math.max(0, totalContentHeight - viewportHeight);
+        this.badgeScrollOffset = Phaser.Math.Clamp(this.badgeScrollOffset ?? 0, 0, maxScroll);
+
+        const listViewport = this.add.container(0, 0);
+        const viewportBackground = this.add.graphics();
+        viewportBackground.fillStyle(0x1b2a31, 0.98);
+        viewportBackground.fillRect(-contentWidth / 2 + 6, viewportTop, contentWidth - 24, viewportHeight);
+        viewportBackground.lineStyle(2, 0x3f5c69, 0.95);
+        viewportBackground.strokeRect(-contentWidth / 2 + 6, viewportTop, contentWidth - 24, viewportHeight);
+        listViewport.add(viewportBackground);
+
+        const listContent = this.add.container(0, 0);
+        listViewport.add(listContent);
+        contentPanel.add(listViewport);
+        contentPanel.bringToTop(listViewport);
+
+	        const badgeIcons = [];
+	        const gridWidth = columns * cellSize + Math.max(0, columns - 1) * iconGap;
+	        // The viewport background is drawn with a slight left offset (to make room for the scrollbar),
+	        // so center the badge grid within that same viewport rect.
+	        const viewportLeftX = -contentWidth / 2 + 6;
+	        const viewportCenterX = viewportLeftX + viewportWidth / 2;
+	        const gridStartX = viewportCenterX - gridWidth / 2 + cellSize / 2;
+        badgeEntries.forEach((badge, index) => {
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            const baseX = gridStartX + col * (cellSize + iconGap);
+            const baseY = viewportTop + gridOffsetY + cellSize / 2 + row * rowHeight;
+            const icon = this.createBadgeIcon(badge, baseX, baseY - this.badgeScrollOffset, iconSize);
+            icon.setData('baseY', baseY);
+            listContent.add(icon);
+            badgeIcons.push(icon);
+        });
+
+        let scrollTrack = null;
+        let trackX = 0;
+        let trackHeight = 0;
+        let thumbHeight = 0;
+        let thumbTravel = 0;
+        let thumbHitArea = null;
+
+        const applyScroll = (nextOffset) => {
+            const clamped = Phaser.Math.Clamp(nextOffset, 0, maxScroll);
+            this.badgeScrollOffset = clamped;
+            badgeIcons.forEach((icon) => {
+                const baseY = Number(icon.getData('baseY') ?? 0);
+                icon.y = baseY - clamped;
+                const radius = Number(icon.getData('outerRadius') ?? (iconSize / 2 + 6));
+                const iconTop = icon.y - radius;
+                const iconBottom = icon.y + radius;
+                // Match the meta upgrade shop behavior: hide if any part is outside the viewport.
+                icon.setVisible(iconTop >= viewportTop && iconBottom <= (viewportTop + viewportHeight));
+            });
+            if (scrollTrack && maxScroll > 0) {
+                const thumbY = viewportTop + Math.round((clamped / maxScroll) * thumbTravel);
+                scrollTrack.clear();
+                scrollTrack.fillStyle(0x1a252b, 0.95);
+                scrollTrack.fillRoundedRect(trackX, viewportTop, 6, trackHeight, 4);
+                scrollTrack.lineStyle(1, 0x51656f, 1);
+                scrollTrack.strokeRoundedRect(trackX, viewportTop, 6, trackHeight, 4);
+                scrollTrack.fillStyle(0xa8d6ea, 0.95);
+                scrollTrack.fillRoundedRect(trackX, thumbY, 6, thumbHeight, 4);
+            }
+        };
+
+        if (this.badgeWheelHandler) {
+            this.input.off('wheel', this.badgeWheelHandler);
+            this.badgeWheelHandler = null;
+        }
+
+        const viewportLeft = -contentWidth / 2 + 6;
+        const viewportRight = viewportLeft + (contentWidth - 24);
+        const viewportBottom = viewportTop + viewportHeight;
+        this.badgeWheelHandler = (pointer, _currentlyOver, _dx, dy) => {
+            const localX = pointer.x - panel.x;
+            const localY = pointer.y - panel.y;
+            if (localX < viewportLeft || localX > viewportRight || localY < viewportTop || localY > viewportBottom) return;
+            applyScroll((this.badgeScrollOffset ?? 0) + dy * 0.55);
+        };
+        this.input.on('wheel', this.badgeWheelHandler);
+
+        if (maxScroll > 0) {
+            scrollTrack = this.add.graphics();
+            trackX = contentWidth / 2 - 12;
+            trackHeight = viewportHeight;
+            scrollTrack.fillStyle(0x1a252b, 0.95);
+            scrollTrack.fillRoundedRect(trackX, viewportTop, 6, trackHeight, 4);
+            scrollTrack.lineStyle(1, 0x51656f, 1);
+            scrollTrack.strokeRoundedRect(trackX, viewportTop, 6, trackHeight, 4);
+            thumbHeight = Math.max(28, Math.round((viewportHeight / totalContentHeight) * trackHeight));
+            thumbTravel = Math.max(0, trackHeight - thumbHeight);
+            const thumbY = viewportTop + Math.round((this.badgeScrollOffset / maxScroll) * thumbTravel);
+            scrollTrack.fillStyle(0xa8d6ea, 0.95);
+            scrollTrack.fillRoundedRect(trackX, thumbY, 6, thumbHeight, 4);
+            listViewport.add(scrollTrack);
+
+            thumbHitArea = this.add.rectangle(trackX + 3, viewportTop + viewportHeight / 2, 18, viewportHeight, 0xffffff, 0.001)
+                .setInteractive();
+            let dragStartY = 0;
+            let dragStartOffset = 0;
+            thumbHitArea.on('pointerdown', (pointer) => {
+                dragStartY = pointer.y;
+                dragStartOffset = this.badgeScrollOffset ?? 0;
+            });
+            thumbHitArea.on('pointermove', (pointer) => {
+                if (!pointer.isDown) return;
+                applyScroll(dragStartOffset - (pointer.y - dragStartY));
+            });
+            listViewport.add(thumbHitArea);
+            listViewport.bringToTop(scrollTrack);
+            listViewport.bringToTop(thumbHitArea);
+        }
+
+        // Touch drag scroll anywhere in viewport (mobile-friendly).
+        const dragArea = this.add.rectangle(0, viewportTop + viewportHeight / 2, contentWidth - 42, viewportHeight, 0xffffff, 0.001)
+            .setInteractive();
+        let dragStartY = 0;
+        let dragStartOffset = 0;
+        dragArea.on('pointerdown', (pointer) => {
+            dragStartY = pointer.y;
+            dragStartOffset = this.badgeScrollOffset ?? 0;
+        });
+        dragArea.on('pointermove', (pointer) => {
+            if (!pointer.isDown) return;
+            applyScroll(dragStartOffset - (pointer.y - dragStartY));
+        });
+        listViewport.add(dragArea);
+        // Keep the drag surface behind the badge icons so taps still open details.
+        listViewport.sendToBack(dragArea);
+        listViewport.bringToTop(listContent);
+        if (scrollTrack) listViewport.bringToTop(scrollTrack);
+        if (thumbHitArea) listViewport.bringToTop(thumbHitArea);
+
+        applyScroll(this.badgeScrollOffset ?? 0);
+
+        this.uiRoot.add(createPixelButton(this, width / 2, height - safeY - (isCompact ? 28 : 24), Math.min(220, panelWidth - 40), isCompact ? 44 : 42, 'BACK', () => this.setMode('main'), {
+            fontSize: isCompact ? '14px' : '16px',
+            textColor: SHOP_HUB_COLORS.text,
+            fill: SHOP_HUB_COLORS.buttonFill,
+            inner: SHOP_HUB_COLORS.buttonInner,
+            activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+            activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+            border: SHOP_HUB_COLORS.border,
+            activeBorder: SHOP_HUB_COLORS.borderBright
+        }));
+
+        if (this.selectedBadgeId) {
+            const selected = badgeEntries.find((entry) => entry.id === this.selectedBadgeId) ?? null;
+            if (selected) {
+                this.renderBadgeDetailsOverlay(selected);
+            } else {
+                this.selectedBadgeId = null;
+            }
+        }
+    }
+
+	    createBadgeIcon(badge, x, y, size) {
+	        const container = this.add.container(x, y);
+	        const tier = getBadgeTier(badge?.tier);
+	        const isUnlocked = Boolean(badge?.unlocked);
+	        const textureKey = badge?.iconKey;
+
+	        const outer = size / 2 + 6;
+	        const iconSize = Math.max(10, Math.round(size * 0.68));
+	        container.setData('outerRadius', outer);
+	        const ring = this.add.graphics();
+	        ring.fillStyle(0x0a0f12, 0.88);
+	        ring.fillCircle(0, 0, outer);
+        ring.lineStyle(2, 0x000000, 1);
+        ring.strokeCircle(0, 0, outer);
+        ring.lineStyle(2, isUnlocked ? 0xa8d6ea : 0x3f5c69, 0.95);
+        ring.strokeCircle(0, 0, outer - 2);
+        ring.lineStyle(1, Phaser.Display.Color.HexStringToColor(tier.color).color, isUnlocked ? 0.95 : 0.6);
+        ring.strokeCircle(0, 0, outer - 6);
+
+	        const icon = textureKey && this.textures.exists(textureKey)
+	            ? this.add.image(0, 0, textureKey)
+	            : this.add.rectangle(0, 0, size, size, 0x22313a, 0.9);
+	        if (icon.setDisplaySize) {
+	            icon.setDisplaySize(iconSize, iconSize);
+	        }
+	        if (!isUnlocked && icon.setTint) {
+	            icon.setTint(0x6b757d);
+	            icon.setAlpha(0.55);
+	        }
+
+        const hitArea = this.add.circle(0, 0, outer, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+        hitArea.on('pointerdown', () => {
+            this.selectedBadgeId = badge?.id ?? null;
+            this.render();
+        });
+
+        container.add([ring, icon, hitArea]);
+        return container;
+    }
+
+    renderBadgeDetailsOverlay(badge) {
+        const { width, height, safeX, safeY, isCompact, isPortrait } = this.getResponsiveMetrics();
+        const tier = getBadgeTier(badge?.tier);
+        const isUnlocked = Boolean(badge?.unlocked);
+        const progress = badge?.progress ?? null;
+        const progressPercent = progress ? Math.max(0, Math.min(1, Number(progress.percent ?? 0))) : (isUnlocked ? 1 : 0);
+        const progressCurrent = progress ? Math.max(0, Number(progress.current ?? 0)) : (isUnlocked ? 1 : 0);
+        const progressTarget = progress ? Math.max(1, Number(progress.target ?? 1)) : 1;
+
+        const overlay = this.add.container(0, 0);
+        this.uiRoot.add(overlay);
+
+        const shade = this.add.rectangle(0, 0, width, height, 0x05080a, 0.82).setOrigin(0);
+        overlay.add(shade);
+
+        const panelWidth = Math.min(width - safeX * 2, isPortrait ? 380 : 520);
+        const panelHeight = Math.min(height - safeY * 2, isPortrait ? 360 : 340);
+        const panel = createPixelPanel(this, width / 2, height / 2 + 10, panelWidth, panelHeight, {
+            fill: SHOP_HUB_COLORS.panelInner,
+            fillDark: SHOP_HUB_COLORS.panelOuter,
+            border: isUnlocked ? SHOP_HUB_COLORS.borderBright : SHOP_HUB_COLORS.border
+        });
+        overlay.add(panel);
+
+        const header = this.add.text(width / 2, height / 2 - panelHeight / 2 + 28, badge?.name ?? 'BADGE', {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '18px' : '22px',
+            fontStyle: '700',
+            color: SHOP_HUB_COLORS.title,
+            align: 'center',
+            wordWrap: { width: panelWidth - 48, useAdvancedWrap: true }
+        }).setOrigin(0.5);
+        finalizeUiText(header, { resolution: 4 });
+        overlay.add(header);
+
+        const sub = this.add.text(width / 2, height / 2 - panelHeight / 2 + 54, `${tier.label} • ${isUnlocked ? 'UNLOCKED' : 'LOCKED'}`, {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '11px' : '13px',
+            fontStyle: '600',
+            color: tier.color,
+            align: 'center'
+        }).setOrigin(0.5);
+        finalizeUiText(sub, { resolution: 3 });
+        overlay.add(sub);
+
+	        const iconSize = isPortrait ? 88 : 96;
+	        const innerIconSize = Math.max(14, Math.round(iconSize * 0.68));
+	        const iconRing = this.add.graphics();
+	        iconRing.fillStyle(0x0a0f12, 0.88);
+	        iconRing.fillCircle(width / 2, height / 2 - 38, iconSize / 2 + 10);
+        iconRing.lineStyle(2, 0x000000, 1);
+        iconRing.strokeCircle(width / 2, height / 2 - 38, iconSize / 2 + 10);
+        iconRing.lineStyle(2, isUnlocked ? 0xa8d6ea : 0x3f5c69, 0.95);
+        iconRing.strokeCircle(width / 2, height / 2 - 38, iconSize / 2 + 8);
+        overlay.add(iconRing);
+
+	        const icon = badge?.iconKey && this.textures.exists(badge.iconKey)
+	            ? this.add.image(width / 2, height / 2 - 38, badge.iconKey)
+	            : this.add.rectangle(width / 2, height / 2 - 38, iconSize, iconSize, 0x22313a, 0.9);
+	        if (icon.setDisplaySize) {
+	            icon.setDisplaySize(innerIconSize, innerIconSize);
+	        }
+        if (!isUnlocked && icon.setTint) {
+            icon.setTint(0x6b757d);
+            icon.setAlpha(0.55);
+        }
+        overlay.add(icon);
+
+        const desc = this.add.text(width / 2, height / 2 + 48, badge?.description ?? '', {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '12px' : '13px',
+            color: isUnlocked ? SHOP_HUB_COLORS.text : SHOP_HUB_COLORS.dimText,
+            fontStyle: '500',
+            align: 'center',
+            wordWrap: { width: panelWidth - 48, useAdvancedWrap: true }
+        }).setOrigin(0.5, 0.5);
+        finalizeUiText(desc, { resolution: 3 });
+        overlay.add(desc);
+
+        const progressLabel = this.add.text(width / 2, height / 2 + 92, `PROGRESS: ${Math.floor(progressCurrent)} / ${Math.floor(progressTarget)}`, {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '11px' : '13px',
+            fontStyle: '600',
+            color: SHOP_HUB_COLORS.subtitle,
+            align: 'center'
+        }).setOrigin(0.5);
+        finalizeUiText(progressLabel, { resolution: 3 });
+        overlay.add(progressLabel);
+
+        const barWidth = Math.min(panelWidth - 80, 360);
+        const barHeight = 12;
+        const barX = width / 2 - barWidth / 2;
+        const barY = height / 2 + 112;
+        const bar = this.add.graphics();
+        bar.fillStyle(0x0b1013, 0.95);
+        bar.fillRoundedRect(barX, barY, barWidth, barHeight, 5);
+        bar.lineStyle(1, 0x3f5c69, 1);
+        bar.strokeRoundedRect(barX, barY, barWidth, barHeight, 5);
+        bar.fillStyle(isUnlocked ? 0xa8d6ea : 0x51656f, 0.95);
+        bar.fillRoundedRect(barX + 2, barY + 2, Math.max(0, Math.floor((barWidth - 4) * progressPercent)), barHeight - 4, 4);
+        overlay.add(bar);
+
+        const progressText = this.add.text(width / 2, barY + barHeight + 12, `${Math.round(progressPercent * 100)}%${isUnlocked ? ' • COMPLETED' : ''}`, {
+            fontFamily: MENU_TEXT_FONT_FAMILY,
+            fontSize: isCompact ? '11px' : '13px',
+            fontStyle: '600',
+            color: isUnlocked ? '#bff2ff' : SHOP_HUB_COLORS.dimText,
+            align: 'center'
+        }).setOrigin(0.5);
+        finalizeUiText(progressText, { resolution: 3 });
+        overlay.add(progressText);
+
+        const closeButton = createPixelButton(this, width / 2, height / 2 + panelHeight / 2 - 28, Math.min(220, panelWidth - 40), 42, 'CLOSE', () => {
+            this.selectedBadgeId = null;
+            this.render();
+        }, {
+            fontSize: isCompact ? '14px' : '16px',
+            textColor: SHOP_HUB_COLORS.text,
+            fill: SHOP_HUB_COLORS.buttonFill,
+            inner: SHOP_HUB_COLORS.buttonInner,
+            activeFill: SHOP_HUB_COLORS.buttonActiveFill,
+            activeInner: SHOP_HUB_COLORS.buttonActiveInner,
+            border: SHOP_HUB_COLORS.border,
+            activeBorder: SHOP_HUB_COLORS.borderBright
+        });
+        overlay.add(closeButton);
+
+        shade.setInteractive().on('pointerdown', () => {
+            this.selectedBadgeId = null;
+            this.render();
+        });
     }
 
     createCharacterSlot(key, config, size, selected, unlocked = true) {
@@ -1217,12 +1680,12 @@ export default class MainMenuScene extends Phaser.Scene {
         const panelWidth = Math.max(110, options.panelWidth ?? PASSIVE_INFO_PANEL_MAX_WIDTH);
         const tooltipPadding = compact ? 8 : 10;
         const tooltipTextStyle = {
-            fontFamily: 'monospace',
+            fontFamily: MENU_TEXT_FONT_FAMILY,
             fontSize: compact ? '9px' : '10px',
             color: '#fff3cf',
             align: 'left',
             stroke: '#000000',
-            strokeThickness: 2,
+            strokeThickness: 1,
             wordWrap: { width: panelWidth - tooltipPadding * 2, useAdvancedWrap: true }
         };
 
@@ -1278,7 +1741,7 @@ export default class MainMenuScene extends Phaser.Scene {
             return createPixelText(this, x, y, '?', {
                 fontSize: `${Math.max(20, Math.floor(displaySize * 0.55))}px`,
                 color: '#fff1c9',
-                strokeThickness: 4
+                strokeThickness: 2
             }).setOrigin(0.5);
         }
         return this.add.sprite(x, y, atlasKey, frameName)
@@ -1305,13 +1768,18 @@ export default class MainMenuScene extends Phaser.Scene {
             color: selected ? SHOP_HUB_COLORS.title : SHOP_HUB_COLORS.dimText,
             strokeThickness: 2
         });
+        // Keep map names consistent with other UI text that uses extra padding/resolution to avoid clipped glyph edges.
+        const isMobileViewport = (this.scale?.width ?? window?.innerWidth ?? 0) < 640;
+        const mapLabelPadding = isMobileViewport ? { x: 10, y: 8 } : { x: 8, y: 6 };
+        label?.setPadding?.(mapLabelPadding.x, mapLabelPadding.y);
+        label?.setResolution?.(2);
         const initials = definition?.label?.split(' ').map(part => part[0]).join('').slice(0, 2) ?? mapKey.slice(0, 2).toUpperCase();
         const icon = hasIconTexture
             ? this.add.image(0, 8, iconTextureKey).setDisplaySize(size - 28, size - 42).setOrigin(0.5)
             : createPixelText(this, 0, 8, initials, {
                 fontSize: size <= 120 ? '26px' : '30px',
                 color: '#fff1c9',
-                strokeThickness: 4
+                strokeThickness: 2
             });
         const hitArea = this.add.rectangle(0, 0, size, size, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
         hitArea.on('pointerdown', () => {
@@ -1348,13 +1816,13 @@ export default class MainMenuScene extends Phaser.Scene {
             : createPixelText(this, -width / 2 + 42, -height / 2 + 42, '?', {
                 fontSize: '18px',
                 color: SHOP_HUB_COLORS.title,
-                strokeThickness: 3
+                strokeThickness: 1
             });
         const title = createPixelText(this, -width / 2 + 84, -height / 2 + 24, translateText(this, upgrade.label), {
             fontSize: '11px',
             color: SHOP_HUB_COLORS.title,
             originX: 0,
-            strokeThickness: 3
+            strokeThickness: 1
         });
         const maxText = createPixelText(this, -width / 2 + 84, -height / 2 + 44, t(this, 'max_value', {
             value: translateText(this, upgrade.maxText)
@@ -1372,7 +1840,7 @@ export default class MainMenuScene extends Phaser.Scene {
         const levelText = createPixelText(this, width / 2 - 44, -height / 2 + 25, `${level}/${maxLevel}`, {
             fontSize: '10px',
             color: isMaxed ? '#e9ffd7' : SHOP_HUB_COLORS.title,
-            strokeThickness: 3
+            strokeThickness: 1
         });
 
         const progressY = -height / 2 + 56;
@@ -1395,7 +1863,7 @@ export default class MainMenuScene extends Phaser.Scene {
             fontSize: '10px',
             color: SHOP_HUB_COLORS.text,
             originX: 0,
-            strokeThickness: 3
+            strokeThickness: 1
         });
         const nextText = createPixelText(this, -width / 2 + 16, 26, isMaxed ? t(this, 'fully_upgraded') : t(this, 'next_value', {
             value: formatMetaUpgradeValue(upgrade, nextValue)
@@ -1403,7 +1871,7 @@ export default class MainMenuScene extends Phaser.Scene {
             fontSize: '10px',
             color: isMaxed ? '#fff4d0' : '#a7e6b8',
             originX: 0,
-            strokeThickness: 3
+            strokeThickness: 1
         });
         const hintText = createPixelText(this, -width / 2 + 16, 46, translateText(this, upgrade.bonusText), {
             fontSize: '9px',
@@ -1423,7 +1891,7 @@ export default class MainMenuScene extends Phaser.Scene {
         }), {
             fontSize: '10px',
             color: isMaxed ? '#e9ffd7' : canBuy ? '#fff1c9' : '#e4c0c0',
-            strokeThickness: 3
+            strokeThickness: 1
         });
         const statusText = createPixelText(
             this,
@@ -1491,7 +1959,7 @@ export default class MainMenuScene extends Phaser.Scene {
                 return;
             }
             if (keyCode === codes.ENTER) {
-                if (isCharacterUnlocked(this, this.selectedCharacterKey)) {
+                if (this.isCharacterAvailable(this.selectedCharacterKey)) {
                     this.setMode('maps');
                 } else {
                     if (getCharacterUnlockType(this.selectedCharacterKey) === 'dynamon') {
@@ -1677,6 +2145,9 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     setMode(mode) {
+        if (mode !== 'badges') {
+            this.selectedBadgeId = null;
+        }
         this.mode = mode;
         this.render();
     }
@@ -1728,7 +2199,7 @@ export default class MainMenuScene extends Phaser.Scene {
 
     purchaseCharacterUnlock(characterKey) {
         const key = String(characterKey ?? '').trim();
-        if (!key || isCharacterUnlocked(this, key)) return true;
+        if (!key || this.isCharacterAvailable(key)) return true;
         if (getCharacterUnlockType(key) !== 'dynamon') return false;
         const unlockCost = getCharacterUnlockCost(key);
         if ((getMetaProgress(this).dynamon ?? 0) < unlockCost) {
@@ -1742,8 +2213,8 @@ export default class MainMenuScene extends Phaser.Scene {
     }
 
     startGame() {
-        if (!isCharacterUnlocked(this, this.selectedCharacterKey)) return;
-        this.debugMode = DEBUG_MODE_ENABLED && this.debugMode === true;
+        this.debugMode = isDebugMenuEnabled() && this.debugMode === true;
+        if (!this.isCharacterAvailable(this.selectedCharacterKey)) return;
         this.registry.set('selectedCharacterKey', this.selectedCharacterKey);
         this.registry.set('selectedMapKey', this.selectedMapKey);
         this.registry.set('debugMode', this.debugMode);

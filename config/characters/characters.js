@@ -14,7 +14,8 @@ export const CHARACTER_CONFIG = {
             hp: -25,
             skillRange: 40
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     knight: createCharacterConfig({
         label: 'Knight',
@@ -42,7 +43,8 @@ export const CHARACTER_CONFIG = {
             moveSpeed: -5,
             dodge: 0.2
         },
-        size: { width: 22, height: 22 }
+        size: { width: 31, height: 31 },
+        hitboxSize: { width: 62, height: 62 }
     }),
     aqua: createCharacterConfig({
         label: 'Aqua',
@@ -56,7 +58,8 @@ export const CHARACTER_CONFIG = {
         statsBonus: {
             hp: 40
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     radian: createCharacterConfig({
         label: 'Radian',
@@ -73,7 +76,8 @@ export const CHARACTER_CONFIG = {
         statsBonus: {
             hp: 5
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     frost: createCharacterConfig({
         label: 'Frost',
@@ -87,7 +91,8 @@ export const CHARACTER_CONFIG = {
         statsBonus: {
             moveSpeed: 3
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     witch: createCharacterConfig({
         label: 'Witch',
@@ -109,7 +114,8 @@ export const CHARACTER_CONFIG = {
             effectChance: 0.2,
             effectDamageMultiplier: 0.1
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     asian_dragon: createCharacterConfig({
         label: 'Asian Dragon',
@@ -127,7 +133,8 @@ export const CHARACTER_CONFIG = {
             hp: -25,
             moveSpeed: 7
         },
-        size: { width: 30, height: 25 }
+        size: { width: 42, height: 35 },
+        hitboxSize: { width: 84, height: 70 }
     }),
     bodoi: createCharacterConfig({
         label: 'Bodoi',
@@ -142,7 +149,8 @@ export const CHARACTER_CONFIG = {
             hp: -20,
             moveSpeed: 7
         },
-        size: { width: 20, height: 23 }
+        size: { width: 28, height: 32 },
+        hitboxSize: { width: 56, height: 64 }
     }),
     gambler: createCharacterConfig({
         label: 'Gambler',
@@ -158,7 +166,8 @@ export const CHARACTER_CONFIG = {
             moveSpeed: 5,
             critChance: 0.08
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     raiji: createCharacterConfig({
         label: 'Raiji',
@@ -176,7 +185,8 @@ export const CHARACTER_CONFIG = {
             critChance: 0.02,
             shockChainCount: 1
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     warden: createCharacterConfig({
         label: 'Warden',
@@ -192,7 +202,8 @@ export const CHARACTER_CONFIG = {
             armor: 1,
             moveSpeed: -2
         },
-        size: { width: 20, height: 20 }
+        size: { width: 28, height: 28 },
+        hitboxSize: { width: 56, height: 56 }
     }),
     werewolf: createCharacterConfig({
         label: 'Werewolf',
@@ -216,7 +227,8 @@ export const CHARACTER_CONFIG = {
             moveSpeed: 2,
             critChance: -0.6
         },
-        size: { width: 25, height: 25 }
+        size: { width: 35, height: 35 },
+        hitboxSize: { width: 70, height: 70 }
     }),
     assasin: createCharacterConfig({
         label: 'Assasin',
@@ -247,7 +259,8 @@ export const CHARACTER_CONFIG = {
             moveSpeed: 10,
             critChance: 0.1
         },
-        size: { width: 20, height: 22 }
+        size: { width: 28, height: 31 },
+        hitboxSize: { width: 56, height: 62 }
     })
 };
 

@@ -100,7 +100,7 @@ export function getScenarioWavePlan(scenario, waveNumber) {
     return null;
 }
 
-export function getScenarioWaveDurationSeconds(scenario, waveNumber, fallbackSeconds = 45) {
+export function getScenarioWaveDurationSeconds(scenario, waveNumber, fallbackSeconds = 50) {
     const wavePlans = Array.isArray(scenario?.wavePlans) ? scenario.wavePlans : [];
     if (!wavePlans.length) return fallbackSeconds;
     const index = Math.max(0, Math.round(waveNumber) - 1);

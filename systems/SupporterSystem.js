@@ -140,11 +140,11 @@ export default class SupporterSystem {
         pulse.setDepth(1004);
         pulse.setStrokeStyle(2, options.glowColor ?? 0xffffff, 0.85);
         pulse.setBlendMode(Phaser.BlendModes.ADD);
+        const pulseBaseRadius = pulse.radius;
         this.scene?.tweens?.add?.({
             targets: pulse,
             alpha: 0,
-            scaleX: 1.8,
-            scaleY: 1.8,
+            radius: pulseBaseRadius * 1.8,
             duration: 220,
             ease: 'Quad.easeOut',
             onComplete: () => pulse.destroy()

@@ -217,7 +217,6 @@ export function spawnDashAttackTelegraph(enemy, targetPoint) {
     enemy.dashAttackTelegraphTween = enemy.scene.tweens?.add({
         targets: [alert],
         alpha: { from: 0.45, to: 1 },
-        scale: { from: 0.92, to: 1.08 },
         duration: 260,
         yoyo: true,
         repeat: -1,
@@ -277,4 +276,3 @@ export function spawnBullet(enemy, x, y, dirX, dirY, options = {}) {
     }
     enemy.scene?.spawnEnemyProjectileDirection?.(enemy, x, y, normalized.x, normalized.y, options);
 }
-

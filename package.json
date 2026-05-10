@@ -1,14 +1,15 @@
 {
   "name": "rune-pixel-survivors",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "private": true,
   "description": "Rune Pixel Survivors mobile wrapper and build scripts",
   "scripts": {
     "build:mobile-web": "node scripts/build-mobile-web.mjs",
+    "build:mobile-web:debug": "node scripts/build-mobile-web.mjs --variant debug",
     "cap:sync": "npm run build:mobile-web && npx cap sync",
     "cap:sync:android": "npm run build:mobile-web && npx cap sync android",
     "cap:open:android": "npx cap open android",
-    "apk:debug": "npm run build:mobile-web && npx cap sync android && cd android && ./gradlew assembleDebug"
+    "apk:debug": "npm run build:mobile-web:debug && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^7.1.1",

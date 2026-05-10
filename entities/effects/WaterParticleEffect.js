@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const WATER_PARTICLE_KEY = 'water_particle_fx';
 
 const DEFAULT_CONFIG = {
@@ -7,11 +9,10 @@ const DEFAULT_CONFIG = {
     tertiaryTint: 0x2fa9ff,
     foamTint: 0xf2ffff,
     speed: { min: 18, max: 42 },
-    scale: { start: 1.55, end: 0.28 },
-    alpha: { start: 0.68, end: 0 },
+    alpha: { start: 0.45, end: 0 },
     lifespan: 420,
-    frequency: 12,
-    quantity: 7,
+    frequency: 14,
+    quantity: 5,
     followOffset: 22,
     spread: 16,
     radialDrift: 14,
@@ -64,13 +65,12 @@ export default class WaterParticleEffect {
             quantity: this.config.quantity,
             speedX: { min: -this.config.speed.max, max: this.config.speed.max },
             speedY: { min: -this.config.speed.max, max: this.config.speed.max },
-            scale: this.config.scale,
             alpha: this.config.alpha,
             blendMode: Phaser.BlendModes.SCREEN,
             tint: [this.config.foamTint, this.config.tint, this.config.secondaryTint, this.config.tertiaryTint],
             emitting: true
         });
-        this.emitter.setDepth((skill.depth ?? 0) + (this.config.depthOffset ?? 0));
+        this.emitter.setDepth(resolveEffectDepth(skill.depth, this.config.depthOffset ?? 0, { maxDepth: 55, fallbackDepth: 30 }));
     }
 
     update() {

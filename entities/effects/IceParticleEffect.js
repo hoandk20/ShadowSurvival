@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const ICE_PARTICLE_KEY = 'ice_particle_fx';
 
 const DEFAULT_CONFIG = {
@@ -5,11 +7,10 @@ const DEFAULT_CONFIG = {
     tint: 0xb8f4ff,
     secondaryTint: 0x7cdfff,
     speed: { min: 10, max: 28 },
-    scale: { start: 0.8, end: 0 },
-    alpha: { start: 0.82, end: 0 },
+    alpha: { start: 0.62, end: 0 },
     lifespan: 220,
-    frequency: 16,
-    quantity: 3,
+    frequency: 18,
+    quantity: 2,
     followOffset: 12,
     spread: 5
 };
@@ -39,13 +40,12 @@ export default class IceParticleEffect {
             quantity: this.config.quantity,
             speedX: { min: -this.config.speed.max, max: this.config.speed.max },
             speedY: { min: -this.config.speed.max, max: this.config.speed.max },
-            scale: this.config.scale,
             alpha: this.config.alpha,
             blendMode: Phaser.BlendModes.ADD,
             tint: [this.config.tint, this.config.secondaryTint],
             emitting: true
         });
-        this.emitter.setDepth((skill.depth ?? 0) + (this.config.depthOffset ?? 0));
+        this.emitter.setDepth(resolveEffectDepth(skill.depth, this.config.depthOffset ?? 0, { maxDepth: 55, fallbackDepth: 30 }));
     }
 
     update() {

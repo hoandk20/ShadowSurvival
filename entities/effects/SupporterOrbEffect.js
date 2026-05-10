@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 export default class SupporterOrbEffect {
     constructor(scene, orb, options = {}) {
         this.scene = scene;
@@ -12,13 +14,13 @@ export default class SupporterOrbEffect {
         if (!this.scene || !this.orb?.active) return;
         if ((time - this.lastTrailAt) < this.trailIntervalMs) return;
         this.lastTrailAt = time;
-        const puff = this.scene.add.circle(this.orb.x, this.orb.y, 2, this.trailColor, 0.65);
-        puff.setDepth((this.orb.depth ?? 40) - 1);
+        const puff = this.scene.add.circle(this.orb.x, this.orb.y, 2, this.trailColor, 0.45);
+        puff.setDepth(resolveEffectDepth(this.orb.depth, -1, { maxDepth: 55, fallbackDepth: 40 }));
+        const puffBaseRadius = puff.radius;
         this.scene.tweens.add({
             targets: puff,
             alpha: 0,
-            scaleX: 0.25,
-            scaleY: 0.25,
+            radius: puffBaseRadius * 0.25,
             duration: 180,
             onComplete: () => puff.destroy()
         });
@@ -26,13 +28,13 @@ export default class SupporterOrbEffect {
 
     spawnLaunchPulse() {
         if (!this.scene || !this.orb) return;
-        const pulse = this.scene.add.circle(this.orb.x, this.orb.y, 5, this.burstColor, 0.4);
-        pulse.setDepth((this.orb.depth ?? 40) - 1);
+        const pulse = this.scene.add.circle(this.orb.x, this.orb.y, 5, this.burstColor, 0.28);
+        pulse.setDepth(resolveEffectDepth(this.orb.depth, -1, { maxDepth: 55, fallbackDepth: 40 }));
+        const pulseBaseRadius = pulse.radius;
         this.scene.tweens.add({
             targets: pulse,
             alpha: 0,
-            scaleX: 1.8,
-            scaleY: 1.8,
+            radius: pulseBaseRadius * 1.8,
             duration: 180,
             onComplete: () => pulse.destroy()
         });
@@ -42,15 +44,15 @@ export default class SupporterOrbEffect {
         if (!this.scene) return;
         for (let index = 0; index < 5; index += 1) {
             const angle = (Math.PI * 2 * index) / 5;
-            const spark = this.scene.add.circle(x, y, 2, this.burstColor, 0.95);
-            spark.setDepth((this.orb?.depth ?? 40) + 1);
+            const spark = this.scene.add.circle(x, y, 2, this.burstColor, 0.75);
+            spark.setDepth(resolveEffectDepth(this.orb?.depth, 1, { maxDepth: 55, fallbackDepth: 40 }));
+            const sparkBaseRadius = spark.radius;
             this.scene.tweens.add({
                 targets: spark,
                 x: x + Math.cos(angle) * 12,
                 y: y + Math.sin(angle) * 12,
                 alpha: 0,
-                scaleX: 0.35,
-                scaleY: 0.35,
+                radius: sparkBaseRadius * 0.35,
                 duration: 220,
                 ease: 'Quad.easeOut',
                 onComplete: () => spark.destroy()

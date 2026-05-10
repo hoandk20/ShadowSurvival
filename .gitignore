@@ -8,6 +8,7 @@ npm-debug.log*
 # Local environment overrides
 .env
 .env.*
+BACKUP_SIGNING_INFO.txt
 
 # Android / Gradle
 android/

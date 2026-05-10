@@ -100,8 +100,8 @@ const RAW_SKILL_CONFIG = {
         // Base damage is distributed across ticks (via zoneDamageRatio and zoneTickIntervalMs).
         damage: 24,
         duration: 1500,
-        cooldown: 2300,
-        zoneRadius: 130,
+        cooldown: 1640,
+        zoneRadius: 182,
         zoneDurationMs: 1600,
         zoneTickIntervalMs: 400,
         zoneDamageRatio: 0.3,
@@ -128,8 +128,8 @@ const RAW_SKILL_CONFIG = {
         hitboxHeight: 1,
         damage: 20,
         duration: 1500,
-        cooldown: 2200,
-        zoneRadius: 128,
+        cooldown: 1570,
+        zoneRadius: 179,
         zoneDurationMs: 1600,
         zoneTickIntervalMs: 320,
         zoneDamageRatio: 0.28,
@@ -170,10 +170,10 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 13,
         duration: 300,
-        cooldown: 1200,
+        cooldown: 860,
         summonLifetimeMs: 20000,
-        hitboxWidth: 10,
-        hitboxHeight: 10,
+        hitboxWidth: 14,
+        hitboxHeight: 14,
         playAnimation: false,
         visibleDuringEffect: false,
         tags: ['summon', 'ghost']
@@ -210,9 +210,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 14,
         duration: 300,
-        cooldown: 1000,
-        hitboxWidth: 60,
-        hitboxHeight: 30,
+        cooldown: 715,
+        hitboxWidth: 84,
+        hitboxHeight: 42,
         playAnimation: false,
         visibleDuringEffect: false,
         statusEffects: [
@@ -224,7 +224,7 @@ const RAW_SKILL_CONFIG = {
             }
         ],
         chainCount: 0,
-        chainRadius: 180,
+        chainRadius: 252,
         chainInitialDamageRatio: 0.75,
         chainDamageDecayFactor: 0.75,
         chainMinimumDamageRatio: 0.3,
@@ -248,7 +248,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 6
         },
         projectile: {
-            speed: 400,
+            speed: 560,
             range: 140,
             alignWithMovement: false,
             destroyOnHit: true,
@@ -271,9 +271,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 16,
         duration: 800,
-        cooldown: 1400,
-        hitboxWidth: 20,
-        hitboxHeight: 8,
+        cooldown: 1000,
+        hitboxWidth: 28,
+        hitboxHeight: 11,
         critical: {
             chance: 0.25,
             multiplier: 1.4,
@@ -288,7 +288,7 @@ const RAW_SKILL_CONFIG = {
             autoAim: {
                 enabled: true,
                 distinctTargets: true,
-                burstInterval: 300
+                burstInterval: 215
             }
         },
         objects: {
@@ -297,7 +297,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 800,
+            speed: 1120,
             range: 140,
             alignWithMovement: true,
             destroyOnHit: true
@@ -316,9 +316,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 22,
         duration: 1600,
-        cooldown: 1000,
-        hitboxWidth: 40,
-        hitboxHeight: 15,
+        cooldown: 715,
+        hitboxWidth: 56,
+        hitboxHeight: 21,
         critical: {
             chance: 0.25,
             multiplier: 1.75,
@@ -336,7 +336,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 260,
+            speed: 365,
             range: 120,
             alignWithMovement: true,
             destroyOnHit: true
@@ -359,15 +359,15 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 18,
         duration: 10000,
-        cooldown: 1800,
-        hitboxWidth: 20,
-        hitboxHeight: 20,
+        cooldown: 1285,
+        hitboxWidth: 28,
+        hitboxHeight: 28,
         detentionMark: {
             enabled: true,
             markEffectKey: 'mark',
             markDurationMs: 6000,
             rootDurationMs: 550,
-            explosionRadius: 38,
+            explosionRadius: 53,
             explosionDamageRatio: 0.4,
             explosionTint: '#ff9a4d'
         },
@@ -398,7 +398,7 @@ const RAW_SKILL_CONFIG = {
             autoAim: {
                 enabled: true,
                 distinctTargets: false,
-                burstInterval: 300
+                burstInterval: 215
             }
         },
         objects: {
@@ -406,7 +406,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 3
         },
         projectile: {
-            speed: 240,
+            speed: 336,
             range: 130,
             alignWithMovement: true,
             destroyOnHit: true
@@ -433,13 +433,13 @@ const RAW_SKILL_CONFIG = {
         ],
         damage: 22,
         duration: 1800,
-        cooldown: 2500,
-        hitboxWidth: 30,
-        hitboxHeight: 20,
-        onHitExplosionRadius: 42,
+        cooldown: 1785,
+        hitboxWidth: 42,
+        hitboxHeight: 28,
+        onHitExplosionRadius: 59,
         onHitExplosionDamageRatio: 0.3,
         onHitExplosionTint: '#ff9a4d',
-        onHitBurnCloudRadius: 54,
+        onHitBurnCloudRadius: 76,
         onHitBurnCloudDurationMs: 1500,
         onHitBurnDurationMs: 2200,
         critical: {
@@ -456,7 +456,7 @@ const RAW_SKILL_CONFIG = {
             autoAim: {
                 enabled: true,
                 distinctTargets: true,
-                burstInterval: 300
+                burstInterval: 215
             }
         },
         objects: {
@@ -464,7 +464,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 150,
+            speed: 210,
             range: 140,
             alignWithMovement: true,
             destroyOnHit: true
@@ -482,9 +482,9 @@ const RAW_SKILL_CONFIG = {
         effectKey: 'codeProjectile',
         damage: 15,
         duration: 1800,
-        cooldown: 3000,
-        hitboxWidth: 10,
-        hitboxHeight: 10,
+        cooldown: 2140,
+        hitboxWidth: 14,
+        hitboxHeight: 14,
         critical: {
             chance: 0.15,
             multiplier: 2,
@@ -498,7 +498,7 @@ const RAW_SKILL_CONFIG = {
             homing: false,
             autoAim: {
                 enabled: true,
-                burstInterval: 200
+                burstInterval: 145
             }
         },
         objects: {
@@ -506,7 +506,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 8
         },
         projectile: {
-            speed: 500,
+            speed: 700,
             range: 140,
             alignWithMovement: true,
             destroyOnHit: true,
@@ -532,9 +532,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 18,
         duration: 8000,
-        cooldown: 2000,
-        hitboxWidth: 12,
-        hitboxHeight: 12,
+        cooldown: 1430,
+        hitboxWidth: 17,
+        hitboxHeight: 17,
         retargetBurstEffect: {
             enabled: true,
             coreColor: 0xf6f5c2,
@@ -567,7 +567,7 @@ const RAW_SKILL_CONFIG = {
             }
         },
         projectile: {
-            speed: 400,
+            speed: 560,
             range: 145,
             alignWithMovement: true,
             destroyOnHit: true,
@@ -602,9 +602,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 18,
         duration: 1800,
-        cooldown: 1500,
-        hitboxWidth: 10,
-        hitboxHeight: 15,
+        cooldown: 1070,
+        hitboxWidth: 14,
+        hitboxHeight: 21,
         critical: {
             chance: 0.15,
             multiplier: 2,
@@ -614,14 +614,14 @@ const RAW_SKILL_CONFIG = {
     claw: {
         label: 'Claw',
         category: 'melee',
-        meleeRange: 34,
+        meleeRange: 48,
         castGap: 22,
         visibleDuringEffect: false,
         damage: 22,
         duration: 1200,
-        cooldown: 1200,
-        hitboxWidth: 20,
-        hitboxHeight: 40,
+        cooldown: 860,
+        hitboxWidth: 28,
+        hitboxHeight: 56,
         meleeHitEffect: {
             color: 0xff667f,
             glowColor: 0xffd0d6,
@@ -637,14 +637,14 @@ const RAW_SKILL_CONFIG = {
     stab: {
         label: 'Stab',
         category: 'melee',
-        meleeRange: 30,
+        meleeRange: 42,
         castGap: 20,
         visibleDuringEffect: false,
         damage: 18,
         duration: 900,
-        cooldown: 820,
-        hitboxWidth: 18,
-        hitboxHeight: 34,
+        cooldown: 585,
+        hitboxWidth: 25,
+        hitboxHeight: 48,
         meleeHitEffect: {
             color: 0xe8eef7,
             glowColor: 0xffffff,
@@ -668,17 +668,17 @@ const RAW_SKILL_CONFIG = {
         meleeTargetMode: 'arc',
         meleeArcDegrees: 180,
         meleeMaxTargets: Infinity,
-        meleeRange: 38,
+        meleeRange: 53,
         castGap: 24,
         visibleDuringEffect: false,
         damage: 24,
         duration: 1000,
-        cooldown: 1700,
-        hitboxWidth: 44,
-        hitboxHeight: 44,
+        cooldown: 1215,
+        hitboxWidth: 62,
+        hitboxHeight: 62,
         meleeHitEffect: {
             style: 'knightSlash',
-            radius: 30,
+            radius: 42,
             arcDegrees: 180,
             duration: 170,
             particleLifespan: 180,
@@ -710,7 +710,7 @@ const RAW_SKILL_CONFIG = {
             autoAim: {
                 enabled: true,
                 distinctTargets: true,
-                burstInterval: 120
+                burstInterval: 85
             }
         },
         objects: {
@@ -718,7 +718,7 @@ const RAW_SKILL_CONFIG = {
             maxCount: 5
         },
         projectile: {
-            speed: 720,
+            speed: 1008,
             range: 140,
             alignWithMovement: true,
             destroyOnHit: true
@@ -737,9 +737,9 @@ const RAW_SKILL_CONFIG = {
         },
         damage: 18,
         duration: 2000,
-        cooldown: 3000,
-        hitboxWidth: 15,
-        hitboxHeight: 20,
+        cooldown: 2140,
+        hitboxWidth: 21,
+        hitboxHeight: 28,
         critical: {
             chance: 0.25,
             multiplier: 1.7,

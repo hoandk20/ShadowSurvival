@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const COMET_PARTICLE_KEY = 'comet_tail_particle_fx';
 
 const DEFAULT_CONFIG = {
@@ -6,11 +8,10 @@ const DEFAULT_CONFIG = {
     glowTint: 0xffb45c,
     emberTint: 0xff7a45,
     speed: { min: 18, max: 42 },
-    scale: { start: 0.95, end: 0 },
-    alpha: { start: 0.85, end: 0 },
+    alpha: { start: 0.55, end: 0 },
     lifespan: 260,
-    frequency: 18,
-    quantity: 4,
+    frequency: 20,
+    quantity: 3,
     followOffset: 18,
     spread: 8,
     rotateToDirection: false
@@ -42,13 +43,12 @@ export default class CometTailEffect {
             quantity: this.config.quantity,
             speedX: { min: -this.config.speed.max, max: this.config.speed.max },
             speedY: { min: -this.config.speed.max, max: this.config.speed.max },
-            scale: this.config.scale,
             alpha: this.config.alpha,
             blendMode: Phaser.BlendModes.ADD,
             tint: [this.config.coreTint, this.config.glowTint, this.config.emberTint],
             emitting: true
         });
-        this.emitter.setDepth((skill.depth ?? 0) + (this.config.depthOffset ?? 0));
+        this.emitter.setDepth(resolveEffectDepth(skill.depth, this.config.depthOffset ?? 0, { maxDepth: 55, fallbackDepth: 30 }));
     }
 
     update() {

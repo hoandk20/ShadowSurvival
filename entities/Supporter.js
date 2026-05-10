@@ -33,8 +33,8 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
             (this.config.displaySize?.width ?? 30) * SUPPORTER_DISPLAY_SCALE,
             (this.config.displaySize?.height ?? 30) * SUPPORTER_DISPLAY_SCALE
         );
-        this.baseScaleX = this.scaleX;
-        this.baseScaleY = this.scaleY;
+        this.baseDisplayWidth = this.displayWidth;
+        this.baseDisplayHeight = this.displayHeight;
         scene.add.existing(this);
         this.playAnimation('idle');
         this.setRuntimeOverrides();
@@ -250,17 +250,19 @@ export default class Supporter extends Phaser.GameObjects.Sprite {
 
     pulseShot() {
         this.scene?.tweens?.killTweensOf?.(this);
-        this.setScale(this.baseScaleX, this.baseScaleY);
+        const baseWidth = this.baseDisplayWidth ?? this.displayWidth ?? 30;
+        const baseHeight = this.baseDisplayHeight ?? this.displayHeight ?? 30;
+        this.setDisplaySize(baseWidth, baseHeight);
         this.scene?.tweens?.add({
             targets: this,
-            scaleX: this.baseScaleX * 1.12,
-            scaleY: this.baseScaleY * 1.12,
+            displayWidth: baseWidth * 1.12,
+            displayHeight: baseHeight * 1.12,
             duration: 90,
             yoyo: true,
             ease: 'Quad.easeOut',
             onComplete: () => {
                 if (!this.active) return;
-                this.setScale(this.baseScaleX, this.baseScaleY);
+                this.setDisplaySize(baseWidth, baseHeight);
             }
         });
     }

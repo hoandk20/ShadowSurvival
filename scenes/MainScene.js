@@ -32,10 +32,11 @@ import PlayerRunState from '../systems/PlayerRunState.js';
 import TargetingSystem from '../systems/TargetingSystem.js';
 import StatusEffectSystem from '../systems/status/StatusEffectSystem.js';
 import { ensureAudioSettings, installAudioUnlock, isAudioUnlocked, isMusicEnabled, playSfx } from '../utils/audioSettings.js';
-import { addDynamon, bootstrapMetaProgress, getMetaProgress, isCharacterUnlocked, unlockCharacter } from '../utils/metaProgress.js';
+import { addDynamon, bootstrapMetaProgress, getMetaProgress, isCharacterUnlocked, recordRunCompleted, unlockCharacter } from '../utils/metaProgress.js';
 import EnemyProjectile from '../entities/EnemyProjectile.js';
 import GhostSummon from '../entities/summons/GhostSummon.js';
 import { getMetaUpgradeBonuses } from '../config/metaUpgrades.js';
+import BadgeRunSystem from '../systems/BadgeRunSystem.js';
 
 const SPAWN_PADDING = 50;
 const DESPAWN_MARGIN = 150;
@@ -53,6 +54,9 @@ const PRE_SHOP_CARD_SELECTION_REROLL_COST = 10;
 const PRE_SHOP_CARD_SELECTION_MAX_REROLLS = 2;
 const MIN_META_SHOP_REROLL_COST = 6;
 const WAVE_START_DELAY_MS = 2000;
+const GAMEPLAY_BASE_VIEWPORT_WIDTH = 256;
+const GAMEPLAY_BASE_VIEWPORT_HEIGHT = 144;
+const GAMEPLAY_CAMERA_ZOOM = 1;
 
 function createEnemyInstance(scene, x, y, enemyType, options = {}) {
     if (enemyType === 'giant_rock') {
@@ -69,6 +73,10 @@ function createEnemyInstance(scene, x, y, enemyType, options = {}) {
         return new MiniBossEnemy(scene, x, y, enemyType);
     }
     return new Enemy(scene, x, y, enemyType);
+}
+
+function resolveGameplayCameraZoom(scene, isMobileDevice) {
+    return GAMEPLAY_CAMERA_ZOOM;
 }
 
 export default class MainScene extends Phaser.Scene {
@@ -163,7 +171,7 @@ export default class MainScene extends Phaser.Scene {
         this.isTransitioningToMenu = false;
         this.currentWavePlan = null;
         this.currentWaveConfig = null;
-        this.currentWaveDurationSeconds = 45;
+        this.currentWaveDurationSeconds = 50;
         this.currentWaveElapsedMs = 0;
         this.waveEnding = false;
         this.waveSpawnQueue = [];
@@ -178,9 +186,120 @@ export default class MainScene extends Phaser.Scene {
         this.shopRerollsRemaining = 0;
         this.supporterSelectionRerollsRemaining = 0;
         this.preShopCardSelectionRerollsRemaining = 0;
+        this.gameplayTimeMs = 0;
 
         // Keep summon counts stable even if a summon expires while the owning skill is gated by range checks.
         this.ghostSummonMaintainTimerMs = 0;
+
+        // Feedback/readability state
+        this.lastBossHitFeedbackAt = 0;
+        this.lastCriticalHitFeedbackAt = 0;
+        this.comboKillStreakCount = 0;
+        this.comboKillStreakResetTimer = null;
+        this.lastComboKillAt = 0;
+        this.feedbackFlashOverlay = null;
+        this.feedbackTimeScaleRestoreTimer = null;
+        this.feedbackTimeScaleOriginal = null;
+    }
+
+    ensureFeedbackFlashOverlay() {
+        if (this.feedbackFlashOverlay?.active) return;
+        const width = this.scale?.width ?? 0;
+        const height = this.scale?.height ?? 0;
+        if (width <= 0 || height <= 0) return;
+        this.feedbackFlashOverlay = this.add.rectangle(0, 0, width, height, 0xffffff, 0)
+            .setOrigin(0)
+            .setScrollFactor(0)
+            .setDepth(1500);
+        this.feedbackFlashOverlay.setBlendMode?.(Phaser.BlendModes.ADD);
+    }
+
+    flashScreen({ color = 0xffffff, alpha = 0.12, duration = 120 } = {}) {
+        this.ensureFeedbackFlashOverlay();
+        if (!this.feedbackFlashOverlay) return;
+        const safeAlpha = Phaser.Math.Clamp(alpha, 0, 1);
+        const safeDuration = Math.max(1, duration);
+        this.feedbackFlashOverlay.fillColor = color;
+        this.feedbackFlashOverlay.setAlpha(safeAlpha);
+        this.tweens.killTweensOf(this.feedbackFlashOverlay);
+        this.tweens.add({
+            targets: this.feedbackFlashOverlay,
+            alpha: 0,
+            duration: safeDuration,
+            ease: 'Cubic.easeOut'
+        });
+    }
+
+    applyTimeScalePulse(multiplier = 0.75, durationMs = 90) {
+        if (!this.time) return;
+        const original = this.feedbackTimeScaleOriginal ?? (this.time.timeScale || 1);
+        this.feedbackTimeScaleOriginal = original;
+        const clampedMultiplier = Phaser.Math.Clamp(multiplier, 0.05, 1);
+        const targetScale = Math.max(0.01, original * clampedMultiplier);
+        this.time.timeScale = Math.min(this.time.timeScale || 1, targetScale);
+        this.feedbackTimeScaleRestoreTimer?.remove?.(false);
+        this.feedbackTimeScaleRestoreTimer = this.time.delayedCall(Math.max(1, durationMs), () => {
+            if (!this.time) return;
+            this.time.timeScale = this.feedbackTimeScaleOriginal ?? original;
+            this.feedbackTimeScaleOriginal = null;
+            this.feedbackTimeScaleRestoreTimer = null;
+        });
+    }
+
+    registerComboKillForFeedback() {
+        if (!this.time) return;
+        const now = this.time.now ?? 0;
+        const windowMs = 650;
+        const withinWindow = now > 0 && (now - (this.lastComboKillAt ?? 0) <= windowMs);
+        this.comboKillStreakCount = withinWindow ? (this.comboKillStreakCount ?? 0) + 1 : 1;
+        this.lastComboKillAt = now;
+
+        this.comboKillStreakResetTimer?.remove?.(false);
+        this.comboKillStreakResetTimer = this.time.delayedCall(windowMs, () => {
+            this.comboKillStreakCount = 0;
+            this.comboKillStreakResetTimer = null;
+            this.lastComboKillAt = 0;
+        });
+
+        if ((this.comboKillStreakCount ?? 0) >= 2) {
+            this.triggerComboKillFeedback(this.comboKillStreakCount);
+        }
+    }
+
+    triggerComboKillFeedback(count = 2) {
+        const safeCount = Math.max(2, Math.floor(count));
+        const comboTier = Math.min(10, safeCount);
+        const shakeDuration = 90 + (comboTier * 10);
+        const shakeIntensity = 0.003 + (comboTier * 0.00055);
+        this.cameras?.main?.shake?.(shakeDuration, Math.min(0.012, shakeIntensity), true);
+        this.flashScreen({ color: 0x8bf1ff, alpha: Math.min(0.18, 0.07 + comboTier * 0.01), duration: 140 });
+
+        const width = this.scale?.width ?? 0;
+        const height = this.scale?.height ?? 0;
+        if (width <= 0 || height <= 0) return;
+
+        const label = `x${safeCount}`;
+        const fontSize = safeCount >= 6 ? '18px' : '16px';
+        const comboText = this.add.text(Math.round(width * 0.5), Math.round(height * 0.24), label, {
+            fontSize,
+            fontFamily: '"Press Start 2P", "PixelFont", monospace',
+            color: safeCount >= 6 ? '#fff4d0' : '#d9f6ff',
+            stroke: '#000000',
+            strokeThickness: 4,
+            align: 'center'
+        }).setOrigin(0.5);
+        comboText.setScrollFactor(0);
+        comboText.setDepth(1490);
+        comboText.setResolution?.(2);
+
+        this.tweens.add({
+            targets: comboText,
+            y: comboText.y - 10,
+            alpha: 0,
+            duration: 420,
+            ease: 'Cubic.easeOut',
+            onComplete: () => comboText.destroy()
+        });
     }
 
     preload() {
@@ -189,9 +308,10 @@ export default class MainScene extends Phaser.Scene {
         preloadAllAssets(this);
     }
 
-    create() {
+	    create() {
         const width = this.scale.width;
         const height = this.scale.height;
+        this.gameplayTimeMs = 0;
         this.isGameOver = false;
         this.isTransitioningToMenu = false;
         this.debugMode = this.registry.get('debugMode') === true;
@@ -208,15 +328,19 @@ export default class MainScene extends Phaser.Scene {
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.input.keyboard.on('keydown-ESC', this.handlePauseToggle, this);
         this.setupTouchControls();
+        this.applyGameplaySpeedSettings();
 
         // Create all animations from config
         createAllAnimations(this);
-        const selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
-        this.stageScenario = getStageScenario(selectedMapKey);
-        const scenarioWavePlans = Array.isArray(this.stageScenario?.wavePlans) ? this.stageScenario.wavePlans : [];
-        if (scenarioWavePlans.length > 0) {
-            this.maxWaveCount = scenarioWavePlans.length;
-        }
+	        const selectedMapKey = this.registry.get('selectedMapKey') ?? DEFAULT_MAP_KEY;
+	        this.stageScenario = getStageScenario(selectedMapKey);
+	        this.blackWidowCameoWave = selectedMapKey === 'maprock_field' ? Phaser.Math.Between(2, 3) : null;
+	        this.blackWidowCameoShown = false;
+	        this.blackWidowCameoActive = false;
+	        const scenarioWavePlans = Array.isArray(this.stageScenario?.wavePlans) ? this.stageScenario.wavePlans : [];
+	        if (scenarioWavePlans.length > 0) {
+	            this.maxWaveCount = scenarioWavePlans.length;
+	        }
         const mapDef = this.mapManager.loadMap(selectedMapKey);
         this.audioUnlockCleanup = installAudioUnlock(this, () => {
             if (!this.scene.isActive('MainScene')) return;
@@ -225,7 +349,7 @@ export default class MainScene extends Phaser.Scene {
         if (mapDef) {
             this.mapManager.applyWorldBounds();
             const isMobileDevice = Boolean(this.sys.game.device.os.android || this.sys.game.device.os.iOS);
-            this.cameras.main.setZoom(isMobileDevice ? 1.3 : 2);
+            this.cameras.main.setZoom(resolveGameplayCameraZoom(this, isMobileDevice));
             this.syncMapMusic(mapDef);
         }
         this.cameras.main.setBackgroundColor('#808080');
@@ -269,6 +393,7 @@ export default class MainScene extends Phaser.Scene {
             sparkDuration: { min: 120, max: 260 }
         });
         this.skillBehaviorPipeline = new SkillBehaviorPipeline(this);
+        this.badgeRunSystem = new BadgeRunSystem(this);
         this.supporterSystem = new SupporterSystem(this);
         this.lootSystem = new LootSystem(this);
         this.refreshPlayerInteractionBindings();
@@ -281,7 +406,7 @@ export default class MainScene extends Phaser.Scene {
         this.scene.bringToTop('HudScene');
 
         this.cameraFollowTarget = this.add.zone(this.player.x, this.player.y, 1, 1);
-        this.cameras.main.startFollow(this.cameraFollowTarget, false, 1, 1);
+        this.cameras.main.startFollow(this.cameraFollowTarget, true, 1, 1);
         this.cameras.main.setDeadzone(0, 0);
 
         this.enemies = this.physics.add.group();
@@ -294,6 +419,48 @@ export default class MainScene extends Phaser.Scene {
         this.initializeEnemySpawnStatus();
         this.maxEnemiesOnMap = 25;
         this.events.on('enemy-dead', this.handleEnemyDeath, this);
+        this.enemyDamagedBadgeHandler = (payload) => {
+            const enemy = payload?.enemy ?? null;
+            if (!enemy || !enemy.active) return;
+            const damageTaken = Math.max(0, Number(payload?.damageTaken ?? 0) || 0);
+            const isCritical = payload?.isCritical === true;
+            const isBossTarget = Boolean(enemy.isBoss || enemy.isMiniBoss || enemy.isFinalBoss);
+            const now = this.time?.now ?? 0;
+
+            // Crit => feedback (boss crit is stronger than normal enemy crit).
+            if (isCritical && (now - (this.lastCriticalHitFeedbackAt ?? 0) >= 120)) {
+                this.lastCriticalHitFeedbackAt = now;
+                this.playerHitEffect?.spawn?.(enemy);
+                if (isBossTarget) {
+                    this.cameras?.main?.shake?.(140, 0.01, true);
+                    this.applyTimeScalePulse(0.7, 110);
+                } else {
+                    this.cameras?.main?.shake?.(90, 0.004, true);
+                    this.applyTimeScalePulse(0.88, 70);
+                }
+                this.events.emit('heavy-hit-effect', { enemy, isCritical: true, damageTaken });
+                return;
+            }
+
+            // Boss hit => slow + flash (throttled).
+            if (isBossTarget && (now - (this.lastBossHitFeedbackAt ?? 0) >= 420)) {
+                this.lastBossHitFeedbackAt = now;
+                this.cameras?.main?.shake?.(120, 0.006, true);
+                this.applyTimeScalePulse(0.6, 140);
+                this.flashScreen({ color: 0xffa24a, alpha: 0.14, duration: 150 });
+                this.events.emit('heavy-hit-effect', { enemy, isCritical: false, damageTaken, isBossHit: true });
+                return;
+            }
+
+            // Big non-crit hit feedback (rare).
+            if (damageTaken >= 150) {
+                this.playerHitEffect?.spawn?.(enemy);
+                this.cameras?.main?.shake?.(110, 0.005, true);
+                this.applyTimeScalePulse(0.78, 90);
+                this.events.emit('heavy-hit-effect', { enemy, isCritical: false, damageTaken });
+            }
+        };
+        this.events.on('enemy-damaged', this.enemyDamagedBadgeHandler);
         this.resetWaveProgress(1);
         this.scheduleWaveStart();
 
@@ -535,8 +702,11 @@ export default class MainScene extends Phaser.Scene {
         if (this.isChoosingCard) return;
         if (this.isShopOpen) return;
         if (this.isRunComplete) return;
+        const gameplayDelta = (delta ?? 0);
+        this.gameplayTimeMs += gameplayDelta;
+        const gameplayTime = this.gameplayTimeMs;
         if (this.waveSystemEnabled && !this.waveStartPending && !this.waveEnding) {
-            this.currentWaveElapsedMs += delta;
+            this.currentWaveElapsedMs += gameplayDelta;
             if (this.hasCurrentWaveTimedOut()) {
                 this.endCurrentWave('timeout');
                 return;
@@ -549,12 +719,12 @@ export default class MainScene extends Phaser.Scene {
             this.spawnInterval = Math.max(1, Math.round(1000 / currentSpawnRate));
         }
         // Update player
-        this.player.update(time, delta);
+        this.player.update(gameplayTime, gameplayDelta);
         this.applyDebugPlayerSpeedOverride();
         this.applyDebugPlayerHealthOverride();
 
         // Maintain ghost summons so they respawn after expiring (e.g. 20s lifetime) even if the cast is range-gated.
-        this.ghostSummonMaintainTimerMs += (delta ?? 0);
+        this.ghostSummonMaintainTimerMs += gameplayDelta;
         if (this.ghostSummonMaintainTimerMs >= 250) {
             this.ghostSummonMaintainTimerMs = 0;
             const players = this.getActivePlayers();
@@ -574,7 +744,7 @@ export default class MainScene extends Phaser.Scene {
             this.respawnPool -= 1;
             this.spawnNextWaveEnemy();
         }
-        this.spawnTimer += delta;
+        this.spawnTimer += gameplayDelta;
         if (this.debugMode && this.spawnTimer >= this.spawnInterval) {
             this.spawnTimer -= this.spawnInterval;
             if (this.canSpawnMoreEnemies()) {
@@ -589,30 +759,46 @@ export default class MainScene extends Phaser.Scene {
         // Update enemies
         const enemyChildren = this.enemies.getChildren();
         this.enemies.children.each(enemy => {
-            enemy.update(time, delta, this.getActivePlayers(), enemyChildren);
+            enemy.update(gameplayTime, gameplayDelta, this.getActivePlayers(), enemyChildren);
         });
         this.enemyProjectiles.children.each((projectile) => {
-            projectile?.update?.(time, delta, this.getActivePlayers());
+            projectile?.update?.(gameplayTime, gameplayDelta, this.getActivePlayers());
         });
         if (this.summons?.children?.each) {
             this.summons.children.each((summon) => {
                 const desired = summon?.owner?.getSkillObjectCount?.('ghost_summon') ?? 0;
-                summon?.update?.(time, delta, desired);
+                summon?.update?.(gameplayTime, gameplayDelta, desired);
             });
         }
 
         this.skills.children.each(skill => {
             if (skill && typeof skill.update === 'function') {
-                skill.update(time, delta);
+                skill.update(gameplayTime, gameplayDelta);
             }
         });
-        this.supporterSystem?.update?.(time, delta);
-        this.skillHitCheckTimer += delta;
+        this.supporterSystem?.update?.(gameplayTime, gameplayDelta);
+        this.skillHitCheckTimer += gameplayDelta;
         if (this.skillHitCheckTimer >= SKILL_HIT_CHECK_INTERVAL_MS) {
             this.skillHitCheckTimer %= SKILL_HIT_CHECK_INTERVAL_MS;
             this.checkSkillHits();
         }
+        this.badgeRunSystem?.update?.(gameplayTime, gameplayDelta);
         this.updateEnemyCountDisplay();
+    }
+
+    applyGameplaySpeedSettings() {
+        if (this.time) {
+            this.time.timeScale = 1;
+        }
+        if (this.tweens) {
+            this.tweens.timeScale = 1;
+        }
+        if (this.anims) {
+            this.anims.globalTimeScale = 1;
+        }
+        if (this.physics?.world) {
+            this.physics.world.timeScale = 1;
+        }
     }
 
     updateMapBounds() {
@@ -1209,7 +1395,7 @@ export default class MainScene extends Phaser.Scene {
                 this.mapManager.enableObjectCollisions(this.enemies);
                 this.repositionPlayerForCurrentMap();
                 this.updateCameraFollowTarget();
-                this.cameras.main.startFollow(this.cameraFollowTarget ?? this.player, false, 1, 1);
+                this.cameras.main.startFollow(this.cameraFollowTarget ?? this.player, true, 1, 1);
                 this.cameras.main.centerOn(this.cameraFollowTarget?.x ?? this.player.x, this.cameraFollowTarget?.y ?? this.player.y);
                 this.syncMapMusic(mapDef);
             }
@@ -1682,7 +1868,7 @@ export default class MainScene extends Phaser.Scene {
             enemy.applyRuntimeStats?.({
                 maxHealth: Math.max(1, Math.round((enemy.maxHealth ?? 1) * healthMultiplier)),
                 damage: enemy.damage,
-                speed: enemy.speed,
+                speed: enemy.currentStats?.speed ?? enemy.baseStats?.speed ?? enemy.speed,
                 scale: enemy.scaleSize ?? 1
             }, { preserveHealthRatio: false });
             enemy.captureBaseStats?.();
@@ -1728,6 +1914,7 @@ export default class MainScene extends Phaser.Scene {
                 emberDuration: { min: 140, max: 260 }
             });
         }
+        this.events.emit('enemy-spawned', { enemy });
         return enemy;
     }
 
@@ -1763,13 +1950,13 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    resetWaveProgress(waveNumber = 1) {
-        this.currentWaveNumber = Phaser.Math.Clamp(Math.round(waveNumber), 1, this.maxWaveCount);
+	    resetWaveProgress(waveNumber = 1) {
+	        this.currentWaveNumber = Phaser.Math.Clamp(Math.round(waveNumber), 1, this.maxWaveCount);
         this.currentWaveConfig = Array.isArray(this.stageScenario?.wavePlans)
             ? (this.stageScenario.wavePlans[this.currentWaveNumber - 1] ?? null)
             : null;
         this.currentWavePlan = this.buildWavePlanEntries(this.currentWaveNumber);
-        this.currentWaveDurationSeconds = getScenarioWaveDurationSeconds(this.stageScenario, this.currentWaveNumber, 45);
+        this.currentWaveDurationSeconds = getScenarioWaveDurationSeconds(this.stageScenario, this.currentWaveNumber, 50);
         this.currentWaveElapsedMs = 0;
         this.waveEnemyCount = this.currentWavePlan.length || ENEMIES_PER_WAVE;
         this.waveSpawnQueue = this.currentWavePlan.map((entry) => ({
@@ -1782,9 +1969,117 @@ export default class MainScene extends Phaser.Scene {
         this.waveKillCount = 0;
         this.waveShopPending = false;
         this.respawnPool = 0;
-        this.waveStartPending = false;
-        this.waveEnding = false;
-    }
+	        this.waveStartPending = false;
+	        this.waveEnding = false;
+	        this.events.emit('wave-start', { waveNumber: this.currentWaveNumber });
+	        try {
+	            this.stageScenario?.onWaveStart?.(this, { waveNumber: this.currentWaveNumber });
+	        } catch (error) {
+	            console.warn('Scenario onWaveStart hook failed:', error);
+	        }
+	    }
+
+	    playBlackWidowCameo({ dashCount = 10, idleMs = 1000 } = {}) {
+	        if (this.blackWidowCameoShown || this.blackWidowCameoActive || this.isGameOver || this.isRunComplete) return;
+	        this.blackWidowCameoActive = true;
+	        this.blackWidowCameoShown = true;
+
+	        const view = this.cameras?.main?.worldView;
+	        const bounds = view
+	            ? { left: view.x, top: view.y, right: view.x + view.width, bottom: view.y + view.height }
+	            : (this.physics?.world?.bounds ?? { left: 0, top: 0, right: this.scale.width, bottom: this.scale.height });
+	        const paddingX = 48;
+	        const paddingY = 90;
+	        const startX = bounds.left + paddingX;
+	        const startY = Phaser.Math.Clamp(bounds.top + paddingY, bounds.top + 60, bounds.bottom - 160);
+
+	        const widow = this.spawnEnemyAtPosition(startX, startY, 'black_widow', {
+	            ignoreSpawnCap: true,
+	            isBoss: false,
+	            countsTowardWave: false,
+	            statsOverride: { scale: 1 }
+	        });
+	        if (!widow) {
+	            this.blackWidowCameoActive = false;
+	            return;
+	        }
+
+	        widow.isTeaserCameo = true;
+	        widow.isBoss = false;
+	        widow.isFinalBoss = false;
+	        widow.finalBossKey = null;
+	        widow.finalBossConfig = null;
+	        widow.finalBossRoundIndex = 0;
+	        widow.setHealthVisible?.(false);
+	        widow.setAlpha?.(0);
+	        widow.body && (widow.body.enable = false);
+	        widow.playWidowAnimation?.('idle');
+	        this.tweens.add({
+	            targets: widow,
+	            alpha: { from: 0, to: 0.95 },
+	            duration: 140,
+	            ease: 'Sine.easeOut'
+	        });
+
+	        const dashTotal = Phaser.Math.Clamp(Math.round(dashCount), 1, 12);
+	        const yMin = bounds.top + 84;
+	        const yMax = bounds.bottom - 140;
+	        const startLeftX = bounds.left + paddingX;
+	        const endRightX = bounds.right - paddingX;
+	        const patterns = Array.from({ length: dashTotal }, (_unused, index) => {
+	            const laneCount = 5;
+	            const laneIndex = index % laneCount;
+	            const laneT = laneCount <= 1 ? 0.5 : laneIndex / (laneCount - 1);
+	            const baseY = Phaser.Math.Linear(yMin, yMax, laneT);
+	            const wobble = Math.round(Math.sin(index * 1.2) * 10);
+	            const y = Phaser.Math.Clamp(baseY + wobble, yMin, yMax);
+	            const fromLeft = index % 2 === 0;
+	            const startX = fromLeft ? startLeftX : endRightX;
+	            const endX = fromLeft ? endRightX : startLeftX;
+	            return { startX, startY: y, endX, endY: Phaser.Math.Clamp(y + (fromLeft ? 10 : -10), yMin, yMax) };
+	        });
+
+	        const runDashAt = (index = 0) => {
+	            if (!widow?.active) {
+	                this.blackWidowCameoActive = false;
+	                return;
+	            }
+	            const pattern = patterns[index];
+	            if (!pattern || typeof widow.runSingleDashPattern !== 'function') {
+	                widow.destroy?.();
+	                this.blackWidowCameoActive = false;
+	                return;
+	            }
+	            widow.runSingleDashPattern(pattern, () => {
+	                if (!widow?.active) {
+	                    this.blackWidowCameoActive = false;
+	                    return;
+	                }
+	                const nextIndex = index + 1;
+	                if (nextIndex < patterns.length) {
+	                    this.time.delayedCall(120, () => runDashAt(nextIndex));
+	                    return;
+	                }
+	                this.tweens.add({
+	                    targets: widow,
+	                    alpha: { from: widow.alpha ?? 1, to: 0 },
+	                    duration: 160,
+	                    ease: 'Sine.easeIn',
+	                    onComplete: () => {
+	                        widow.destroy?.();
+	                        this.blackWidowCameoActive = false;
+	                    }
+	                });
+	            });
+	        };
+	        this.time.delayedCall(Math.max(0, Math.round(idleMs)), () => {
+	            if (!widow?.active) {
+	                this.blackWidowCameoActive = false;
+	                return;
+	            }
+	            runDashAt(0);
+	        });
+	    }
 
     scheduleWaveStart() {
         if (!this.waveSystemEnabled || this.isGameOver || this.isRunComplete) return;
@@ -2001,6 +2296,7 @@ export default class MainScene extends Phaser.Scene {
                 this.clearTimedOutWaveRemnants();
             });
         }
+        this.events.emit('wave-end', { waveNumber: this.currentWaveNumber, reason });
         this.handleWaveCleared();
     }
 
@@ -2037,6 +2333,8 @@ export default class MainScene extends Phaser.Scene {
     handleRunVictory() {
         if (this.isRunComplete || this.isGameOver) return;
         this.isRunComplete = true;
+        this.events.emit('run-end', { won: true });
+        recordRunCompleted(this, { won: true });
         this.waveShopPending = false;
         this.resetTouchMoveState();
         this.physics.world.pause();
@@ -2072,6 +2370,7 @@ export default class MainScene extends Phaser.Scene {
     handleEnemyDeath({ enemy, source }) {
         if (!enemy) return;
         playSfx(this, 'sfx_enemy_kill', { volume: 0.25 });
+        this.registerComboKillForFeedback();
         const ownerContext = this.getSourceOwnerContext(source);
         const ownerRunState = ownerContext.runState;
         if (ownerRunState) {
@@ -2175,6 +2474,10 @@ export default class MainScene extends Phaser.Scene {
         this.input.off('pointerupoutside', this.handleTouchPointerUp, this);
         this.registry.events?.off?.('changedata-audioSettings', this.handleAudioSettingsChanged, this);
         this.events.off('enemy-dead', this.handleEnemyDeath, this);
+        if (this.enemyDamagedBadgeHandler) {
+            this.events.off('enemy-damaged', this.enemyDamagedBadgeHandler);
+            this.enemyDamagedBadgeHandler = null;
+        }
         this.audioUnlockCleanup?.();
         this.audioUnlockCleanup = null;
         const panel = document.getElementById('debug-panel');
@@ -2204,6 +2507,8 @@ export default class MainScene extends Phaser.Scene {
         this.lootSystem = null;
         this.statusEffectSystem?.destroy?.();
         this.statusEffectSystem = null;
+        this.badgeRunSystem?.destroy?.();
+        this.badgeRunSystem = null;
         this.mapManager?.clearMap?.();
         this.supporterSystem?.destroy?.();
         this.supporterSystem = null;
@@ -2248,6 +2553,19 @@ export default class MainScene extends Phaser.Scene {
         if (!this.touchMoveState?.active || this.touchMoveState.pointerId !== pointer.id) return;
         this.touchMoveState.currentX = pointer.x;
         this.touchMoveState.currentY = pointer.y;
+
+        const dx = this.touchMoveState.currentX - this.touchMoveState.startX;
+        const dy = this.touchMoveState.currentY - this.touchMoveState.startY;
+        const distance = Math.hypot(dx, dy);
+        const maxDistance = Math.max(1, this.touchMoveState.maxDistance ?? 64);
+
+        if (distance > maxDistance) {
+            const overflow = distance - maxDistance;
+            const normalX = dx / distance;
+            const normalY = dy / distance;
+            this.touchMoveState.startX += normalX * overflow;
+            this.touchMoveState.startY += normalY * overflow;
+        }
     }
 
     handleTouchPointerUp(pointer) {
@@ -2396,6 +2714,7 @@ export default class MainScene extends Phaser.Scene {
         if ((this.supporterSelectionRerollsRemaining ?? 0) <= 0) return;
         const rerollCost = this.getSupporterSelectionRerollCost();
         if (!this.player.spendGold?.(rerollCost)) return;
+        this.events.emit('run-reroll', { type: 'supporter', cost: rerollCost });
         this.supporterSelectionRerollsRemaining = Math.max(0, (this.supporterSelectionRerollsRemaining ?? 0) - 1);
         const choices = this.getRandomSupporterChoices(4);
         const hudScene = this.scene.get('HudScene');
@@ -2462,6 +2781,7 @@ export default class MainScene extends Phaser.Scene {
         if ((this.preShopCardSelectionRerollsRemaining ?? 0) <= 0) return;
         const rerollCost = this.getPreShopCardSelectionRerollCost();
         if (!this.player.spendGold?.(rerollCost)) return;
+        this.events.emit('run-reroll', { type: 'pre_shop_card', cost: rerollCost });
         this.preShopCardSelectionRerollsRemaining = Math.max(0, (this.preShopCardSelectionRerollsRemaining ?? 0) - 1);
         const cards = this.getRandomPreShopCardChoices(4);
         const hudScene = this.scene.get('HudScene');
@@ -2497,6 +2817,8 @@ export default class MainScene extends Phaser.Scene {
     handlePlayerDeath() {
         if (this.isGameOver) return;
         this.isGameOver = true;
+        this.events.emit('run-end', { won: false });
+        recordRunCompleted(this, { won: false });
         this.resetTouchMoveState();
         this.physics.world.pause();
         this.scene.pause('HudScene');
@@ -2598,6 +2920,7 @@ export default class MainScene extends Phaser.Scene {
             this.prepareShopStockForNextWave();
         }
         this.ensureShopStock();
+        this.events.emit('shop-open', { reason });
         const hudScene = this.scene.get('HudScene');
         hudScene?.showShopOverlay?.({
             ...this.buildShopOverlayState(),
@@ -2614,6 +2937,7 @@ export default class MainScene extends Phaser.Scene {
         this.endShopTimerPause();
         const hudScene = this.scene.get('HudScene');
         hudScene?.hideShopOverlay?.();
+        this.events.emit('shop-close', {});
         this.spawnTimer = 0;
         const shopReason = this.shopOpenReason;
         this.shopOpenReason = null;
@@ -2733,7 +3057,7 @@ export default class MainScene extends Phaser.Scene {
     prepareShopStockForNextWave(playerOrId = null, runState = null) {
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
-        if (!resolvedRunState || this.debugMode) return;
+        if (!resolvedRunState) return;
         resolvedRunState.shopCurrentRerollCost = this.getBaseShopRerollCost();
         const lockedSet = new Set(resolvedRunState.shopLockedItemIds ?? []);
         resolvedRunState.shopCurrentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
@@ -2910,9 +3234,7 @@ export default class MainScene extends Phaser.Scene {
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
         const lockedIds = new Set(resolvedRunState?.shopLockedItemIds ?? []);
-        const stockIds = this.debugMode
-            ? (resolvedRunState?.shopCurrentStockIds ?? [])
-            : (resolvedRunState?.shopCurrentStockIds ?? []).slice(0, 5);
+        const stockIds = (resolvedRunState?.shopCurrentStockIds ?? []).slice(0, 5);
         const items = stockIds
             .map((itemId) => {
                 const itemConfig = getShopItemConfig(itemId);
@@ -2948,17 +3270,6 @@ export default class MainScene extends Phaser.Scene {
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
         if (!resolvedRunState) return [];
-        if (this.debugMode) {
-            const blocked = new Set([
-                ...this.getUnlockElementShopExcludeIds(context.player),
-                ...getConditionalShopExcludeIds(this.getCurrentSkillEffectKeys(context.player), context.player?.characterKey ?? null)
-            ]);
-            resolvedRunState.shopCurrentStockIds = SHOP_ITEM_CONFIG
-                .filter((item) => !blocked.has(item.id))
-                .map((item) => item.id);
-            resolvedRunState.shopLockedItemIds = [];
-            return resolvedRunState.shopCurrentStockIds;
-        }
         const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
             .slice(0, 5)
             .map((itemId) => (getShopItemConfig(itemId) ? itemId : null));
@@ -3008,6 +3319,7 @@ export default class MainScene extends Phaser.Scene {
         if (!player.spendGold?.(runtimeCost)) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
+        this.events.emit('shop-purchase', { itemId: itemConfig.id, cost: runtimeCost });
 
         const effects = this.buildShopItemEffects(itemConfig);
         effects.forEach((effect) => player.applyEffect?.(effect, { shopItemConfig: itemConfig }));
@@ -3041,6 +3353,7 @@ export default class MainScene extends Phaser.Scene {
             .map((shopItemId) => (shopItemId === itemConfig.id ? null : shopItemId));
         resolvedRunState.shopLockedItemIds = (resolvedRunState.shopLockedItemIds ?? [])
             .filter((shopItemId) => shopItemId !== itemConfig.id);
+        this.events.emit('shop-lock-change', { lockedItemIds: resolvedRunState.shopLockedItemIds.slice(0) });
         return this.buildShopOverlayState(player, resolvedRunState);
     }
 
@@ -3049,9 +3362,6 @@ export default class MainScene extends Phaser.Scene {
         const resolvedRunState = this.ensureShopRunState(context.runState);
         const player = context.player;
         if (!resolvedRunState || !player) {
-            return this.buildShopOverlayState(player, resolvedRunState);
-        }
-        if (this.debugMode) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
         const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? [])
@@ -3066,6 +3376,7 @@ export default class MainScene extends Phaser.Scene {
         if (!player.spendGold?.(rerollCost)) {
             return this.buildShopOverlayState(player, resolvedRunState);
         }
+        this.events.emit('shop-reroll', { cost: rerollCost, lockedItemIds: (resolvedRunState.shopLockedItemIds ?? []).slice(0) });
         resolvedRunState.shopCurrentRerollCost = Math.max(this.getBaseShopRerollCost(), rerollCost * 2);
 
         const currentStockWithSlots = (resolvedRunState.shopCurrentStockIds ?? [])
@@ -3139,7 +3450,7 @@ export default class MainScene extends Phaser.Scene {
         const itemConfig = getShopItemConfig(itemId);
         const context = this.resolvePlayerRunContext(playerOrId, runState);
         const resolvedRunState = this.ensureShopRunState(context.runState);
-        if (!itemConfig || !resolvedRunState || this.debugMode) {
+        if (!itemConfig || !resolvedRunState) {
             return this.buildShopOverlayState(context.player, resolvedRunState);
         }
         const currentStockIds = (resolvedRunState.shopCurrentStockIds ?? []).slice(0, 5);
@@ -3153,6 +3464,7 @@ export default class MainScene extends Phaser.Scene {
             lockedSet.add(itemConfig.id);
         }
         resolvedRunState.shopLockedItemIds = currentStockIds.filter((stockItemId) => lockedSet.has(stockItemId));
+        this.events.emit('shop-lock-change', { lockedItemIds: resolvedRunState.shopLockedItemIds.slice(0) });
         return this.buildShopOverlayState(context.player, resolvedRunState);
     }
 

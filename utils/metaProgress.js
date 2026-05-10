@@ -4,11 +4,13 @@
 // Today we persist to localStorage, but the API is provider-based so we can
 // swap to an account-backed provider later without touching game logic.
 import { DEFAULT_UNLOCKED_CHARACTER_KEYS } from '../config/characters/characters.js';
+import { syncMetaBadges } from './badgeMetaSync.js';
 
 export const DEFAULT_META_PROGRESS = Object.freeze({
-    dynamon: 10000,
+    dynamon: 0,
     totalDynamonEarned: 0,
     totalWavesCleared: 0,
+    totalRunsCompleted: 0,
     upgrades: Object.freeze({}),
     unlockedCharacters: Object.freeze([...DEFAULT_UNLOCKED_CHARACTER_KEYS])
 });
@@ -29,6 +31,7 @@ function sanitizeMetaProgress(raw) {
         dynamon: clampInt(safe.dynamon, 0),
         totalDynamonEarned: clampInt(safe.totalDynamonEarned, 0),
         totalWavesCleared: clampInt(safe.totalWavesCleared, 0),
+        totalRunsCompleted: clampInt(safe.totalRunsCompleted, 0),
         upgrades: sanitizeUpgradeLevels(safe.upgrades),
         unlockedCharacters: sanitizeUnlockedCharacters(safe.unlockedCharacters)
     };
@@ -98,6 +101,7 @@ export function setMetaProgress(scene, next) {
     const value = { ...DEFAULT_META_PROGRESS, ...sanitizeMetaProgress(next) };
     registry.set(REGISTRY_KEY, value);
     scene?.events?.emit?.('metaProgressChanged', value);
+    syncMetaBadges(scene, value);
     return value;
 }
 
@@ -187,5 +191,20 @@ export function addDynamon(scene, amount, options = {}) {
     };
     setMetaProgress(scene, next);
     saveMetaProgress(scene);
+    return next;
+}
+
+export function recordRunCompleted(scene, options = {}) {
+    const current = getMetaProgress(scene);
+    const next = {
+        ...current,
+        totalRunsCompleted: clampInt((current.totalRunsCompleted ?? 0) + 1, 0)
+    };
+    setMetaProgress(scene, next);
+    saveMetaProgress(scene);
+    scene?.events?.emit?.('runCompleted', {
+        won: options.won === true,
+        totalRunsCompleted: next.totalRunsCompleted
+    });
     return next;
 }

@@ -1,3 +1,5 @@
+import { resolveEffectDepth } from './effectRenderUtils.js';
+
 const FIRECOAT_DEFAULT_INTERVAL_MS = 1000;
 const FIRECOAT_DEFAULT_RADIUS = 70;
 const FIRECOAT_DEFAULT_DAMAGE_RATIO = 0.2;
@@ -107,15 +109,15 @@ export default class FirecoatAuraEffect {
 
     spawnAuraWave(radius = FIRECOAT_DEFAULT_RADIUS) {
         if (!this.scene?.add || !this.scene?.tweens || !this.owner) return;
-        const aura = this.scene.add.circle(this.owner.x, this.owner.y, 18, 0xff8a3a, 0.16)
-            .setDepth((this.owner.depth ?? 20) + 1);
-        aura.setStrokeStyle(3, 0xffc26a, 0.65);
+        const auraDepth = resolveEffectDepth(this.owner.depth, 1, { minDepth: 12, maxDepth: 45, fallbackDepth: 20 });
+        const aura = this.scene.add.circle(this.owner.x, this.owner.y, 18, 0xff8a3a, 0.12)
+            .setDepth(auraDepth);
+        aura.setStrokeStyle(3, 0xffc26a, 0.5);
 
         this.scene.tweens.add({
             targets: aura,
             radius,
-            alpha: { from: 0.16, to: 0 },
-            scale: { from: 0.92, to: 1.08 },
+            alpha: { from: 0.12, to: 0 },
             duration: 320,
             ease: 'Cubic.easeOut',
             onComplete: () => aura.destroy()

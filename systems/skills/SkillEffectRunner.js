@@ -18,10 +18,20 @@ export default class SkillEffectRunner {
         if (mode === 'off') return null;
         // reduced mode still uses the same cap/merge system; callers can further lower frequency separately.
         const capMode = getDamageTextCapMode(this.scene);
+
+        // Position: place near the target's body top with a small padding.
+        // Using `target.y - body.height` pushes text far above tall bosses (because `target.y` is typically body center).
+        const body = target.body ?? null;
+        const fallbackHeight = target.displayHeight ?? target.height ?? 20;
+        const bodyHeight = body?.height ?? fallbackHeight ?? 20;
+        const topY = (typeof body?.top === 'number') ? body.top : (target.y - (bodyHeight * 0.5));
+        const pad = Phaser.Math.Clamp(Math.round(bodyHeight * 0.1), 4, 10);
+        const damageTextY = topY - pad;
+
         return DamageText.createOrMerge(
             this.scene,
             target.x,
-            target.y - (target.body?.height ?? 20),
+            damageTextY,
             value,
             { capMode, ...options }
         );
